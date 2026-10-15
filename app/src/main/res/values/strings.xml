@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Model Atlas</string>
+    <string name="model_list_title">模型列表</string>
+    <string name="model_list_sample_notice">本地示例数据，尚未连接模型 API。</string>
 </resources>
