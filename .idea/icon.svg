@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="300" viewBox="0 370 1024 300" role="img" aria-labelledby="title desc">
+  <title id="title">ModelAtlas — Transparent Logo</title>
+  <desc id="desc">Seven colored rounded tiles increasing in size toward the center, on a fully transparent background.</desc>
+  <g id="model-tiles">
+    <rect x="44" y="487" width="80" height="80" rx="18" fill="#6cbb8b" />
+    <rect x="137" y="465" width="110" height="118" rx="22" fill="#e6a08a" />
+    <rect x="260" y="434" width="132" height="181" rx="27" fill="#81abef" />
+    <rect x="406" y="393" width="206" height="255" rx="34" fill="#717171" />
+    <rect x="626" y="433" width="132" height="183" rx="27" fill="#c3c9d0" />
+    <rect x="770" y="465" width="110" height="118" rx="22" fill="#7189ff" />
+    <rect x="896" y="487" width="80" height="80" rx="18" fill="#ff9863" />
+  </g>
+</svg>
