@@ -1,0 +1,64 @@
+{
+  "example/atlas": {
+    "id": "example/atlas",
+    "name": "Example Atlas",
+    "description": "Synthetic model for parser tests",
+    "family": "atlas",
+    "attachment": true,
+    "reasoning": true,
+    "tool_call": true,
+    "structured_output": false,
+    "temperature": false,
+    "knowledge": "2025-03",
+    "release_date": "2026-01-15",
+    "last_updated": "2026-10-19",
+    "modalities": {
+      "input": ["text", "image", "audio", "pdf", "video"],
+      "output": ["text"]
+    },
+    "open_weights": true,
+    "limit": {
+      "context": 262144,
+      "input": 245760,
+      "output": 16384
+    },
+    "license": "Apache-2.0",
+    "weights": [
+      {
+        "label": "Example weights",
+        "url": "https://example.com/weights",
+        "quantization": "fp8",
+        "format": "safetensors"
+      },
+      {"url": "https://example.com/other-weights"}
+    ],
+    "links": [
+      {
+        "label": "Model card",
+        "url": "https://example.com/model-card",
+        "type": "model_card"
+      },
+      {"url": "https://example.com/announcement"}
+    ],
+    "benchmarks": [
+      {
+        "name": "Example benchmark",
+        "score": 95.5,
+        "metric": "accuracy",
+        "source": "https://example.com/benchmark",
+        "date": "2026-10-19",
+        "version": "2",
+        "variant": "no tools",
+        "dataset": "public",
+        "harness": "example-harness"
+      },
+      {"name": "Integer score", "score": 96}
+    ]
+  },
+  "example/embedding": {
+    "id": "example/embedding",
+    "name": "Example Embedding",
+    "type": "embedding",
+    "limit": {"context": 8192}
+  }
+}

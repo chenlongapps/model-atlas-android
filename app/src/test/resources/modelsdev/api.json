@@ -1,0 +1,111 @@
+{
+  "example-api": {
+    "id": "example-api",
+    "name": "Example API",
+    "env": ["EXAMPLE_API_KEY", "EXAMPLE_REGION"],
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://example.com/v1",
+    "doc": "https://example.com/docs",
+    "models": {
+      "atlas-chat-v1": {
+        "id": "atlas-chat-v1",
+        "name": "Example Atlas Chat",
+        "description": "Synthetic offering for parser tests",
+        "family": "atlas",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {"type": "effort", "values": [null, "low", "medium", "high"]},
+          {"type": "budget_tokens", "min": 0, "max": 65536},
+          {"type": "toggle"}
+        ],
+        "tool_call": true,
+        "interleaved": {"field": "reasoning_content"},
+        "structured_output": true,
+        "temperature": false,
+        "knowledge": "2025-03",
+        "release_date": "2026-01-15",
+        "last_updated": "2026-10-19",
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "open_weights": true,
+        "limit": {"context": 262144, "input": 245760, "output": 16384},
+        "status": "deprecated",
+        "cost": {
+          "input": 0,
+          "output": 3,
+          "cache_read": 0.1,
+          "cache_write": 0.2,
+          "input_audio": 1.5,
+          "output_audio": 2,
+          "reasoning": 4,
+          "tiers": [
+            {
+              "tier": {"type": "context", "size": 200000},
+              "input": 1,
+              "output": 2,
+              "cache_read": 0.5,
+              "cache_write": 0.75,
+              "input_audio": 3,
+              "output_audio": 4,
+              "reasoning": 2.5
+            }
+          ],
+          "context_over_200k": {
+            "input": 1,
+            "output": 2,
+            "cache_read": 0.5,
+            "cache_write": 0.75
+          }
+        },
+        "provider": {
+          "npm": "@ai-sdk/openai",
+          "api": "https://example.com/alternate/v1",
+          "shape": "responses"
+        },
+        "experimental": {
+          "modes": {
+            "fast": {
+              "cost": {"input": 1.25, "output": 7.5, "cache_read": 0.125},
+              "provider": {
+                "body": {
+                  "service_tier": "priority",
+                  "reasoning": {"mode": "pro"},
+                  "additionalModelRequestFields": {"service_tier": "reserved"},
+                  "custom": [true, 42, null]
+                },
+                "headers": {"anthropic-beta": "example-fast-mode"}
+              }
+            },
+            "future-mode": {"provider": {"body": {"enabled": true}}}
+          }
+        },
+        "canonical_model_id": "example/atlas"
+      },
+      "@example/unlinked": {
+        "id": "@example/unlinked",
+        "name": "Unlinked model",
+        "interleaved": false
+      }
+    }
+  },
+  "second-api": {
+    "id": "second-api",
+    "name": "Second API",
+    "env": [],
+    "models": {
+      "atlas-chat-v1": {
+        "id": "atlas-chat-v1",
+        "name": "Example Atlas on Second API",
+        "interleaved": true,
+        "canonical_model_id": "example/atlas"
+      },
+      "embedding-v1": {
+        "id": "embedding-v1",
+        "name": "Example Embedding API",
+        "type": "embedding",
+        "reasoning_options": [],
+        "cost": {}
+      }
+    }
+  }
+}

@@ -2,18 +2,23 @@
 
 基于 Kotlin 和 Jetpack Compose 的 Android 应用，用于发现、了解和对比 AI 模型。
 
-> 🚧 项目处于早期开发阶段，目前使用本地静态数据演示模型列表，尚未接入 Models.dev API。
+> 🚧 项目处于早期开发阶段，已接入 Models.dev 真实目录，支持浏览 LLM 名称、LAB 及 LAB logo、发布时间、上下文长度、最大输出、输入／输出模态、开放权重与报价。搜索、详情和对比尚未实现。
 
 ## 已实现
 
 - `MainActivity` 启动入口与 Hilt 依赖注入
 - 跟随系统切换的 Material 3 浅色、深色主题
-- 最小 MVVM 链路：静态仓库 → ViewModel → StateFlow → Compose 列表
+- 真实数据链路：Retrofit / OkHttp → 独立 DTO 映射 → Room3 事务写入 → Flow → ViewModel → Compose 列表
+- 每个规范模型一行，展示名称、LAB（模型 ID 第一个 `/` 前的部分）及其彩色 logo、发布时间、token 限制、输入／输出模态与开放权重（`open_weights` 三态，权重公开时附许可；“权重公开”不等于开源或允许商用）；缺失信息显示“暂无数据”。LAB logo 为随包的 Models.dev 品牌素材，只覆盖 23 个实验室，没有素材时显示兜底图，不借用其他实验室的 logo
+- 每个模型展示一条报价：以「价格（USD / 百万 tokens）」为小节标题逐行展示输入、输出、缓存命中输入等单价，不显示服务商；官方报价优先，没有官方报价时按内置的第三方优先级选一家。没有可用报价显示「价格：暂无数据」，明确的零价显示 `$0.00`
+- LLM 收录规则、多模态文本模型支持，以及加载、空数据、失败重试状态
+- 三张 Room3 目录表及独立 JSON 值对象，保留模型与服务、报价、稳定标识和获取时间（见[本地目录数据](docs/local-data.md)）
+- 应用内数据来源、独立第三方说明与 Models.dev MIT 许可全文
 
 ## 功能规划
 
 - 浏览、搜索和筛选 AI 模型
-- 查看模型能力、上下文窗口及 API 定价
+- 查看模型能力、上下文窗口及全部服务商报价
 - 对比多个模型的参数与价格
 - 收藏模型，支持本地缓存
 - 后续扩展：价格追踪、新模型提醒、模型更新历史
@@ -24,7 +29,9 @@ Kotlin · Jetpack Compose · Material 3 · MVVM · Hilt · Retrofit / OkHttp · 
 
 ## 数据来源
 
-计划使用 [Models.dev](https://models.dev/) 的公开 API：[api.json](https://models.dev/api.json)，[models.json](https://models.dev/models.json)，可用字段以数据源为准。
+通过 [Models.dev](https://models.dev/) 的公开 API 获取数据：[models.json?type=all](https://models.dev/models.json?type=all) 提供规范模型，[api.json?type=all](https://models.dev/api.json?type=all) 提供服务商与模型服务。两个响应均成功后原子更新本地目录，列表只收录符合规则的 LLM；未显式关联的服务不猜测匹配。上游定价统一为 USD / 百万 tokens，报价已存储并在列表展示，选取规则与计价语义见[数据源说明](docs/data-source.md)。
+
+当前每次进入新的列表 ViewModel 都会请求目录；失败不使用示例或旧目录伪装成功，离线回退与刷新策略仍属规划。Models.dev 上游 MIT 许可全文随应用打包，可通过页面右上角“数据来源与许可”查看。
 
 本项目为独立第三方应用，与 Models.dev 及各 AI 模型提供商无官方隶属关系。
 

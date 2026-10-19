@@ -1,0 +1,415 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "9c648d7eec47c36222b156f91078675b",
+    "entities": [
+      {
+        "tableName": "models",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `description` TEXT, `family` TEXT, `type` TEXT, `knowledgeCutoff` TEXT, `releaseDate` TEXT, `sourceLastUpdated` TEXT, `attachment` INTEGER, `reasoning` INTEGER, `toolCall` INTEGER, `structuredOutput` INTEGER, `temperature` INTEGER, `openWeights` INTEGER, `contextLimitTokens` INTEGER, `inputLimitTokens` INTEGER, `outputLimitTokens` INTEGER, `inputModalities` TEXT, `outputModalities` TEXT, `license` TEXT, `weights` TEXT, `links` TEXT, `benchmarks` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAtEpochMillis",
+            "columnName": "fetchedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "family",
+            "columnName": "family",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "knowledgeCutoff",
+            "columnName": "knowledgeCutoff",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseDate",
+            "columnName": "releaseDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceLastUpdated",
+            "columnName": "sourceLastUpdated",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "attachment",
+            "columnName": "attachment",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reasoning",
+            "columnName": "reasoning",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "toolCall",
+            "columnName": "toolCall",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "structuredOutput",
+            "columnName": "structuredOutput",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "temperature",
+            "columnName": "temperature",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "openWeights",
+            "columnName": "openWeights",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "contextLimitTokens",
+            "columnName": "contextLimitTokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "inputLimitTokens",
+            "columnName": "inputLimitTokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "outputLimitTokens",
+            "columnName": "outputLimitTokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "inputModalities",
+            "columnName": "inputModalities",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "outputModalities",
+            "columnName": "outputModalities",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "license",
+            "columnName": "license",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "weights",
+            "columnName": "weights",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "links",
+            "columnName": "links",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "benchmarks",
+            "columnName": "benchmarks",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "providers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `apiUrl` TEXT, `documentationUrl` TEXT, `npmPackage` TEXT, `environmentVariables` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAtEpochMillis",
+            "columnName": "fetchedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "apiUrl",
+            "columnName": "apiUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "documentationUrl",
+            "columnName": "documentationUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "npmPackage",
+            "columnName": "npmPackage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "environmentVariables",
+            "columnName": "environmentVariables",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "model_offerings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`providerId` TEXT NOT NULL, `id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `canonicalModelId` TEXT, `description` TEXT, `family` TEXT, `type` TEXT, `knowledgeCutoff` TEXT, `releaseDate` TEXT, `sourceLastUpdated` TEXT, `attachment` INTEGER, `reasoning` INTEGER, `toolCall` INTEGER, `structuredOutput` INTEGER, `temperature` INTEGER, `openWeights` INTEGER, `contextLimitTokens` INTEGER, `inputLimitTokens` INTEGER, `outputLimitTokens` INTEGER, `inputModalities` TEXT, `outputModalities` TEXT, `status` TEXT, `reasoningOptions` TEXT, `interleaved` TEXT, `pricing` TEXT, `providerOverride` TEXT, `experimentalModes` TEXT, PRIMARY KEY(`providerId`, `id`), FOREIGN KEY(`providerId`) REFERENCES `providers`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "providerId",
+            "columnName": "providerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAtEpochMillis",
+            "columnName": "fetchedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalModelId",
+            "columnName": "canonicalModelId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "family",
+            "columnName": "family",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "knowledgeCutoff",
+            "columnName": "knowledgeCutoff",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseDate",
+            "columnName": "releaseDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceLastUpdated",
+            "columnName": "sourceLastUpdated",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "attachment",
+            "columnName": "attachment",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reasoning",
+            "columnName": "reasoning",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "toolCall",
+            "columnName": "toolCall",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "structuredOutput",
+            "columnName": "structuredOutput",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "temperature",
+            "columnName": "temperature",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "openWeights",
+            "columnName": "openWeights",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "contextLimitTokens",
+            "columnName": "contextLimitTokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "inputLimitTokens",
+            "columnName": "inputLimitTokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "outputLimitTokens",
+            "columnName": "outputLimitTokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "inputModalities",
+            "columnName": "inputModalities",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "outputModalities",
+            "columnName": "outputModalities",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "reasoningOptions",
+            "columnName": "reasoningOptions",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "interleaved",
+            "columnName": "interleaved",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pricing",
+            "columnName": "pricing",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "providerOverride",
+            "columnName": "providerOverride",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "experimentalModes",
+            "columnName": "experimentalModes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "providerId",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_model_offerings_canonicalModelId",
+            "unique": false,
+            "columnNames": [
+              "canonicalModelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_model_offerings_canonicalModelId` ON `${TABLE_NAME}` (`canonicalModelId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "providers",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "providerId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9c648d7eec47c36222b156f91078675b')"
+    ]
+  }
+}
