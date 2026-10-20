@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="517" android:viewportHeight="517">
+    <!-- 原 SVG 的 473 × 223 图形等比居中，灰度层次用 alpha 表达以兼容主题 tint。 -->
+    <group android:translateX="22" android:translateY="147">
+        <path android:fillColor="#FF000000" android:fillAlpha="0.704"
+            android:pathData="M28,30H98A28,28 0,0 1,126 58V179A28,28 0,0 1,98 207H28A28,28 0,0 1,0 179V58A28,28 0,0 1,28 30Z" />
+        <path android:fillColor="#FF000000"
+            android:pathData="M182,0H291A35,35 0,0 1,326 35V188A35,35 0,0 1,291 223H182A35,35 0,0 1,147 188V35A35,35 0,0 1,182 0Z" />
+        <path android:fillColor="#FF000000" android:fillAlpha="0.691"
+            android:pathData="M375,30H445A28,28 0,0 1,473 58V178A28,28 0,0 1,445 206H375A28,28 0,0 1,347 178V58A28,28 0,0 1,375 30Z" />
+    </group>
+</vector>

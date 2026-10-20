@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">Model Atlas</string>
+    <string name="nav_models">模型</string>
+    <string name="nav_settings">设置</string>
+    <string name="settings_empty">暂无设置项</string>
     <string name="model_list_source_notice">数据来源：Models.dev（https://models.dev/）。本应用为独立第三方，与数据源及模型提供商无官方隶属关系。LAB 为模型 ID 的前缀标签，未经独立核实。“开放权重”指来源报告训练权重可公开获取，不等于开源或允许商用，具体许可以模型 license 字段为准。</string>
     <string name="model_list_lab">LAB · %1$s</string>
     <string name="model_list_title">模型目录</string>

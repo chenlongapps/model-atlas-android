@@ -21,7 +21,7 @@
 
 ## 当前应用结构
 
-- Kotlin 源码位于 `app/src/main/java/io/github/chenlongapps/modelatlas/`。`ModelAtlasApplication` 负责初始化 Hilt；`MainActivity` 承载 `ModelAtlasTheme` → `ModelListRoute`。
+- Kotlin 源码位于 `app/src/main/java/io/github/chenlongapps/modelatlas/`。`ModelAtlasApplication` 负责初始化 Hilt；`MainActivity` 承载 `ModelAtlasTheme` → `ModelAtlasApp`，后者通过横向分页承载 `ModelListRoute` 与设置占位页，底部为 Backdrop 悬浮玻璃导航。
 - `DefaultModelRepository` 并行请求 Models.dev 两个端点，经独立 DTO 映射后通过 `CatalogDao` 原子更新 Room3 目录；`observeModels()` 合并规范模型左连接 Flow 与独立报价投影 Flow，按规范模型 ID 去重并执行 LLM 收录规则，展示模型名、LAB（稳定 ID 前缀）及其彩色 logo（无随包素材时显示兜底图）、发布时间、上下文长度、最大输出、输入／输出模态与开放权重（`open_weights` 三态，权重公开时附 license），以及一条按官方优先规则选出的报价（输入／输出、缓存、推理、音频单价与上下文档位，单位 USD / 百万 tokens，不显示服务商），不混用服务商限制。DTO、应用模型与 Entity 保持独立，存储契约见 [本地目录数据](docs/local-data.md)。网络、数据库和仓库由 `di/DataModule.kt` 配置；清单已声明普通 `INTERNET` 权限。
 - `ModelListRoute` 负责调用 `hiltViewModel()`，并以生命周期感知的方式收集状态。保持 `ModelListScreen(uiState)` 不依赖注入机制，以确保浅色和深色模式预览正常工作。
 - `ModelsDevParser` 支持两个端点的字符串解析，与 Retrofit 共用 JSON 配置；`LlmInclusionPolicy` 负责收录规则。列表 ViewModel 优先读取并观察本地目录，有数据时后台检查完整目录变化，仅提示可更新；确认后应用暂存快照，下拉刷新则主动获取并提交（检查进行中复用请求）。失败保留本地列表，无本地数据时提供首次加载与重试，不使用运行时示例。报价已展示：每个规范模型取一条，官方第一方优先，否则按 `PriceProviderPolicy` 的第三方优先级选一家，缺失显示“暂无数据”；计价单位及适用条件见 [数据源说明](docs/data-source.md)。

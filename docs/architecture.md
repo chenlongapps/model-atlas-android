@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的真实 LLM 列表、网络请求、独立映射、Room3 目录存储与本地优先刷新策略。搜索、详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
+本文描述当前已实现的真实 LLM 列表、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及模型／设置双标签与悬浮玻璃导航。设置页仅有占位框架；搜索、详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
 
 ## 代码入口与职责
 
@@ -9,7 +9,10 @@
 | 路径 | 当前职责 |
 | --- | --- |
 | [`ModelAtlasApplication.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ModelAtlasApplication.kt) | 通过 `@HiltAndroidApp` 初始化 Hilt |
-| [`MainActivity.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/MainActivity.kt) | 应用入口，启用边到边显示，承载 `ModelAtlasTheme` 与 `ModelListRoute` |
+| [`MainActivity.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/MainActivity.kt) | 应用入口，启用边到边显示，承载 `ModelAtlasTheme` 与 `ModelAtlasApp`，关闭系统导航栏对比度遮罩 |
+| [`ui/ModelAtlasApp.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/ModelAtlasApp.kt) | 两个标签页的外壳，通过 `HorizontalPager` 切换模型与设置，记录页面背景供玻璃导航采样，并向页面传递悬浮栏避让高度 |
+| [`ui/navigation/GlassNavigationBar.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/navigation/GlassNavigationBar.kt) | Backdrop 悬浮玻璃胶囊、连续跟随分页偏移的选中块、点击和拖动切换、选中图标和颜色过渡及震动反馈 |
+| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面框架，目前只显示“暂无设置项”，没有实际设置功能 |
 | [`data/model/ModelSummary.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelSummary.kt) | 独立列表摘要模型，包含稳定 ID、名称、发布时间、token 限制、输入／输出模态、开放权重与许可；LAB 从稳定 ID 前缀派生，不引用 DTO 或 Entity |
 | [`data/model/ModelPrice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelPrice.kt) | `ModelPriceSummary` 与 `ModelPriceTierSummary`，单条展示报价与条件档位，口径为 USD / 百万 tokens |
 | [`data/model/PriceProviderPolicy.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/PriceProviderPolicy.kt) | 官方服务商对应表与第三方优先级；决定同一模型多个报价中展示哪一家 |
@@ -59,6 +62,10 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - `ModelListScreen` 通过 Material 3 `PullToRefreshBox` 提供下拉刷新（空目录同样支持），指示器避开顶部系统栏，并为读屏提供“刷新目录”自定义操作。Snackbar 不改变列表页头的普通滚动行为。
 - `ModelListRoute` 负责获取 Hilt ViewModel 和生命周期感知的状态收集，不直接请求数据源。
 - `ModelListScreen` 通过参数接收状态，不依赖 Hilt 或 ViewModel。修改时保留这一边界，使预览和后续界面测试可以使用独立数据。
+- `ModelAtlasApp` 承载两个标签：模型列表与设置占位。外壳通过内容插槽保持可独立预览和测试，真实模型页继续使用 `ModelListRoute`，不新增业务数据源。`rememberPagerState` 保存当前页面，两个页面都保留在分页器中，切换时不重建列表或重新启动更新提示协程；列表位置、许可弹窗和报价展开状态继续使用各自可保存状态。
+- 悬浮栏参考 RvSystem Monitor 的玻璃样式，使用 `io.github.kyant0:backdrop:2.0.0`：分页内容通过 `layerBackdrop` 记录，导航外壳和选中块分别采样，组合增艳、4dp 模糊、镜片折射与色散，覆盖主题半透明底色。Android 12/12L 支持模糊，Android 13 及以上再叠加运行时着色器折射；Android 10/11 与设计预览使用实色胶囊兜底。没有新增外观开关，配色沿用动态主题。
+- 胶囊底部居中，距系统导航安全区 16dp，水平至少留白 16dp、最大宽度 400dp；底部与两侧避让导航栏及显示缺口。页面仍自行处理系统安全区，外壳只额外传递实测导航高度加 32dp 外边距，列表使用底部 `contentPadding`，更新 Snackbar 额外向上避让，因此滚动内容可经过玻璃后方，而列表末尾及“立即更新”操作不会被遮挡。标签提供 Tab 单选语义及至少 56dp 的布局高度，字号放大时导航自动增高；位置与拖动映射支持 RTL。
+- 模型标签使用三柱圆角图标：参考所提供 SVG 的 473∶223 比例、柱宽、高度与圆角，等比居中于 24dp 图标槽；中心柱更高更宽，两侧以 alpha 保留层次。未选中使用 `ic_nav_models_outline.xml` 中空描边版，选中使用 `ic_nav_models.xml` 实心版；描边约 1.3dp，中心线向内收缩，保证两版外轮廓一致，内部真正透明而非背景色填充。图标通过既有 Crossfade 过渡，颜色沿用导航主题，不固定 SVG 的灰黑色；列表状态卡片的 `ic_catalog` 保持不变。
 - 页面不使用 `TopAppBar`、Scaffold 的 `topBar` 插槽或应用栏专用滚动行为。标题、目录数量与来源许可入口放在 Scaffold 内容区内，作为 `LazyColumn` 的首项 `CatalogHeader`，与模型卡片同速滚动，回到列表顶部时才再次显示，不固定、不吸顶，也不在下滑时单独弹出。Scaffold 最后叠加随主题变化的半透明状态栏渐变保护层，不占布局空间、不拦截触摸。
 - 列表使用 `models.json` 字典键作为稳定 `id` 和条目 key；每个规范模型一行。同名模型不合并，缺少服务商关联的规范模型仍展示；查询仍保留显式 `canonical_model_id` 左连接，摘要映射按规范模型 ID 去重，不再向界面传递服务商和描述。报价来自独立的 `observeOfferingPriceRows()` 投影，两条 Flow 在仓库层用 `combine` 合并后一起映射，因此规范模型元数据与报价不会互相污染。
 - 数据库存储整个目录以保留未关联服务和完整报价；列表收录明确 `type = "llm"`，或无类型且输入、输出模态均包含 `text` 的记录。明确非 LLM、未知类型及无法判断的记录不收录。该规则不是模型能力认证。
@@ -79,7 +86,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 已实现本地优先与离线浏览：每个新的 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。更新检测涵盖全部模型、服务商和模型服务的新增、删除、参数与报价等变化，不仅限于当前列表字段；不将本地抓取时间或字典顺序变化当作更新。待应用快照仅暂存在仓库内存中，进程重启后重新检查；内容一致时不重复写库。尚未展示更新时间，也未引入 TTL 策略。
 - 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
-- 当前没有模型详情或多页面导航流程。新增功能前先确认任务范围，不因依赖已存在就假定对应能力已实现。
+- 当前只有模型与设置两个顶层标签，没有模型详情、收藏、对比或基于路由的导航栈。设置为占位页面，不因导航入口存在就假定对应业务能力已实现。
 - Models.dev 的收录、计价、能力与许可约定见[数据源说明](data-source.md)。
 
 ## 现有单元测试
@@ -115,3 +122,5 @@ DefaultModelRepository.checkForUpdates() / refresh()
 价格区的浅色／深色回归用例比较价格区与外层模型卡片的实际背景像素，并检查标题、价格区与能力分隔线左对齐，防止重新引入内层卡片底色或额外缩进。
 
 刷新回归增加实际下拉手势（有数据与空目录）、更新提示的显式确认操作、刷新失败仍显示本地模型及数量；数据库回归增加完整快照读取与目录存在性查询。
+
+`ModelAtlasAppTest` 覆盖真实列表与设置占位的标签切换、页面滑动与导航拖动、选中块对齐、切换后列表位置不变、标签与报价展开状态恢复、列表末尾及更新 Snackbar 避让悬浮栏，以及双倍字号和 RTL 标签布局。

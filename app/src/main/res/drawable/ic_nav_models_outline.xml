@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="517" android:viewportHeight="517">
+    <!-- 描边中心线内缩半个线宽，确保外轮廓与实心版一致，内部保持透明。 -->
+    <group android:translateX="22" android:translateY="147">
+        <path android:fillColor="#00000000"
+            android:strokeColor="#FF000000" android:strokeAlpha="0.704"
+            android:strokeWidth="28"
+            android:pathData="M28,44H98A14,14 0,0 1,112 58V179A14,14 0,0 1,98 193H28A14,14 0,0 1,14 179V58A14,14 0,0 1,28 44Z" />
+        <path android:fillColor="#00000000"
+            android:strokeColor="#FF000000" android:strokeWidth="28"
+            android:pathData="M182,14H291A21,21 0,0 1,312 35V188A21,21 0,0 1,291 209H182A21,21 0,0 1,161 188V35A21,21 0,0 1,182 14Z" />
+        <path android:fillColor="#00000000"
+            android:strokeColor="#FF000000" android:strokeAlpha="0.691"
+            android:strokeWidth="28"
+            android:pathData="M375,44H445A14,14 0,0 1,459 58V178A14,14 0,0 1,445 192H375A14,14 0,0 1,361 178V58A14,14 0,0 1,375 44Z" />
+    </group>
+</vector>

@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,6 +77,7 @@ import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 @Composable
 fun ModelListRoute(
     modifier: Modifier = Modifier,
+    bottomOverlayPadding: Dp = 0.dp,
     viewModel: ModelListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -86,6 +88,7 @@ fun ModelListRoute(
         onApplyUpdate = viewModel::applyUpdate,
         onMessageShown = viewModel::clearMessage,
         modifier = modifier,
+        bottomOverlayPadding = bottomOverlayPadding,
     )
 }
 
@@ -98,6 +101,7 @@ internal fun ModelListScreen(
     onRefresh: () -> Unit = {},
     onApplyUpdate: () -> Unit = {},
     onMessageShown: () -> Unit = {},
+    bottomOverlayPadding: Dp = 0.dp,
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -150,7 +154,9 @@ internal fun ModelListScreen(
                 }
             },
         containerColor = backgroundColor,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomOverlayPadding))
+        },
         contentWindowInsets = windowInsets,
     ) { innerPadding ->
         PullToRefreshBox(
@@ -184,7 +190,7 @@ internal fun ModelListScreen(
                     start = innerPadding.calculateStartPadding(layoutDirection) + 16.dp,
                     top = innerPadding.calculateTopPadding() + 16.dp,
                     end = innerPadding.calculateEndPadding(layoutDirection) + 16.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                    bottom = innerPadding.calculateBottomPadding() + bottomOverlayPadding + 16.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
