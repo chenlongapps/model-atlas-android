@@ -61,13 +61,13 @@ internal fun labLogoRes(lab: String?): Int = labLogoResOrNull(lab) ?: R.drawable
 /** 品牌 logo 需要固定浅色底：素材保留官方配色，深色图案在深色卡片上才能看清。 */
 private val LabLogoBackground: Color = Color.White
 
-private val LabLogoChipSize: Dp = 28.dp
-private val LabLogoIconSize: Dp = 20.dp
+private val LabLogoChipSize: Dp = 56.dp
+private val LabLogoIconSize: Dp = 44.dp
 
 /**
  * 列表卡片中的 LAB logo。
  *
- * 与模型名并列，仅作视觉标识；「研发机构」文本已说明该前缀，因此不额外提供无障碍描述。
+ * 与模型名并列，仅作视觉标识；旁侧已显示同一 LAB 的文字，因此不重复提供无障碍描述。
  */
 @Composable
 internal fun LabLogo(
@@ -78,7 +78,7 @@ internal fun LabLogo(
     Box(
         modifier = modifier
             .size(LabLogoChipSize)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(LabLogoBackground),
         contentAlignment = Alignment.Center,
     ) {
