@@ -45,7 +45,7 @@ class ModelListViewModelTest {
         assertTrue(viewModel.uiState.value.models.isEmpty())
     }
 
-    @Test fun failureDoesNotShowOldRowsAndRetryCanSucceed() = runTest {
+    @Test fun firstLoadFailureWithoutCacheCanBeRetried() = runTest {
         val repository = FakeRepository().apply { failure = IOException("offline") }
         val viewModel = create(repository)
         advanceUntilIdle()
@@ -113,23 +113,204 @@ class ModelListViewModelTest {
         assertTrue(viewModel.uiState.value.isLoading)
     }
 
+    @Test fun cachedModelsAreVisibleWhileBackgroundCheckIsStillRunning() = runTest {
+        val repository = cachedRepository().apply { gate = CompletableDeferred() }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test fun backgroundCheckOnlyPromptsAndApplyUsesStagedData() = runTest {
+        val repository = cachedRepository().apply {
+            remoteModels = listOf(ModelSummary("lab/new", "New"))
+        }
+        val previous = repository.models.value
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(previous, viewModel.uiState.value.models)
+        assertTrue(viewModel.uiState.value.updateAvailable)
+        viewModel.applyUpdate()
+        advanceUntilIdle()
+        assertEquals(repository.remoteModels, viewModel.uiState.value.models)
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertEquals(ModelListMessage.UPDATED, viewModel.uiState.value.message)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+        assertEquals(1, repository.applies)
+    }
+
+    @Test fun backgroundFailureIsSilentAndExplicitRefreshFailureKeepsLocalData() = runTest {
+        val repository = cachedRepository().apply { failure = IOException("offline") }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(null, viewModel.uiState.value.error)
+        assertEquals(null, viewModel.uiState.value.refreshError)
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertEquals(null, viewModel.uiState.value.error)
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.refreshError)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        viewModel.clearMessage()
+        assertEquals(null, viewModel.uiState.value.refreshError)
+    }
+
+    @Test fun pullDuringCheckReusesRequestAndAppliesItsResult() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            remoteModels = emptyList()
+        }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        repeat(5) { viewModel.refresh() }
+        assertTrue(viewModel.uiState.value.isRefreshing)
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.models.isEmpty())
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+        assertEquals(1, repository.applies)
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+    }
+
+    @Test fun failedCheckPromotedByPullReportsNonBlockingError() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            failure = IOException("offline")
+        }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.refresh()
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.refreshError)
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+    }
+
+    @Test fun repeatedPullDoesNotDuplicateRequestsAndNoChangesShowsLatestMessage() = runTest {
+        val repository = cachedRepository()
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        repository.gate = CompletableDeferred()
+        repeat(5) { viewModel.refresh() }
+        advanceUntilIdle()
+        assertEquals(1, repository.refreshes)
+        assertTrue(viewModel.uiState.value.isRefreshing)
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ModelListMessage.UP_TO_DATE, viewModel.uiState.value.message)
+    }
+
+    @Test fun localCatalogWithNoIncludedModelsStillChecksWithoutBlocking() = runTest {
+        val repository = cachedRepository().apply {
+            models.value = emptyList()
+            remoteModels = emptyList()
+        }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test fun unchangedBackgroundCheckDoesNotPromptOrShowManualRefreshMessage() = runTest {
+        val viewModel = create(cachedRepository())
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertEquals(null, viewModel.uiState.value.message)
+    }
+
+    @Test fun failedApplyRetainsCachedModelsAndUpdateActionForRetry() = runTest {
+        val repository = cachedRepository().apply {
+            remoteModels = listOf(ModelSummary("lab/new", "New"))
+            applyFailure = IllegalStateException("disk")
+        }
+        val previous = repository.models.value
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.applyUpdate()
+        advanceUntilIdle()
+        assertEquals(previous, viewModel.uiState.value.models)
+        assertTrue(viewModel.uiState.value.updateAvailable)
+        assertEquals(ModelListError.STORAGE, viewModel.uiState.value.refreshError)
+        repository.applyFailure = null
+        viewModel.applyUpdate()
+        advanceUntilIdle()
+        assertEquals(repository.remoteModels, viewModel.uiState.value.models)
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertEquals(1, repository.checks)
+    }
+
+    @Test fun cancellationDuringPromotedCheckKeepsCacheWithoutReportingError() = runTest {
+        val repository = cachedRepository().apply { gate = CompletableDeferred() }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.refresh()
+        store.clear()
+        advanceUntilIdle()
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertEquals(null, viewModel.uiState.value.error)
+        assertEquals(null, viewModel.uiState.value.refreshError)
+        assertEquals(0, repository.applies)
+    }
+
+    private fun cachedRepository() = FakeRepository().apply {
+        local = true
+        models.value = remoteModels
+    }
+
     private fun create(repository: ModelRepository) = ModelListViewModel(repository).also {
         store.put("model-list", it)
     }
 
     private class FakeRepository : ModelRepository {
-        val models = MutableStateFlow(listOf(ModelSummary("lab/canonical", "Remote model")))
+        val models = MutableStateFlow<List<ModelSummary>>(emptyList())
+        var remoteModels = listOf(ModelSummary("lab/canonical", "Remote model"))
+        var local = false
         var failure: Exception? = null
+        var applyFailure: Exception? = null
         var observationFailure: Exception? = null
         var refreshes = 0
+        var checks = 0
+        var applies = 0
+        private var pending: List<ModelSummary>? = null
         var gate: CompletableDeferred<Unit>? = null
         override fun observeModels(): Flow<List<ModelSummary>> = observationFailure?.let { failure ->
             flow { throw failure }
         } ?: models
-        override suspend fun refresh() {
+        override suspend fun hasLocalCatalog() = local
+        override suspend fun checkForUpdates(): Boolean {
+            checks++
+            gate?.await()
+            failure?.let { throw it }
+            pending = remoteModels.takeUnless { it == models.value }
+            return pending != null
+        }
+        override suspend fun applyPendingUpdate(): Boolean {
+            applies++
+            applyFailure?.let { throw it }
+            val data = pending ?: return false
+            models.value = data
+            pending = null
+            return true
+        }
+        override suspend fun refresh(): Boolean {
             refreshes++
             gate?.await()
             failure?.let { throw it }
+            val changed = models.value != remoteModels
+            models.value = remoteModels
+            pending = null
+            local = true
+            return changed
         }
     }
 }

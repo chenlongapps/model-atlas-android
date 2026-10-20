@@ -50,6 +50,64 @@ import org.junit.Test
 class ModelListScreenTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun updatePromptKeepsCachedListAndHasExplicitApplyAction() {
+        var applies = 0
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelListScreen(
+                    uiState = ModelListUiState(
+                        models = listOf(ModelSummary("lab/cached", "本地模型")),
+                        isLoading = false,
+                        updateAvailable = true,
+                    ),
+                    onApplyUpdate = { applies++ },
+                )
+            }
+        }
+        compose.onNodeWithText("本地模型").assertIsDisplayed()
+        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
+        assertEquals(0, applies)
+        compose.onNodeWithText("立即更新").performClick()
+        assertEquals(1, applies)
+    }
+
+    @Test fun pullAtTopRequestsRefreshWithoutRemovingCachedModels() {
+        assertPullRequestsRefresh(listOf(ModelSummary("lab/cached", "本地模型")))
+        compose.onNodeWithText("本地模型").assertIsDisplayed()
+    }
+
+    @Test fun emptyCatalogCanAlsoBePulledToRefresh() {
+        assertPullRequestsRefresh(emptyList())
+    }
+
+    @Test fun refreshFailureIsNonBlockingAndKeepsCatalogCount() {
+        show(ModelListUiState(
+            models = listOf(ModelSummary("lab/cached", "本地模型")),
+            isLoading = false,
+            refreshError = ModelListError.NETWORK,
+        ))
+        compose.onNodeWithText("本地模型").assertIsDisplayed()
+        compose.onNodeWithText("模型目录 · 1 个模型").assertIsDisplayed()
+        compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertIsDisplayed()
+        compose.onNodeWithText("暂时无法加载").assertDoesNotExist()
+    }
+
+    private fun assertPullRequestsRefresh(models: List<ModelSummary>) {
+        var refreshes = 0
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelListScreen(
+                    uiState = ModelListUiState(models = models, isLoading = false),
+                    onRefresh = { refreshes++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("model-list").performTouchInput {
+            swipeDown(startY = height * 0.2f, endY = height * 0.9f, durationMillis = 600)
+        }
+        compose.runOnIdle { assertEquals(1, refreshes) }
+    }
+
     @Test fun lightPriceSectionSharesTheModelCardBackground() {
         assertFlatPriceSection(darkTheme = false)
     }

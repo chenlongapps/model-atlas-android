@@ -28,6 +28,22 @@ class CatalogDatabaseTest {
 
     @After fun close() = database.close()
 
+    @Test fun readsCompleteSnapshotIncludingUnlinkedOfferings() = runBlocking {
+        assertTrue(dao.readCatalog().isEmpty)
+        assertEquals(false, dao.hasCatalog())
+        val initial = snapshot()
+        dao.replaceCatalog(initial)
+        val persisted = dao.readCatalog()
+        assertTrue(dao.hasCatalog())
+        assertTrue(initial.hasSameContentAs(persisted))
+        assertEquals(initial.models.associateBy { it.id }, persisted.models.associateBy { it.id })
+        assertEquals(initial.providers.associateBy { it.id }, persisted.providers.associateBy { it.id })
+        assertEquals(
+            initial.offerings.associateBy { it.providerId to it.id },
+            persisted.offerings.associateBy { it.providerId to it.id },
+        )
+    }
+
     @Test fun joinsOnlyExplicitAssociationsAndAllowsDuplicateOfferingIdsAcrossProviders() = runBlocking {
         dao.replaceCatalog(snapshot())
         val rows = dao.observeModelRows().first()

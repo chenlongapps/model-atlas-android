@@ -4,7 +4,7 @@
 
 - [`DefaultModelRepository`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/DefaultModelRepository.kt) 已通过 Retrofit / OkHttp 请求两个真实端点，后台映射后事务写入 Room3，列表由数据库 Flow 驱动，不再使用运行时示例。
 - 独立 Kotlinx Serialization DTO、纯字符串入口 [`ModelsDevParser`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevParser.kt) 与 Retrofit 共用 `ModelsDevJson`，未知字段忽略、已知字段类型严格。
-- 已实现 DTO → Entity、生产数据库、DAO 与完整报价存储，标识与存储契约见[本地目录数据](local-data.md)。离线缓存策略仍未实现。
+- 已实现 DTO → Entity、生产数据库、DAO、完整报价存储与本地优先读取／后台检查／主动刷新策略，标识与存储契约见[本地目录数据](local-data.md)。
 - 独立 `ModelSummary` 用于规范模型名称、LAB、发布时间、上下文长度、最大输出、输入／输出模态、开放权重和列表报价，不能与 DTO 或 Entity 混用，详见[架构说明](architecture.md)。
 
 ## 已核实的端点与结构
@@ -131,7 +131,7 @@ DTO 位于 [`data/remote/dto/`](../app/src/main/java/io/github/chenlongapps/mode
 ### 请求、缓存与时效
 
 - 本次读取两个公开 JSON 端点无需 API Key；服务商记录中的 `env` 是调用该服务商模型 API 的配置，不是读取 Models.dev 目录的鉴权要求。
-- 所查上游 README 与公开 API 说明未公布固定 QPS 配额或 SLA，不能理解为允许无限请求或保证可用。后续网络接入应设置超时、控制重试，遇到限流时尊重 `Retry-After`，避免高频轮询；具体刷新策略留给接入与缓存任务。
+- 所查上游 README 与公开 API 说明未公布固定 QPS 配额或 SLA，不能理解为允许无限请求或保证可用。当前已设置超时、控制重试，并在限流时尊重 `Retry-After`；进入页面检查一次，主动刷新防重入，不高频轮询。
 - 核实时两个端点均返回 `Cache-Control: public, max-age=0, must-revalidate` 和 `ETag`。这是当次 HTTP 观察，不是固定缓存契约；后续 HTTP 缓存应遵循实际响应头，不把它与推理 API 的 prompt cache 混淆，也不据此承诺固定刷新周期。
 - 数据由社区维护，不保证与服务商实时同步。远程 `last_updated` 是条目元数据，不是本地抓取时间，也不能当作价格生效时间；当前映射已单独记录来源与获取时间。
 
@@ -157,7 +157,8 @@ DTO 位于 [`data/remote/dto/`](../app/src/main/java/io/github/chenlongapps/mode
 - 解析测试使用 [`app/src/test/resources/modelsdev/`](../app/src/test/resources/modelsdev/) 中的合成样本及测试内的边界 JSON，无需联网。样本说明记录了结构依据与核实日期，不将合成数值当作真实报价。
 - 已覆盖两类完整嵌套结构、跨服务商重复模型 ID、缺失与显式空值、未知字段、动态模式、整数与小数价格、超出 Int 的限制值、`interleaved` 双向序列化和异常响应。
 - 已添加普通 `INTERNET` 权限、客户端、Hilt 配置、后台映射、异步加载与失败重试。客户端设置连接 15 秒、读取 30 秒、整次调用 60 秒超时，不自动重试或轮询。HTTP 429 / 503 尊重 `Retry-After` 秒数或 HTTP 日期；缺失或无效时冷却 60 秒，冷却期间用户重试不会再次请求服务器。
-- 仅在两个端点均成功获取、解析和映射后事务写入；本地获取时间按各响应成功后的时钟记录，同一响应记录保持一致。网络失败、非法响应或取消不写入部分目录。新的列表 ViewModel 必须先完成本次请求才订阅目录，不回退示例或旧数据。
+- 仅在两个端点均成功获取、解析和映射后形成完整快照；本地获取时间按各响应成功后的时钟记录，同一响应记录保持一致。网络失败、非法响应或取消不写入部分目录。新的列表 ViewModel 优先读取并观察本地目录；有任一目录记录时后台只检查、提示更新，用户确认后才事务提交暂存快照；没有记录时自动获取并提交。下拉刷新主动获取并提交，检查期间下拉复用该请求。后台检查失败不打扰本地浏览，主动刷新失败显示非阻断提示，不清空本地目录。
+- 变化比较涵盖两端点映射后的完整模型、服务商和模型服务内容（含报价），以稳定主键匹配，忽略本地获取时间与字典顺序；仅抓取时间改变不会提示更新或重复写库。待应用快照仅存内存，进程重启后重新检查，不持久化另一份目录。有效空快照仍可经主动刷新／确认清空旧目录。
 - 网络路径与解析由 MockWebServer 测试覆盖，仓库和 ViewModel 异步行为使用 fake 与测试调度器；实际 SQLite 事务与列表状态交互由 `androidTest` 验证。
 - 展示时遵循上文已核实的口径；具体服务商的档位边界、缓存条件、模式组合及调用权限等未完整表达的信息，仍需按官方说明核实，不补造默认值。数据来源、独立第三方与 MIT 许可说明已落实。
-- 实现缓存时补充离线与刷新失败测试。接入和缓存任务的完成状态只在 [TODO.md](../TODO.md) 维护。
+- 已补充本地优先、更新检查与提交分离、主动刷新、失败保留数据及并发操作测试；更新时间展示尚未实现。接入和缓存任务的完成状态只在 [TODO.md](../TODO.md) 维护。

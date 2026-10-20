@@ -13,6 +13,26 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 abstract class CatalogDao {
     @Query(
+        "SELECT EXISTS(SELECT 1 FROM models) OR EXISTS(SELECT 1 FROM providers) " +
+            "OR EXISTS(SELECT 1 FROM model_offerings)",
+    )
+    abstract suspend fun hasCatalog(): Boolean
+
+    @Query("SELECT * FROM models ORDER BY id")
+    protected abstract suspend fun readModels(): List<ModelEntity>
+
+    @Query("SELECT * FROM providers ORDER BY id")
+    protected abstract suspend fun readProviders(): List<ProviderEntity>
+
+    @Query("SELECT * FROM model_offerings ORDER BY providerId, id")
+    protected abstract suspend fun readOfferings(): List<ModelOfferingEntity>
+
+    /** 同一事务内读取完整目录，不能仅用筛选后的 LLM 数量判断有无本地数据。 */
+    @Transaction
+    open suspend fun readCatalog(): CatalogSnapshot =
+        CatalogSnapshot(readModels(), readProviders(), readOfferings())
+
+    @Query(
         """
         SELECT DISTINCT m.id, m.name, m.description, m.type,
             m.inputModalities, m.outputModalities,

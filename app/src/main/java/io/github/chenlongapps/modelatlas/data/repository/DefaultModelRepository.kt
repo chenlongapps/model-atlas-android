@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.data.repository
 
+import io.github.chenlongapps.modelatlas.data.local.CatalogSnapshot
 import io.github.chenlongapps.modelatlas.data.local.CatalogStore
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
 import io.github.chenlongapps.modelatlas.data.mapper.toModelSummaries
@@ -33,6 +34,11 @@ class DefaultModelRepository @Inject constructor(
 ) : ModelRepository {
     private val refreshMutex = Mutex()
     private var retryNotBefore = 0L
+    private var pendingSnapshot: CatalogSnapshot? = null
+
+    override suspend fun hasLocalCatalog() = withContext(ioDispatcher) {
+        store.hasCatalog()
+    }
 
     override fun observeModels() = combine(
         store.observeModelRows(),
@@ -41,16 +47,42 @@ class DefaultModelRepository @Inject constructor(
         rows.toModelSummaries(priceRows.groupBy { it.canonicalModelId })
     }.flowOn(ioDispatcher)
 
-    override suspend fun refresh() = refreshMutex.withLock {
+    override suspend fun checkForUpdates(): Boolean = refreshMutex.withLock {
+        withContext(ioDispatcher) {
+            val snapshot = fetchCatalog()
+            pendingSnapshot = snapshot.takeUnless { it.hasSameContentAs(store.readCatalog()) }
+            pendingSnapshot != null
+        }
+    }
+
+    override suspend fun applyPendingUpdate(): Boolean = refreshMutex.withLock {
+        withContext(ioDispatcher) {
+            val snapshot = pendingSnapshot ?: return@withContext false
+            store.replaceCatalog(snapshot)
+            pendingSnapshot = null
+            true
+        }
+    }
+
+    override suspend fun refresh(): Boolean = refreshMutex.withLock {
+        withContext(ioDispatcher) {
+            val snapshot = fetchCatalog()
+            val changed = !snapshot.hasSameContentAs(store.readCatalog())
+            if (changed) store.replaceCatalog(snapshot)
+            pendingSnapshot = null
+            changed
+        }
+    }
+
+    private suspend fun fetchCatalog(): CatalogSnapshot {
         if (clock.millis() < retryNotBefore) throw CatalogRateLimitException(retryNotBefore)
         try {
-            withContext(ioDispatcher) {
+            return withContext(ioDispatcher) {
                 val models = async { api.getModels() to clock.millis() }
                 val providers = async { api.getProviders() to clock.millis() }
                 val (modelData, modelsFetchedAt) = models.await()
                 val (providerData, providersFetchedAt) = providers.await()
-                val snapshot = mapper.map(modelData, providerData, modelsFetchedAt, providersFetchedAt)
-                store.replaceCatalog(snapshot)
+                mapper.map(modelData, providerData, modelsFetchedAt, providersFetchedAt)
             }
         } catch (error: HttpException) {
             if (error.code() == 429 || error.code() == 503) {

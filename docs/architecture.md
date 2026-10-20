@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的真实 LLM 列表、网络请求、独立映射与 Room3 目录存储。搜索、详情、对比、收藏和离线缓存策略仍属于规划，任务状态见 [TODO.md](../TODO.md)。
+本文描述当前已实现的真实 LLM 列表、网络请求、独立映射、Room3 目录存储与本地优先刷新策略。搜索、详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
 
 ## 代码入口与职责
 
@@ -25,7 +25,7 @@
 | [`data/local/ModelListRow.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/ModelListRow.kt) | 规范模型元数据与关联服务商的左连接投影，不包含报价 |
 | [`data/local/ModelOfferingPriceRow.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/ModelOfferingPriceRow.kt) | 报价投影，只取显式关联且有报价的模型服务，不重复规范模型元数据 |
 | [`data/local/CatalogStore.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/CatalogStore.kt) | 仓库使用的存储接口及 Room 实现，可替换为测试 fake |
-| [`data/repository/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/) | `ModelRepository` 接口与 `DefaultModelRepository`；请求、获取时间、后台映射、限流冷却与目录写入 |
+| [`data/repository/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/) | `ModelRepository` 接口与 `DefaultModelRepository`；请求、获取时间、后台映射、完整内容比较、暂存待更新快照、限流冷却与目录写入 |
 | [`di/DataModule.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/di/DataModule.kt) | 网络客户端、数据库、时钟、IO dispatcher 与接口绑定 |
 | [`ui/modellist/ModelListViewModel.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModel.kt) | 定义 `ModelListUiState`，读取仓库数据并暴露只读 `StateFlow` |
 | [`ui/modellist/ModelListScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListScreen.kt) | 包含 Route、列表界面、加载／错误／空目录状态卡片、许可弹窗及预览 |
@@ -36,9 +36,14 @@
 ## 数据与状态流转
 
 ```text
-DefaultModelRepository.refresh()
+本地目录 → ModelListViewModel 立即展示并持续观察
+
+DefaultModelRepository.checkForUpdates() / refresh()
     → 并行请求 models.json?type=all、api.json?type=all
     → CatalogMapper（分别记录两个响应的获取时间）
+    → 与本地完整快照比较（忽略本地抓取时间、字典顺序）
+    → 后台检查：仅暂存变化快照、提示可更新 → 用户确认 applyPendingUpdate()
+    → 主动刷新：直接提交变化快照
     → CatalogStore → CatalogDao.replaceCatalog()（全量快照事务）
     → CatalogDao.observeModelRows()（左连接并去重）
     → CatalogDao.observeOfferingPriceRows()（显式关联且有报价的模型服务）
@@ -49,7 +54,9 @@ DefaultModelRepository.refresh()
     → ModelCard(model)
 ```
 
-- `ModelListViewModel` 初始化时请求刷新，成功后才订阅本地目录。状态包含 `models`、`isLoading` 和分类错误；首次失败不展示旧目录或示例。重复点击重试不会并发发起请求，协程取消不当作失败。
+- `ModelListViewModel` 初始化先读取并观察本地目录；存在任一目录记录时立即展示（即使筛选后的 LLM 列表为空），后台仅检查更新，不自动覆盖数据库。无本地记录时自动获取并提交，首次失败展示分类错误与重试，不使用示例。
+- 状态区分 `isLoading`、`isRefreshing`、`updateAvailable`、阻断错误 `error` 和非阻断的刷新结果／错误。后台检查失败静默保留本地目录；主动刷新失败用 Snackbar 提示，不清空列表。底部持续 Snackbar 提供“立即更新”，确认后提交已获取快照，不重复下载；下拉刷新直接获取并应用，若正在检查则复用当前请求并在完成后提交。初次加载、检查、提交和主动刷新统一防重入，取消不当作失败。
+- `ModelListScreen` 通过 Material 3 `PullToRefreshBox` 提供下拉刷新（空目录同样支持），指示器避开顶部系统栏，并为读屏提供“刷新目录”自定义操作。Snackbar 不改变列表页头的普通滚动行为。
 - `ModelListRoute` 负责获取 Hilt ViewModel 和生命周期感知的状态收集，不直接请求数据源。
 - `ModelListScreen` 通过参数接收状态，不依赖 Hilt 或 ViewModel。修改时保留这一边界，使预览和后续界面测试可以使用独立数据。
 - 页面不使用 `TopAppBar`、Scaffold 的 `topBar` 插槽或应用栏专用滚动行为。标题、目录数量与来源许可入口放在 Scaffold 内容区内，作为 `LazyColumn` 的首项 `CatalogHeader`，与模型卡片同速滚动，回到列表顶部时才再次显示，不固定、不吸顶，也不在下滑时单独弹出。Scaffold 最后叠加随主题变化的半透明状态栏渐变保护层，不占布局空间、不拦截触摸。
@@ -69,7 +76,7 @@ DefaultModelRepository.refresh()
 - 价格格式化至少保留两位小数（`0.6` → `$0.60`），来源更精确时保留更多位（`0.003` → `$0.003`），避免把高精度报价抹成 `$0.00`。
 - 价格区采用无独立背景的 `PriceSection`，取消内层圆角容器与额外内边距，标题、指标与分隔线左对齐；标题与计价单位统一采用 `labelSmall`（默认 11sp／16sp 行高），弱化说明文字、突出 `titleMedium` 单价，保留系统字号缩放。标题箭头缩至 16dp，不再设置 48dp 的布局最小高度，默认标题行随内容约为 16dp；`clickable` 在布局外扩展触摸区域，维持至少 48dp 的触摸高度，附近无其他可点击控件。标题与指标等区域间距 4dp，指标内部间距 2dp，换行间距 8dp。仍保留输入／输出／缓存分列、完整价格精度、单位及其他类别；档位门槛显示完整数值，不使用 K／M 近似。
 - 档位展开箭头遵循折叠区惯例：收起时朝下，展开后朝上，通过 0°／180° 旋转动画过渡；不使用目录树式的朝右／朝下组合。整行点击和读屏动作／状态不变，UI 回归比较箭头实际绘制的尖端方向，覆盖展开与再次收起。
-- 已实现目录落库，不等同于完整离线缓存：每个新的 ViewModel 请求一次，失败由用户重试，不轮询；尚未实现离线读取、失败回退、更新时间展示或缓存时效策略。
+- 已实现本地优先与离线浏览：每个新的 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。更新检测涵盖全部模型、服务商和模型服务的新增、删除、参数与报价等变化，不仅限于当前列表字段；不将本地抓取时间或字典顺序变化当作更新。待应用快照仅暂存在仓库内存中，进程重启后重新检查；内容一致时不重复写库。尚未展示更新时间，也未引入 TTL 策略。
 - 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
 - 当前没有模型详情或多页面导航流程。新增功能前先确认任务范围，不因依赖已存在就假定对应能力已实现。
@@ -81,8 +88,9 @@ DefaultModelRepository.refresh()
 
 | 测试 | 已覆盖内容 |
 | --- | --- |
-| [`ModelRepositoryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/repository/ModelRepositoryTest.kt) | 单次完整写入、失败不写半份、取消、数据库 Flow、空目录及限流冷却 |
-| [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 加载、成功、空目录、状态更新、错误分类、重试去重与取消，不对外暴露 `MutableStateFlow` |
+| [`ModelRepositoryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/repository/ModelRepositoryTest.kt) | 完整写入、失败不写半份、取消、数据库 Flow、空目录、限流冷却、检查不写库、应用不重复下载、无变化不写库、手动刷新取代暂存快照与提交失败可重试 |
+| [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 首次加载与重试、本地优先、后台检查、主动应用、刷新失败保留数据、检查中下拉复用请求、刷新去重与取消，不对外暴露 `MutableStateFlow` |
+| [`CatalogSnapshotTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSnapshotTest.kt) | 完整内容比较、忽略抓取时间与字典顺序、增删及参数／报价变化、保留缺失与空集合／零值区别 |
 | [`ModelsDevApiTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApiTest.kt) | MockWebServer 验证真实 Retrofit 路径、`type=all`、两个端点的解析与 HTTP 错误不自动重试 |
 | [`CatalogMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/CatalogMapperTest.kt)、[`ModelListMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelListMapperTest.kt) | 独立 ID、显式关联、完整复杂字段、缺失信息、规范模型去重、列表元数据映射、开放权重与许可三态、发布时间倒序、报价投影挂载与未匹配报价行 |
 | [`ModelPriceMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelPriceMapperTest.kt) | 官方优先、第三方优先级、同服务商取最低、零价与缺失价、纯档位报价、无服务商名称、缓存／推理／音频与旧版字段 |
@@ -105,3 +113,5 @@ DefaultModelRepository.refresh()
 状态栏回归用例通过 `ModelListScreen` 的 `windowInsets` 参数固定顶部高刘海与底部安全区，覆盖浅色、深色及双倍字号；除检查初始内容和底部说明避开安全区、标题随列表滚走及回到顶部后恢复外，还比较状态栏区域的实际绘制像素，避免仅验证布局边界而漏掉实色背景遮挡。另有保持手指按下的拖动用例，检查标题与来源许可按钮的实际位移，并确认页头与模型卡片同速滚动；滚动到列表中部后下滑不会单独显示页头，回到顶部仍可打开许可弹窗。
 
 价格区的浅色／深色回归用例比较价格区与外层模型卡片的实际背景像素，并检查标题、价格区与能力分隔线左对齐，防止重新引入内层卡片底色或额外缩进。
+
+刷新回归增加实际下拉手势（有数据与空目录）、更新提示的显式确认操作、刷新失败仍显示本地模型及数量；数据库回归增加完整快照读取与目录存在性查询。

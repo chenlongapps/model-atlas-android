@@ -30,10 +30,18 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +59,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -69,7 +79,14 @@ fun ModelListRoute(
     viewModel: ModelListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    ModelListScreen(uiState = uiState, onRetry = viewModel::retry, modifier = modifier)
+    ModelListScreen(
+        uiState = uiState,
+        onRetry = viewModel::retry,
+        onRefresh = viewModel::refresh,
+        onApplyUpdate = viewModel::applyUpdate,
+        onMessageShown = viewModel::clearMessage,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -78,12 +95,39 @@ internal fun ModelListScreen(
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
     windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
+    onRefresh: () -> Unit = {},
+    onApplyUpdate: () -> Unit = {},
+    onMessageShown: () -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest
     var showLicense by rememberSaveable { mutableStateOf(false) }
     // 展开状态提到列表层，避免滚动回收卡片后丢失，同时便于状态恢复。
     var expandedPriceModelId by rememberSaveable { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val pullState = rememberPullToRefreshState()
+    val refreshLabel = stringResource(R.string.model_list_refresh)
+    val updateLabel = stringResource(R.string.model_list_apply_update)
+    val updateNotice = stringResource(R.string.model_list_update_available)
+    val notice = when {
+        uiState.refreshError != null -> stringResource(uiState.refreshError.messageResource())
+        uiState.message == ModelListMessage.UPDATED -> stringResource(R.string.model_list_updated)
+        uiState.message == ModelListMessage.UP_TO_DATE -> stringResource(R.string.model_list_up_to_date)
+        else -> null
+    }
+    LaunchedEffect(notice, uiState.updateAvailable, uiState.isRefreshing) {
+        if (notice != null) {
+            snackbarHostState.showSnackbar(notice)
+            onMessageShown()
+        } else if (uiState.updateAvailable && !uiState.isRefreshing) {
+            val result = snackbarHostState.showSnackbar(
+                message = updateNotice,
+                actionLabel = updateLabel,
+                duration = SnackbarDuration.Indefinite,
+            )
+            if (result == SnackbarResult.ActionPerformed) onApplyUpdate()
+        }
+    }
 
     Scaffold(
         modifier = modifier
@@ -106,92 +150,110 @@ internal fun ModelListScreen(
                 }
             },
         containerColor = backgroundColor,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = windowInsets,
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("model-list")
-                .consumeWindowInsets(innerPadding),
-            contentPadding = PaddingValues(
-                start = innerPadding.calculateStartPadding(layoutDirection) + 16.dp,
-                top = innerPadding.calculateTopPadding() + 16.dp,
-                end = innerPadding.calculateEndPadding(layoutDirection) + 16.dp,
-                bottom = innerPadding.calculateBottomPadding() + 16.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item(key = "catalog-header") {
-                CatalogHeader(uiState = uiState, onShowLicense = { showLicense = true })
-            }
-            when {
-                uiState.isLoading -> item(key = "loading") {
-                    CatalogStateCard(
-                        title = stringResource(R.string.model_list_loading_title),
-                        message = stringResource(R.string.model_list_loading),
-                        isLoading = true,
-                    )
-                }
-                uiState.error != null -> item(key = "error") {
-                    val message = when (uiState.error) {
-                        ModelListError.NETWORK -> R.string.model_list_network_error
-                        ModelListError.SERVER -> R.string.model_list_server_error
-                        ModelListError.INVALID_DATA -> R.string.model_list_invalid_data
-                        ModelListError.RATE_LIMITED -> R.string.model_list_rate_limited
-                        ModelListError.STORAGE -> R.string.model_list_storage_error
-                    }
-                    CatalogStateCard(
-                        title = stringResource(R.string.model_list_error_title),
-                        message = stringResource(message),
-                        onRetry = onRetry,
-                    )
-                }
-                uiState.models.isEmpty() -> item(key = "empty") {
-                    CatalogStateCard(
-                        title = stringResource(R.string.model_list_empty_title),
-                        message = stringResource(R.string.model_list_empty),
-                    )
-                }
-            }
-            if (uiState.models.isNotEmpty()) {
-                item(key = "sort-order") {
-                    Text(
-                        text = stringResource(R.string.model_list_order),
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            items(items = uiState.models, key = { "model:${it.id}" }) { model ->
-                ModelCard(
-                    model = model,
-                    priceDetailsExpanded = expandedPriceModelId == model.id,
-                    onTogglePriceDetails = {
-                        expandedPriceModelId =
-                            if (expandedPriceModelId == model.id) null else model.id
-                    },
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { if (!uiState.isLoading) onRefresh() },
+            state = pullState,
+            modifier = Modifier.fillMaxSize(),
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullState,
+                    isRefreshing = uiState.isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                        .padding(top = innerPadding.calculateTopPadding()),
                 )
-            }
-            if (uiState.models.isNotEmpty()) {
-                item(key = "price-notice") {
-                    Surface(
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+            },
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("model-list")
+                    .semantics {
+                        customActions = listOf(CustomAccessibilityAction(refreshLabel) {
+                            if (uiState.isLoading || uiState.isRefreshing) false else {
+                                onRefresh()
+                                true
+                            }
+                        })
+                    }
+                    .consumeWindowInsets(innerPadding),
+                contentPadding = PaddingValues(
+                    start = innerPadding.calculateStartPadding(layoutDirection) + 16.dp,
+                    top = innerPadding.calculateTopPadding() + 16.dp,
+                    end = innerPadding.calculateEndPadding(layoutDirection) + 16.dp,
+                    bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item(key = "catalog-header") {
+                    CatalogHeader(uiState = uiState, onShowLicense = { showLicense = true })
+                }
+                when {
+                    uiState.isLoading -> item(key = "loading") {
+                        CatalogStateCard(
+                            title = stringResource(R.string.model_list_loading_title),
+                            message = stringResource(R.string.model_list_loading),
+                            isLoading = true,
+                        )
+                    }
+                    uiState.error != null -> item(key = "error") {
+                        val message = uiState.error.messageResource()
+                        CatalogStateCard(
+                            title = stringResource(R.string.model_list_error_title),
+                            message = stringResource(message),
+                            onRetry = onRetry,
+                        )
+                    }
+                    uiState.models.isEmpty() -> item(key = "empty") {
+                        CatalogStateCard(
+                            title = stringResource(R.string.model_list_empty_title),
+                            message = stringResource(R.string.model_list_empty),
+                        )
+                    }
+                }
+                if (uiState.models.isNotEmpty()) {
+                    item(key = "sort-order") {
+                        Text(
+                            text = stringResource(R.string.model_list_order),
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(items = uiState.models, key = { "model:${it.id}" }) { model ->
+                    ModelCard(
+                        model = model,
+                        priceDetailsExpanded = expandedPriceModelId == model.id,
+                        onTogglePriceDetails = {
+                            expandedPriceModelId =
+                                if (expandedPriceModelId == model.id) null else model.id
+                        },
+                    )
+                }
+                if (uiState.models.isNotEmpty()) {
+                    item(key = "price-notice") {
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
                         ) {
-                            Text(
-                                stringResource(R.string.model_list_price_notice_title),
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            Text(
-                                text = stringResource(R.string.model_list_price_notice),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.model_list_price_notice_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = stringResource(R.string.model_list_price_notice),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
@@ -223,6 +285,14 @@ internal fun ModelListScreen(
             },
         )
     }
+}
+
+private fun ModelListError.messageResource() = when (this) {
+    ModelListError.NETWORK -> R.string.model_list_network_error
+    ModelListError.SERVER -> R.string.model_list_server_error
+    ModelListError.INVALID_DATA -> R.string.model_list_invalid_data
+    ModelListError.RATE_LIMITED -> R.string.model_list_rate_limited
+    ModelListError.STORAGE -> R.string.model_list_storage_error
 }
 
 @Composable

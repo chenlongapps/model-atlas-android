@@ -2,10 +2,11 @@
 
 ## 当前实现与边界
 
-已定义并接通三张 Room3 实体、独立本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成最小目录存储。已落库不代表完成离线缓存策略。
+已定义并接通三张 Room3 实体、独立本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成目录存储，支持本地优先读取、后台检查与主动更新。
 
 - `CatalogMapper` 实现 DTO → Entity，保留整个目录与完整复杂字段；数据库名为 `catalog.db`，由 Hilt 配置 `AndroidSQLiteDriver`。
-- Repository 并行请求两个端点，均成功后以全量快照事务更新三表；规范模型与服务商左连接 Flow 驱动真实 LLM 列表。
+- Repository 并行请求两个端点，均成功后形成完整快照；后台检查只暂存变化，用户确认或主动下拉刷新才以全量快照事务更新三表。规范模型与服务商左连接 Flow 驱动真实 LLM 列表。
+- `hasCatalog()` 用三表存在性查询判断本地是否有记录，不用筛选后的 LLM 数量代替；`readCatalog()` 在单个事务中读取三表完整 Entity，供目录比较，不改变 Schema v1。`CatalogSnapshot.hasSameContentAs()` 按主键比较、忽略 `fetchedAtEpochMillis` 与字典顺序，其他已映射字段与缺失值语义均保留。待应用快照仅在仓库内存暂存，不增加持久化表或迁移；相同内容不重复写库。
 - 收藏、筛选状态、最低价等业务数据不混入目录实体；当前不建设多数据源框架。
 - 报价投影 `observeOfferingPriceRows()` 只取显式关联到规范模型且 `pricing` 非空的服务，按 `(canonicalModelId, providerId, id)` 排序；规范模型元数据仍由 `observeModelRows()` 单独提供，两条 Flow 在仓库层合并，互不覆盖。
 - 测试目录中的 `CatalogSchemaTestDatabase` 仅用于 Room KSP 编译校验，不创建运行时数据库。
@@ -77,4 +78,4 @@ JSON 字段目前不承担复杂 SQL 筛选或排序。未来明确需要按单�
 - `CatalogEntitiesTest` 覆盖可选字段默认未知、独立标识、显式获取时间、服务自身的能力 / 限制，以及超出 Int 的 token 数和不完整日期。
 - `CatalogSchemaTestDatabase` 通过 `app/build.gradle.kts` 中的 `kspTest` 显式启用 Room 处理器，让测试编译阶段校验三实体的字段类型、复合主键、外键、索引和转换器声明；这不等同于数据库读写或级联删除测试。
 
-`androidTest` 的 `CatalogDatabaseTest` 验证实际 SQLite 读写、跨服务商重复服务 ID、显式与缺失关联、快照替换、外键失败时整笔回滚和文件数据库重开，并验证报价投影只取显式关联且有报价的服务、未匹配报价行不会变成模型、无报价时不生成报价行。生产 Schema v1 导出到 `app/schemas/`。尚未涉及版本升级迁移、离线策略或刷新失败回退；这些能力需在后续任务增加相应测试。任务进度只在 [TODO.md](../TODO.md) 维护。
+`androidTest` 的 `CatalogDatabaseTest` 验证实际 SQLite 读写、跨服务商重复服务 ID、显式与缺失关联、快照替换、外键失败时整笔回滚和文件数据库重开，并验证完整快照读取、目录存在性查询、报价投影只取显式关联且有报价的服务、未匹配报价行不会变成模型、无报价时不生成报价行。生产 Schema v1 导出到 `app/schemas/`。目录比较、后台检查不写库、应用快照、离线展示和刷新失败保留数据由仓库／ViewModel 单元测试覆盖。尚未涉及版本升级迁移或更新时间展示。任务进度只在 [TODO.md](../TODO.md) 维护。

@@ -136,8 +136,75 @@ class ModelRepositoryTest {
     @Test fun successfulEmptyResponsesAreNotErrors() = runTest {
         api.models = emptyMap()
         api.providers = emptyMap()
-        repository(StandardTestDispatcher(testScheduler)).refresh()
-        assertEquals(CatalogSnapshot(emptyList(), emptyList(), emptyList()), store.snapshot)
+        assertEquals(false, repository(StandardTestDispatcher(testScheduler)).refresh())
+        assertEquals(0, store.writes)
+    }
+
+    @Test fun checkStagesChangesAndApplyDoesNotDownloadAgain() = runTest {
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        assertEquals(false, repository.hasLocalCatalog())
+        repository.refresh()
+        val previous = store.snapshot
+        api.models = api.models.mapValues { (_, model) -> model.copy(name = "Updated") }
+        assertTrue(repository.checkForUpdates())
+        assertEquals(previous, store.snapshot)
+        assertEquals(1, store.writes)
+        assertTrue(repository.applyPendingUpdate())
+        assertEquals("Updated", store.snapshot!!.models.single().name)
+        assertEquals(2, api.providerRequests)
+        assertEquals(2, store.writes)
+        assertEquals(false, repository.applyPendingUpdate())
+        assertTrue(repository.hasLocalCatalog())
+    }
+
+    @Test fun sameContentWithDifferentFetchTimesDoesNotSuggestUpdateOrWrite() = runTest {
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        repository.refresh()
+        store.snapshot = store.snapshot!!.let { snapshot -> snapshot.copy(
+            models = snapshot.models.map { it.copy(fetchedAtEpochMillis = 1) },
+            providers = snapshot.providers.map { it.copy(fetchedAtEpochMillis = 2) },
+            offerings = snapshot.offerings.map { it.copy(fetchedAtEpochMillis = 2) },
+        ) }
+        assertEquals(false, repository.checkForUpdates())
+        assertEquals(false, repository.refresh())
+        assertEquals(1, store.writes)
+    }
+
+    @Test fun manualRefreshSupersedesStagedUpdateAndCanClearCatalog() = runTest {
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        repository.refresh()
+        api.models = api.models.mapValues { (_, model) -> model.copy(name = "Staged") }
+        repository.checkForUpdates()
+        api.models = emptyMap()
+        api.providers = emptyMap()
+        assertTrue(repository.refresh())
+        assertTrue(store.snapshot!!.isEmpty)
+        assertEquals(false, repository.applyPendingUpdate())
+    }
+
+    @Test fun failedCheckPreservesDatabaseAndPendingSnapshotCanBeRetriedAfterWriteFailure() = runTest {
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        repository.refresh()
+        val previous = store.snapshot
+        api.models = api.models.mapValues { (_, model) -> model.copy(name = "New") }
+        repository.checkForUpdates()
+        api.providerFailure = IOException("offline")
+        try {
+            repository.checkForUpdates()
+            error("Expected network failure")
+        } catch (_: IOException) {
+            assertEquals(previous, store.snapshot)
+        }
+        store.writeFailure = IllegalStateException("disk")
+        try {
+            repository.applyPendingUpdate()
+            error("Expected write failure")
+        } catch (_: IllegalStateException) {
+            assertEquals(previous, store.snapshot)
+        }
+        store.writeFailure = null
+        assertTrue(repository.applyPendingUpdate())
+        assertEquals("New", store.snapshot!!.models.single().name)
     }
 
     private fun repository(dispatcher: kotlinx.coroutines.CoroutineDispatcher) =
@@ -180,9 +247,13 @@ class ModelRepositoryTest {
         val priceRows = MutableStateFlow<List<ModelOfferingPriceRow>>(emptyList())
         var snapshot: CatalogSnapshot? = null
         var writes = 0
+        var writeFailure: Exception? = null
+        override suspend fun hasCatalog() = snapshot?.isEmpty == false
+        override suspend fun readCatalog() = snapshot ?: CatalogSnapshot(emptyList(), emptyList(), emptyList())
         override fun observeModelRows() = rows
         override fun observeOfferingPriceRows() = priceRows
         override suspend fun replaceCatalog(snapshot: CatalogSnapshot) {
+            writeFailure?.let { throw it }
             writes++
             this.snapshot = snapshot
         }
