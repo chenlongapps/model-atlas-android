@@ -11,6 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.SerializationException
@@ -57,6 +59,60 @@ class ModelListViewModelTest {
         advanceUntilIdle()
         assertEquals(ModelListUiState(repository.models.value, isLoading = false), viewModel.uiState.value)
         assertEquals(2, repository.refreshes)
+    }
+
+    @Test fun firstLoadKeepsLoadingUntilCommittedModelsAreRead() = runTest {
+        val repository = FakeRepository().apply { refreshObservationGate = CompletableDeferred() }
+        val viewModel = create(repository)
+        val states = mutableListOf<ModelListUiState>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect { states += it }
+        }
+
+        advanceUntilIdle()
+        assertEquals(1, repository.refreshes)
+        assertTrue(repository.local)
+        assertTrue(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.models.isEmpty())
+
+        repository.refreshObservationGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(repository.remoteModels, viewModel.uiState.value.models)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(states.none { !it.isLoading && it.models.isEmpty() && it.error == null })
+    }
+
+    @Test fun firstLoadFinishesWhenCommittedCatalogReallyIsEmpty() = runTest {
+        val repository = FakeRepository().apply {
+            remoteModels = emptyList()
+            refreshObservationGate = CompletableDeferred()
+        }
+        val viewModel = create(repository)
+
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isLoading)
+        repository.refreshObservationGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ModelListUiState(isLoading = false), viewModel.uiState.value)
+    }
+
+    @Test fun firstLoadRetryKeepsLoadingUntilCommittedModelsAreRead() = runTest {
+        val repository = FakeRepository().apply { failure = IOException("offline") }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.error)
+
+        repository.failure = null
+        repository.refreshObservationGate = CompletableDeferred()
+        viewModel.retry()
+        advanceUntilIdle()
+        assertEquals(2, repository.refreshes)
+        assertTrue(viewModel.uiState.value.isLoading)
+        assertEquals(null, viewModel.uiState.value.error)
+
+        repository.refreshObservationGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ModelListUiState(repository.remoteModels, isLoading = false), viewModel.uiState.value)
     }
 
     @Test fun repeatedRetryWhileLoadingDoesNotLaunchMoreRequests() = runTest {
@@ -283,9 +339,14 @@ class ModelListViewModelTest {
         var applies = 0
         private var pending: List<ModelSummary>? = null
         var gate: CompletableDeferred<Unit>? = null
-        override fun observeModels(): Flow<List<ModelSummary>> = observationFailure?.let { failure ->
-            flow { throw failure }
-        } ?: models
+        var refreshObservationGate: CompletableDeferred<Unit>? = null
+        override fun observeModels(): Flow<List<ModelSummary>> = flow {
+            observationFailure?.let { throw it }
+            models.collect { models ->
+                if (local && refreshes > 0) refreshObservationGate?.await()
+                emit(models)
+            }
+        }
         override suspend fun hasLocalCatalog() = local
         override suspend fun checkForUpdates(): Boolean {
             checks++

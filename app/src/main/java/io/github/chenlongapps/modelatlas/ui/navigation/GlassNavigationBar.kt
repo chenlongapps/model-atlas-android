@@ -6,6 +6,8 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +40,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -45,7 +49,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
@@ -71,6 +78,7 @@ internal fun GlassNavigationBar(
     pagerState: PagerState,
     backdrop: Backdrop,
     onNavigate: (Int) -> Unit,
+    onModelsDoubleClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items = Destination.entries
@@ -87,6 +95,8 @@ internal fun GlassNavigationBar(
     val isRtl = layoutDirection == LayoutDirection.Rtl
     val haptics = LocalHapticFeedback.current
     val navigate by rememberUpdatedState(onNavigate)
+    val modelsDoubleClick by rememberUpdatedState(onModelsDoubleClick)
+    val scrollToTopLabel = stringResource(R.string.model_list_scroll_to_top)
 
     Box(
         modifier = modifier
@@ -146,22 +156,26 @@ internal fun GlassNavigationBar(
                 )
             }
             Row(
-                modifier = Modifier.selectableGroup().pointerInput(pagerState, layoutDirection) {
-                    var lastTarget = pagerState.currentPage
-                    detectHorizontalDragGestures(
-                        onDragStart = { lastTarget = pagerState.currentPage },
-                        onHorizontalDrag = { change, _ ->
-                            val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                            val logicalFraction = if (isRtl) 1f - fraction else fraction
-                            val target = (logicalFraction * items.size).toInt().coerceIn(items.indices)
-                            if (target != lastTarget) {
-                                lastTarget = target
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                navigate(target)
-                            }
-                        },
-                    )
-                },
+                modifier = Modifier.selectableGroup()
+                    .pointerInput(layoutDirection) {
+                        detectModelsDoubleClicks(isRtl, spacing = 4.dp.toPx()) { modelsDoubleClick() }
+                    }
+                    .pointerInput(pagerState, layoutDirection) {
+                        var lastTarget = pagerState.currentPage
+                        detectHorizontalDragGestures(
+                            onDragStart = { lastTarget = pagerState.currentPage },
+                            onHorizontalDrag = { change, _ ->
+                                val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                                val logicalFraction = if (isRtl) 1f - fraction else fraction
+                                val target = (logicalFraction * items.size).toInt().coerceIn(items.indices)
+                                if (target != lastTarget) {
+                                    lastTarget = target
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    navigate(target)
+                                }
+                            },
+                        )
+                    },
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -178,6 +192,14 @@ internal fun GlassNavigationBar(
                             .weight(1f)
                             .clip(CircleShape)
                             .testTag(item.tag)
+                            .semantics {
+                                if (item == Destination.Models) {
+                                    customActions = listOf(CustomAccessibilityAction(scrollToTopLabel) {
+                                        onModelsDoubleClick()
+                                        true
+                                    })
+                                }
+                            }
                             .selectable(
                                 selected = selected,
                                 role = Role.Tab,
@@ -212,5 +234,44 @@ internal fun GlassNavigationBar(
                 }
             }
         }
+    }
+}
+
+/** 只观察触摸，不消费事件或等待双击后才执行单击，保留 selectable 与父级拖动的响应。 */
+private suspend fun PointerInputScope.detectModelsDoubleClicks(
+    isRtl: Boolean,
+    spacing: Float,
+    onDoubleClick: () -> Unit,
+) {
+    var previousUpTime: Long? = null
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val itemWidth = (size.width - spacing) / 2f
+        val modelStart = if (isRtl) size.width - itemWidth else 0f
+        val modelEnd = if (isRtl) size.width.toFloat() else itemWidth
+        val interval = previousUpTime?.let { down.uptimeMillis - it }
+        val isDoubleClick = interval != null &&
+            interval in viewConfiguration.doubleTapMinTimeMillis..viewConfiguration.doubleTapTimeoutMillis
+        var validTap = down.position.x in modelStart..modelEnd
+        var upTime = down.uptimeMillis
+        do {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                validTap = false
+                break
+            }
+            if (event.changes.size != 1 ||
+                (change.position - down.position).getDistance() > viewConfiguration.touchSlop ||
+                change.position.x !in modelStart..modelEnd ||
+                change.position.y !in 0f..size.height.toFloat()
+            ) {
+                validTap = false
+            }
+            upTime = change.uptimeMillis
+        } while (change.pressed)
+        validTap = validTap && upTime - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
+        previousUpTime = if (validTap && !isDoubleClick) upTime else null
+        if (validTap && isDoubleClick) onDoubleClick()
     }
 }

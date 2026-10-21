@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -18,33 +17,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,14 +44,14 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -73,12 +64,14 @@ import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import kotlinx.coroutines.delay
 
 @Composable
 fun ModelListRoute(
     modifier: Modifier = Modifier,
     bottomOverlayPadding: Dp = 0.dp,
     viewModel: ModelListViewModel = hiltViewModel(),
+    listState: LazyListState = rememberLazyListState(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     ModelListScreen(
@@ -86,9 +79,10 @@ fun ModelListRoute(
         onRetry = viewModel::retry,
         onRefresh = viewModel::refresh,
         onApplyUpdate = viewModel::applyUpdate,
-        onMessageShown = viewModel::clearMessage,
+        onDismissNotice = viewModel::clearMessage,
         modifier = modifier,
         bottomOverlayPadding = bottomOverlayPadding,
+        listState = listState,
     )
 }
 
@@ -100,36 +94,34 @@ internal fun ModelListScreen(
     windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     onRefresh: () -> Unit = {},
     onApplyUpdate: () -> Unit = {},
-    onMessageShown: () -> Unit = {},
+    onDismissNotice: () -> Unit = {},
     bottomOverlayPadding: Dp = 0.dp,
+    listState: LazyListState = rememberLazyListState(),
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest
-    var showLicense by rememberSaveable { mutableStateOf(false) }
+    val showSkeletons = uiState.isLoading && uiState.models.isEmpty()
+    val shimmerProgress = rememberModelSkeletonShimmer(showSkeletons)
     // 展开状态提到列表层，避免滚动回收卡片后丢失，同时便于状态恢复。
     var expandedPriceModelId by rememberSaveable { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
     val pullState = rememberPullToRefreshState()
     val refreshLabel = stringResource(R.string.model_list_refresh)
-    val updateLabel = stringResource(R.string.model_list_apply_update)
-    val updateNotice = stringResource(R.string.model_list_update_available)
-    val notice = when {
-        uiState.refreshError != null -> stringResource(uiState.refreshError.messageResource())
-        uiState.message == ModelListMessage.UPDATED -> stringResource(R.string.model_list_updated)
-        uiState.message == ModelListMessage.UP_TO_DATE -> stringResource(R.string.model_list_up_to_date)
-        else -> null
+    val accessibilityManager = LocalAccessibilityManager.current
+    val dismissNotice by rememberUpdatedState(onDismissNotice)
+    val transientMessage = uiState.message.takeIf {
+        uiState.hasCatalogNotice() && !uiState.isRefreshing && uiState.refreshError == null
     }
-    LaunchedEffect(notice, uiState.updateAvailable, uiState.isRefreshing) {
-        if (notice != null) {
-            snackbarHostState.showSnackbar(notice)
-            onMessageShown()
-        } else if (uiState.updateAvailable && !uiState.isRefreshing) {
-            val result = snackbarHostState.showSnackbar(
-                message = updateNotice,
-                actionLabel = updateLabel,
-                duration = SnackbarDuration.Indefinite,
-            )
-            if (result == SnackbarResult.ActionPerformed) onApplyUpdate()
+    // 不放在 LazyColumn 条目内，避免滚动回收／重建提醒时重置计时。
+    LaunchedEffect(transientMessage, accessibilityManager) {
+        if (transientMessage != null) {
+            val timeout = accessibilityManager?.calculateRecommendedTimeoutMillis(
+                originalTimeoutMillis = 3_000L,
+                containsIcons = true,
+                containsText = true,
+                containsControls = false,
+            ) ?: 3_000L
+            delay(timeout)
+            dismissNotice()
         }
     }
 
@@ -154,9 +146,6 @@ internal fun ModelListScreen(
                 }
             },
         containerColor = backgroundColor,
-        snackbarHost = {
-            SnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomOverlayPadding))
-        },
         contentWindowInsets = windowInsets,
     ) { innerPadding ->
         PullToRefreshBox(
@@ -174,6 +163,7 @@ internal fun ModelListScreen(
             },
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("model-list")
@@ -195,15 +185,19 @@ internal fun ModelListScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item(key = "catalog-header") {
-                    CatalogHeader(uiState = uiState, onShowLicense = { showLicense = true })
+                    Column {
+                        CatalogHeader(uiState = uiState)
+                        AnimatedCatalogStatusNotice(
+                            notice = uiState.catalogNotice(),
+                            onApplyUpdate = onApplyUpdate,
+                            onRefresh = onRefresh,
+                            onDismiss = onDismissNotice,
+                        )
+                    }
                 }
                 when {
-                    uiState.isLoading -> item(key = "loading") {
-                        CatalogStateCard(
-                            title = stringResource(R.string.model_list_loading_title),
-                            message = stringResource(R.string.model_list_loading),
-                            isLoading = true,
-                        )
+                    showSkeletons -> items(count = 6, key = { "skeleton:$it" }) { index ->
+                        ModelCardSkeleton(shimmerProgress = shimmerProgress, index = index)
                     }
                     uiState.error != null -> item(key = "error") {
                         val message = uiState.error.messageResource()
@@ -240,60 +234,12 @@ internal fun ModelListScreen(
                         },
                     )
                 }
-                if (uiState.models.isNotEmpty()) {
-                    item(key = "price-notice") {
-                        Surface(
-                            shape = MaterialTheme.shapes.large,
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.model_list_price_notice_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Text(
-                                    text = stringResource(R.string.model_list_price_notice),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }
-    if (showLicense) {
-        val resources = LocalResources.current
-        val license = remember(resources) {
-            resources.openRawResource(R.raw.models_dev_license).bufferedReader().use { it.readText() }
-        }
-        AlertDialog(
-            onDismissRequest = { showLicense = false },
-            shape = MaterialTheme.shapes.extraLarge,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            title = { Text(stringResource(R.string.data_source_action)) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(stringResource(R.string.model_list_source_notice))
-                    Text(stringResource(R.string.model_list_price_notice))
-                    Text(license, style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLicense = false }) { Text(stringResource(R.string.close)) }
-            },
-        )
-    }
 }
 
-private fun ModelListError.messageResource() = when (this) {
+internal fun ModelListError.messageResource() = when (this) {
     ModelListError.NETWORK -> R.string.model_list_network_error
     ModelListError.SERVER -> R.string.model_list_server_error
     ModelListError.INVALID_DATA -> R.string.model_list_invalid_data
@@ -302,40 +248,28 @@ private fun ModelListError.messageResource() = when (this) {
 }
 
 @Composable
-private fun CatalogHeader(uiState: ModelListUiState, onShowLicense: () -> Unit) {
-    Row(
+private fun CatalogHeader(uiState: ModelListUiState) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("catalog-header")
             .padding(horizontal = 4.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.app_name),
-                modifier = Modifier.semantics { heading() },
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(
-                text = if (!uiState.isLoading && uiState.error == null) {
-                    stringResource(R.string.model_list_count, uiState.models.size)
-                } else {
-                    stringResource(R.string.model_list_title)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        FilledTonalIconButton(onClick = onShowLicense) {
-            Icon(
-                painter = painterResource(R.drawable.ic_info),
-                contentDescription = stringResource(R.string.data_source_action),
-            )
-        }
+        Text(
+            text = stringResource(R.string.app_name),
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        Text(
+            text = if (!uiState.isLoading && uiState.error == null) {
+                stringResource(R.string.model_list_count, uiState.models.size)
+            } else {
+                stringResource(R.string.model_list_title)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -343,7 +277,6 @@ private fun CatalogHeader(uiState: ModelListUiState, onShowLicense: () -> Unit) 
 private fun CatalogStateCard(
     title: String,
     message: String,
-    isLoading: Boolean = false,
     onRetry: (() -> Unit)? = null,
 ) {
     Card(
@@ -362,11 +295,7 @@ private fun CatalogStateCard(
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             ) {
                 Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
-                    } else {
-                        Icon(painterResource(R.drawable.ic_catalog), contentDescription = null, modifier = Modifier.size(32.dp))
-                    }
+                    Icon(painterResource(R.drawable.ic_catalog), contentDescription = null, modifier = Modifier.size(32.dp))
                 }
             }
             Text(
@@ -471,7 +400,9 @@ private fun ModelListScreenPreview() {
     }
 }
 
-@Preview(name = "Loading", showBackground = true)
+@Preview(name = "Loading · Light", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Loading · Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "Loading · Large font", showBackground = true, widthDp = 320, fontScale = 2f)
 @Composable
 private fun ModelListLoadingPreview() {
     ModelAtlasTheme { ModelListScreen(ModelListUiState()) }

@@ -84,7 +84,7 @@ class ModelListViewModel @Inject constructor(
                     val models = modelRepository.observeModels().first()
                     val hasLocal = modelRepository.hasLocalCatalog()
                     _uiState.update { it.copy(models = models, isLoading = !hasLocal) }
-                    observeCatalog()
+                    if (hasLocal) observeCatalog()
                     backgroundCheck = hasLocal
                 }
                 if (backgroundCheck) {
@@ -97,7 +97,11 @@ class ModelListViewModel @Inject constructor(
                     }
                 } else {
                     val changed = if (applyPending) modelRepository.applyPendingUpdate() else modelRepository.refresh()
-                    _uiState.update { it.copy(isLoading = false, updateAvailable = false) }
+                    // 写库完成不等于观察者已收到结果；首次加载重新查询已提交目录，
+                    // 再原子发布列表与加载结束，避免短暂显示空目录（真实空结果仍可结束加载）。
+                    val models = if (initial) modelRepository.observeModels().first() else null
+                    _uiState.update { it.copy(models = models ?: it.models, isLoading = false, updateAvailable = false) }
+                    if (initial) observeCatalog()
                     if (!initial) refreshed(changed)
                 }
             } catch (cancelled: CancellationException) {

@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的真实 LLM 列表、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及模型／设置双标签与悬浮玻璃导航。设置页仅有占位框架；搜索、详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
+本文描述当前已实现的真实 LLM 列表、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及模型／设置双标签与悬浮玻璃导航。设置页提供“数据来源与许可”独立页面入口；搜索、详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
 
 ## 代码入口与职责
 
@@ -12,7 +12,8 @@
 | [`MainActivity.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/MainActivity.kt) | 应用入口，启用边到边显示，承载 `ModelAtlasTheme` 与 `ModelAtlasApp`，关闭系统导航栏对比度遮罩 |
 | [`ui/ModelAtlasApp.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/ModelAtlasApp.kt) | 两个标签页的外壳，通过 `HorizontalPager` 切换模型与设置，记录页面背景供玻璃导航采样，并向页面传递悬浮栏避让高度 |
 | [`ui/navigation/GlassNavigationBar.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/navigation/GlassNavigationBar.kt) | Backdrop 悬浮玻璃胶囊、连续跟随分页偏移的选中块、点击和拖动切换、选中图标和颜色过渡及震动反馈 |
-| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面框架，目前只显示“暂无设置项”，没有实际设置功能 |
+| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面，提供“数据来源与许可”入口 |
+| [`ui/settings/DataSourceScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/DataSourceScreen.kt) | 独立说明页，集中展示数据来源、第三方身份、价格适用条件和随包 MIT 许可全文，提供返回按钮 |
 | [`data/model/ModelSummary.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelSummary.kt) | 独立列表摘要模型，包含稳定 ID、名称、发布时间、token 限制、输入／输出模态、开放权重与许可；LAB 从稳定 ID 前缀派生，不引用 DTO 或 Entity |
 | [`data/model/ModelPrice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelPrice.kt) | `ModelPriceSummary` 与 `ModelPriceTierSummary`，单条展示报价与条件档位，口径为 USD / 百万 tokens |
 | [`data/model/PriceProviderPolicy.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/PriceProviderPolicy.kt) | 官方服务商对应表与第三方优先级；决定同一模型多个报价中展示哪一家 |
@@ -31,7 +32,9 @@
 | [`data/repository/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/) | `ModelRepository` 接口与 `DefaultModelRepository`；请求、获取时间、后台映射、完整内容比较、暂存待更新快照、限流冷却与目录写入 |
 | [`di/DataModule.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/di/DataModule.kt) | 网络客户端、数据库、时钟、IO dispatcher 与接口绑定 |
 | [`ui/modellist/ModelListViewModel.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModel.kt) | 定义 `ModelListUiState`，读取仓库数据并暴露只读 `StateFlow` |
-| [`ui/modellist/ModelListScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListScreen.kt) | 包含 Route、列表界面、加载／错误／空目录状态卡片、许可弹窗及预览 |
+| [`ui/modellist/ModelListScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListScreen.kt) | 包含 Route、列表界面、首次加载骨架、错误／空目录状态卡片及预览，不再承载来源入口、价格说明卡片或许可弹窗 |
+| [`ui/modellist/ModelCardSkeleton.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCardSkeleton.kt) | 模型卡片骨架、整组共享的 Shimmer 动画与加载语义；根据生命周期和分页可见性暂停动画 |
+| [`ui/modellist/CatalogStatusNotice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNotice.kt) | 页头下的内联状态提醒及淡入／淡出、高度过渡，展示待更新、自动消失的成功结果与非阻断错误，提供确认更新、重试和错误手动关闭；刷新期间不显示加载卡片 |
 | [`ui/modellist/ModelCard.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCard.kt) | 紧凑模型卡片及独立预览、图标参数行、方向模态标签、分列价格区与档位、数值格式化 |
 | [`ui/modellist/LabLogo.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/LabLogo.kt) | LAB 前缀到随包彩色 logo 素材的映射与卡片 logo 组件，没有素材时显示兜底图 |
 | [`ui/theme/Theme.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/theme/Theme.kt) | 定义 Compose 主题与颜色；Activity／窗口主题的修改位置见 [AGENTS.md](../AGENTS.md) |
@@ -58,35 +61,42 @@ DefaultModelRepository.checkForUpdates() / refresh()
 ```
 
 - `ModelListViewModel` 初始化先读取并观察本地目录；存在任一目录记录时立即展示（即使筛选后的 LLM 列表为空），后台仅检查更新，不自动覆盖数据库。无本地记录时自动获取并提交，首次失败展示分类错误与重试，不使用示例。
-- 状态区分 `isLoading`、`isRefreshing`、`updateAvailable`、阻断错误 `error` 和非阻断的刷新结果／错误。后台检查失败静默保留本地目录；主动刷新失败用 Snackbar 提示，不清空列表。底部持续 Snackbar 提供“立即更新”，确认后提交已获取快照，不重复下载；下拉刷新直接获取并应用，若正在检查则复用当前请求并在完成后提交。初次加载、检查、提交和主动刷新统一防重入，取消不当作失败。
-- `ModelListScreen` 通过 Material 3 `PullToRefreshBox` 提供下拉刷新（空目录同样支持），指示器避开顶部系统栏，并为读屏提供“刷新目录”自定义操作。Snackbar 不改变列表页头的普通滚动行为。
+- 无本地目录的首次加载及首次失败重试在刷新提交后重新订阅目录查询，收到首个已提交结果后一次性发布 `models` 与 `isLoading = false`，再持续观察目录；不把网络／写库完成当作列表就绪，避免数据库 Flow 通知滞后时闪现空目录。真实空结果同样结束加载，不等待列表非空，也不人为延迟。
+- 状态区分 `isLoading`、`isRefreshing`、`updateAvailable`、阻断错误 `error` 和非阻断的刷新结果／错误。后台检查失败静默保留本地目录；主动刷新失败用页头下的内联提醒提示，不清空列表。待更新提醒提供“立即更新”，确认后提交已获取快照，不重复下载；下拉刷新直接获取并应用，若正在检查则复用当前请求并在完成后提交。初次加载、检查、提交和主动刷新统一防重入，取消不当作失败。
+- `ModelListScreen` 通过 Material 3 `PullToRefreshBox` 提供下拉刷新（空目录同样支持），指示器避开顶部系统栏，并为读屏提供“刷新目录”自定义操作。刷新期间只保留上方的下拉刷新指示器，不额外显示内联加载提醒。不再使用 Snackbar；`CatalogHeader` 与提醒动画容器合并在同一个稳定 key 的列表项内，提醒仍位于页头与排序说明／模型列表之间，随列表普通滚动，不固定、不吸顶，不主动滚回顶部。提醒上方的 16dp 间距包含在动画内容内，退出结束后高度与间距都归零，不因空列表项残留间距；阻断错误与空目录继续使用状态卡片。
+- 首次无本地目录及首次失败重试在 `isLoading && models.isEmpty()` 时展示六个惰性模型骨架条目，包含 56dp logo、名称／LAB／标签、参数、模态与价格占位；圆角、背景、内边距及间距贴合真实卡片。骨架不创建假 `ModelSummary`，不改变数据源和 ViewModel；页头保留应用名与“模型目录”，不显示虚假的零模型数量。占位块沿用主题 `onSurface` 的低透明度底色与高亮，整组共用 1.2 秒循环的斜向扫光时钟，仅在绘制阶段读取动画值。应用非 `RESUMED`、切到设置页、打开说明子页面或设计预览时静态展示；系统关闭动画时同样保留静态骨架。第一条骨架提供礼貌级“正在加载模型目录…”与不确定进度语义，其余占位不提供重复读屏节点或操作。加载完成后直接显示真实列表／空目录／错误，不人为延迟；已有数据刷新继续保留真实模型与原下拉刷新指示器，不显示骨架。
+- `AnimatedCatalogStatusNotice` 以不含模型列表的 `CatalogNotice` 展示投影作为可空动画目标，使用 Compose `AnimatedContent` 淡入（200ms）／淡出（180ms）及 `SizeTransform` 高度过渡；出现、消失和错误／待更新／成功内容切换均平滑让位，不加弹跳或大幅滑动，遵循系统动画时长设置。退出内容保留到动画完成，但立即禁用旧操作并清除旧读屏语义，避免重复按钮和过时动作。刷新开始时只退出原提醒，不生成新的加载卡片；快速状态切换可中断过渡并收敛到最新状态。页头离开视口后不为恢复显示而重播入场动画，原有成功清除计时不受动画重建影响。
+- 内联提醒使用 24dp 圆角、16dp 内边距、主题 `surfaceContainerLow` 背景，正文保持 `onSurface`，图标以 `primary`／`error` 区分状态，文本提供礼貌级读屏更新语义。操作独立排列并支持换行。刷新期间整体隐藏，结束后显示优先级为刷新错误 → 更新结果 → 待更新。“模型目录已更新／已是最新数据”仅显示图标与正文，不显示关闭按钮或空操作区，默认约 3 秒后自动清除，并遵循无障碍服务建议的显示时长。计时由 `ModelListScreen` 在列表外管理，避免条目滚动回收时重置；结果被更新中、错误或其他结果替换时取消旧计时，避免清除新的状态。待更新提示仍需显式确认；失败不自动消失，有待应用快照时继续提供“立即更新”，否则提供“重试”，并保留手动关闭。关闭错误仅清除消息，不丢弃待更新快照，随后恢复待更新提醒。
 - `ModelListRoute` 负责获取 Hilt ViewModel 和生命周期感知的状态收集，不直接请求数据源。
 - `ModelListScreen` 通过参数接收状态，不依赖 Hilt 或 ViewModel。修改时保留这一边界，使预览和后续界面测试可以使用独立数据。
-- `ModelAtlasApp` 承载两个标签：模型列表与设置占位。外壳通过内容插槽保持可独立预览和测试，真实模型页继续使用 `ModelListRoute`，不新增业务数据源。`rememberPagerState` 保存当前页面，两个页面都保留在分页器中，切换时不重建列表或重新启动更新提示协程；列表位置、许可弹窗和报价展开状态继续使用各自可保存状态。
+- `ModelAtlasApp` 承载两个标签：模型列表与设置。外壳通过内容插槽保持可独立预览和测试，真实模型页继续使用 `ModelListRoute`，不新增业务数据源。`rememberPagerState` 保存当前页面，两个页面都保留在分页器中，切换时不重建列表或主动清除已有状态提醒；成功结果的自动清除计时继续进行。列表位置和报价展开状态继续使用各自可保存状态。
+- 双击悬浮导航的“模型”标签通过 `animateScrollToItem(0, 0)` 平滑滚回目录最顶部（首项、偏移均为 0），替代瞬间跳转；长列表沿用 Compose 的远距离滚动处理，不自行逐条执行动画。从设置页双击时，切页动画与列表回顶同时进行。`ModelAtlasScaffold` 通过 `rememberLazyListState` 保存列表滚动状态并沿内容插槽、Route 传给 Screen，置顶仅操作 UI 状态，不经过 ViewModel、不刷新数据，也不清除报价展开或状态提醒。单击和普通切页仍保留阅读位置。
+- 导航以不消费事件的指针监听按系统双击时间阈值识别模型标签双击；单击继续由 `selectable` 立即处理，不等待双击超时。拖动、多指、长按、越界或点击设置会中断连续模型点击，保留 Tab 单选语义与既有横向拖动切页；设置标签不提供双击操作。模型标签另提供“回到模型列表顶部”自定义无障碍操作，避免要求读屏用户执行触摸双击手势。
+- 设置入口打开全屏 `DataSourceScreen`，替代原来源许可弹窗并集中展示原列表底部的价格说明，不依赖目录是否已加载。外壳以 `rememberSaveable` 保存子页面显示状态；打开时主分页器和玻璃导航保持组合但不放置，避免绘制、触摸与读屏穿透，同时保留列表位置、报价展开和提醒计时。页面提供固定在系统安全区内的返回按钮，系统返回由 `NavigationBackHandler` 处理，两种方式都回到设置页。说明正文使用 `LazyColumn`，支持滚动位置恢复、深浅主题、大字体与 RTL；不引入通用导航栈或新数据源。
 - 悬浮栏参考 RvSystem Monitor 的玻璃样式，使用 `io.github.kyant0:backdrop:2.0.0`：分页内容通过 `layerBackdrop` 记录，导航外壳和选中块分别采样，组合增艳、4dp 模糊、镜片折射与色散，覆盖主题半透明底色。Android 12/12L 支持模糊，Android 13 及以上再叠加运行时着色器折射；Android 10/11 与设计预览使用实色胶囊兜底。没有新增外观开关，配色沿用动态主题。
-- 胶囊底部居中，距系统导航安全区 16dp，水平至少留白 16dp、最大宽度 400dp；底部与两侧避让导航栏及显示缺口。页面仍自行处理系统安全区，外壳只额外传递实测导航高度加 32dp 外边距，列表使用底部 `contentPadding`，更新 Snackbar 额外向上避让，因此滚动内容可经过玻璃后方，而列表末尾及“立即更新”操作不会被遮挡。标签提供 Tab 单选语义及至少 56dp 的布局高度，字号放大时导航自动增高；位置与拖动映射支持 RTL。
+- 胶囊底部居中，距系统导航安全区 16dp，水平至少留白 16dp、最大宽度 400dp；底部与两侧避让导航栏及显示缺口。页面仍自行处理系统安全区，外壳只额外传递实测导航高度加 32dp 外边距，列表使用底部 `contentPadding`，因此滚动内容可经过玻璃后方，而列表末尾及内联提醒的操作仍可滚动到导航上方。标签提供 Tab 单选语义及至少 56dp 的布局高度，字号放大时导航自动增高；位置与拖动映射支持 RTL。
 - 模型标签使用三柱圆角图标：参考所提供 SVG 的 473∶223 比例、柱宽、高度与圆角，等比居中于 24dp 图标槽；中心柱更高更宽，两侧以 alpha 保留层次。未选中使用 `ic_nav_models_outline.xml` 中空描边版，选中使用 `ic_nav_models.xml` 实心版；描边约 1.3dp，中心线向内收缩，保证两版外轮廓一致，内部真正透明而非背景色填充。图标通过既有 Crossfade 过渡，颜色沿用导航主题，不固定 SVG 的灰黑色；列表状态卡片的 `ic_catalog` 保持不变。
-- 页面不使用 `TopAppBar`、Scaffold 的 `topBar` 插槽或应用栏专用滚动行为。标题、目录数量与来源许可入口放在 Scaffold 内容区内，作为 `LazyColumn` 的首项 `CatalogHeader`，与模型卡片同速滚动，回到列表顶部时才再次显示，不固定、不吸顶，也不在下滑时单独弹出。Scaffold 最后叠加随主题变化的半透明状态栏渐变保护层，不占布局空间、不拦截触摸。
+- 页面不使用 `TopAppBar`、Scaffold 的 `topBar` 插槽或应用栏专用滚动行为。模型列表的标题与目录数量放在 Scaffold 内容区内，作为 `LazyColumn` 的首项 `CatalogHeader`，与模型卡片同速滚动，回到列表顶部时才再次显示，不固定、不吸顶，也不在下滑时单独弹出。Scaffold 最后叠加随主题变化的半透明状态栏渐变保护层，不占布局空间、不拦截触摸。来源许可入口已移至设置页，模型列表不再显示价格说明卡片。
 - 列表使用 `models.json` 字典键作为稳定 `id` 和条目 key；每个规范模型一行。同名模型不合并，缺少服务商关联的规范模型仍展示；查询仍保留显式 `canonical_model_id` 左连接，摘要映射按规范模型 ID 去重，不再向界面传递服务商和描述。报价来自独立的 `observeOfferingPriceRows()` 投影，两条 Flow 在仓库层用 `combine` 合并后一起映射，因此规范模型元数据与报价不会互相污染。
 - 数据库存储整个目录以保留未关联服务和完整报价；列表收录明确 `type = "llm"`，或无类型且输入、输出模态均包含 `text` 的记录。明确非 LLM、未知类型及无法判断的记录不收录。该规则不是模型能力认证。
 
 ## 当前实现边界
 
 - 列表展示模型名、LAB 文字与 logo、发布时间、上下文长度、最大输出、多模态能力和开放权重。LAB 取稳定 ID 第一个 `/` 前的非空白部分，没有分隔符或有效前缀时显示“暂无数据”，不视为独立核实的开发商。日期保留来源精度，限制在数据层保留完整 `Long`，列表视觉使用十进制 K／M 缩写、最多一位小数并去除末尾零（`1,000,000 → 1M`、`384,000 → 384K`、`131,072 → 131.1K`）；读屏仍提供字段名、带千位分隔的精确值和 tokens 单位。上下文长度使用横向扩展图标（`ic_context_window`），最大输出使用文字输出箭头图标（`ic_output_limit`），均为随主题着色的 16dp 描边图标，视觉上不重复单位。
-- 列表保留参考 RvSystem Monitor 的圆角结构，模型卡片仅按新的参考图调整紧凑布局、不复制配色：24dp 圆角、16dp 内边距与 16dp 列表间距；56dp logo 右侧显示模型名、LAB、合并的权重许可标签，下面是可换行的图标参数行；输入与输出模态标签横排，中间以指向输出的箭头区分，不显示“输出：”前缀，读屏保留输入／输出说明，窄屏可换行。模型能力与价格之间仅用一条细分隔线分区，价格不再嵌套独立背景或圆角卡片；输入／输出及存在时的缓存命中输入仍以主题色突出、列间显示细分隔线，按价格区可用宽度和字号调整为 1–3 列，窄屏时不额外缩小字体、截断单价或将价格改为近似值。顶部目录数量、来源许可入口与既有发布时间倒序不变，不新增详情跳转或导航。
-- 主题仍使用现有 Material 3 依赖；Android 12 及以上使用系统动态浅色／深色调色板，低版本使用固定备用色。预览关闭动态取色，保持可复现；测试可通过 `ModelAtlasTheme(dynamicColor = false)` 固定配色。加载、空目录、分类错误和许可弹窗统一采用圆角与色调分层。Activity 的 `enableEdgeToEdge()` 继续管理系统栏图标颜色，保留时间、电量等系统信息。页面合并系统栏与显示缺口 insets，Scaffold 将安全区传给列表的 `contentPadding`，不在列表或其父容器添加系统栏 padding，因此初始标题、按钮和首条内容避开系统图标，滚动内容仍可延伸到状态栏下方；底部安全区不变。
+- 列表保留参考 RvSystem Monitor 的圆角结构，模型卡片仅按新的参考图调整紧凑布局、不复制配色：24dp 圆角、16dp 内边距与 16dp 列表间距；56dp logo 右侧显示模型名、LAB、合并的权重许可标签，下面是可换行的图标参数行；输入与输出模态标签横排，中间以指向输出的箭头区分，不显示“输出：”前缀，读屏保留输入／输出说明，窄屏可换行。模型能力与价格之间仅用一条细分隔线分区，价格不再嵌套独立背景或圆角卡片；输入／输出及存在时的缓存命中输入仍以主题色突出、列间显示细分隔线，按价格区可用宽度和字号调整为 1–3 列，窄屏时不额外缩小字体、截断单价或将价格改为近似值。保留顶部目录数量与既有发布时间倒序，不新增模型详情跳转。
+- 主题仍使用现有 Material 3 依赖；Android 12 及以上使用系统动态浅色／深色调色板，低版本使用固定备用色。预览关闭动态取色，保持可复现；测试可通过 `ModelAtlasTheme(dynamicColor = false)` 固定配色。加载、空目录、分类错误和来源说明区块统一采用圆角与色调分层。Activity 的 `enableEdgeToEdge()` 继续管理系统栏图标颜色，保留时间、电量等系统信息。模型列表合并系统栏与显示缺口 insets，Scaffold 将安全区传给列表的 `contentPadding`，不在列表或其父容器添加系统栏 padding，因此初始标题和首条内容避开系统图标，滚动内容仍可延伸到状态栏下方；底部安全区不变。来源说明子页面则整体避让安全区，确保固定返回按钮和滚动正文不被系统栏覆盖。
 - 开放权重按 `open_weights` 三态展示：“开放权重”“权重未公开”“开放权重：暂无数据”；仅在权重公开且 `license` 去除首尾空白后为 1–16 个字符时，以中点附带原始许可短名，如“开放权重 · MIT”“开放权重 · Apache-2.0”。长名称不截断、不猜测简称，列表仅显示“开放权重”，完整原文继续保留在模型与本地目录中，未来详情页再展示（详情页尚未实现）。该字段是来源报告的权重可获取状态，不等于开源、允许任意用途或允许商用，界面来源说明已注明这一点。
 - 列表在模型名左侧显示 LAB 彩色 logo：素材来自 Models.dev 的 Logos 服务，随包覆盖 23 个实验室，按稳定 ID 第一个 `/` 前的前缀精确匹配；没有素材（含 LAB 缺失）时显示兜底星光图，不借用其他实验室的素材，也不从服务商 ID 或名称反推对应关系。素材保留品牌原色、不随主题变色，因此使用固定白色圆角底，保证深色图案在深色卡片上同样可读；logo 只是视觉标识，「LAB 为 ID 前缀标签、未经独立核实」的说明保留。
 - 列表顺序由映射层固定按发布时间倒序（最新在前）：缺失或空白发布时间的模型排在最后，发布时间相同再按名称（不区分大小写）和稳定 ID 稳定排序。日期只按字符串字典序比较，不解析或补全，因此 `2025` 早于 `2025-06`、`2025-06` 早于 `2025-06-01`；DAO 仍按名称排序，仅作为去重前的稳定输入。当前不提供排序切换。
 - 多模态能力分别展示输入和输出，标签仅显示图标、不显示文字，读屏保留模态描述：已知模态翻译为中文，未知模态保留原值；缺失描述为“暂无数据”，显式空集合描述为“无”。文本模态使用 16dp 的 T 形描边图标（`ic_text`），随主题着色；PDF 保留文档图标。列表字段仅取规范模型，不混用 API 服务商限制；服务商和摘要仍保留在本地目录。仅预览和测试保留合成样本，运行时没有 demo 数据。
-- 卡片展示一条报价：以「API 价格 · 美元 / 1M tokens」为小节标题，分列展示输入、输出及存在时的缓存命中输入单价，逐行展示来源提供的缓存写入、推理、音频输入、音频输出单价；单位统一为 USD / 百万 tokens。价格区直接沿用外层模型卡片的 `surface` 背景，标题和价格使用 `primary`，权重公开标签使用 `tertiaryContainer` / `onTertiaryContainer`，跟随系统动态浅色／深色调色板，不硬编码参考图中的绿色。界面不展示服务商名称，也不标注“官方／第三方”或数据未提供的“非高峰”，选取规则只在 `PriceProviderPolicy` 与 `selectPriceFor` 内部决定展示哪一家，该规则是应用内的展示顺序，不是质量或最低价排行榜。没有可用报价时显示「价格：暂无数据」，不补造零价；明确的 `0` 显示为 `$0.00`。`tiers` 的上下文档位默认折叠，有档位时标题行显示箭头并可点击展开／收起，读屏提供动作与状态；无档位时不显示无效箭头。列表底部与「数据来源与许可」弹窗都注明同一模型的不同服务商价格不可直接比较。
+- 卡片展示一条报价：以「API 价格 · 美元 / 1M tokens」为小节标题，分列展示输入、输出及存在时的缓存命中输入单价，逐行展示来源提供的缓存写入、推理、音频输入、音频输出单价；单位统一为 USD / 百万 tokens。价格区直接沿用外层模型卡片的 `surface` 背景，标题和价格使用 `primary`，权重公开标签使用 `tertiaryContainer` / `onTertiaryContainer`，跟随系统动态浅色／深色调色板，不硬编码参考图中的绿色。界面不展示服务商名称，也不标注“官方／第三方”或数据未提供的“非高峰”，选取规则只在 `PriceProviderPolicy` 与 `selectPriceFor` 内部决定展示哪一家，该规则是应用内的展示顺序，不是质量或最低价排行榜。没有可用报价时显示「价格：暂无数据」，不补造零价；明确的 `0` 显示为 `$0.00`。`tiers` 的上下文档位默认折叠，有档位时标题行显示箭头并可点击展开／收起，读屏提供动作与状态；无档位时不显示无效箭头。设置中的「数据来源与许可」独立页面注明同一模型的不同服务商价格不可直接比较，列表不再重复说明。
 - 价格格式化至少保留两位小数（`0.6` → `$0.60`），来源更精确时保留更多位（`0.003` → `$0.003`），避免把高精度报价抹成 `$0.00`。
 - 价格区采用无独立背景的 `PriceSection`，取消内层圆角容器与额外内边距，标题、指标与分隔线左对齐；标题与计价单位统一采用 `labelSmall`（默认 11sp／16sp 行高），弱化说明文字、突出 `titleMedium` 单价，保留系统字号缩放。标题箭头缩至 16dp，不再设置 48dp 的布局最小高度，默认标题行随内容约为 16dp；`clickable` 在布局外扩展触摸区域，维持至少 48dp 的触摸高度，附近无其他可点击控件。标题与指标等区域间距 4dp，指标内部间距 2dp，换行间距 8dp。仍保留输入／输出／缓存分列、完整价格精度、单位及其他类别；档位门槛显示完整数值，不使用 K／M 近似。
 - 档位展开箭头遵循折叠区惯例：收起时朝下，展开后朝上，通过 0°／180° 旋转动画过渡；不使用目录树式的朝右／朝下组合。整行点击和读屏动作／状态不变，UI 回归比较箭头实际绘制的尖端方向，覆盖展开与再次收起。
 - 已实现本地优先与离线浏览：每个新的 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。更新检测涵盖全部模型、服务商和模型服务的新增、删除、参数与报价等变化，不仅限于当前列表字段；不将本地抓取时间或字典顺序变化当作更新。待应用快照仅暂存在仓库内存中，进程重启后重新检查；内容一致时不重复写库。尚未展示更新时间，也未引入 TTL 策略。
 - 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
-- 当前只有模型与设置两个顶层标签，没有模型详情、收藏、对比或基于路由的导航栈。设置为占位页面，不因导航入口存在就假定对应业务能力已实现。
+- 当前只有模型与设置两个顶层标签，以及从设置打开的来源许可说明子页面；没有模型详情、收藏、对比或基于路由的通用导航栈，不因导航入口存在就假定对应业务能力已实现。
 - Models.dev 的收录、计价、能力与许可约定见[数据源说明](data-source.md)。
 
 ## 现有单元测试
@@ -96,7 +106,8 @@ DefaultModelRepository.checkForUpdates() / refresh()
 | 测试 | 已覆盖内容 |
 | --- | --- |
 | [`ModelRepositoryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/repository/ModelRepositoryTest.kt) | 完整写入、失败不写半份、取消、数据库 Flow、空目录、限流冷却、检查不写库、应用不重复下载、无变化不写库、手动刷新取代暂存快照与提交失败可重试 |
-| [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 首次加载与重试、本地优先、后台检查、主动应用、刷新失败保留数据、检查中下拉复用请求、刷新去重与取消，不对外暴露 `MutableStateFlow` |
+| [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 首次加载与重试、提交后查询结果延迟时保持加载且不发布瞬态空目录、真实空结果正常结束加载、本地优先、后台检查、主动应用、刷新失败保留数据、检查中下拉复用请求、刷新去重与取消，不对外暴露 `MutableStateFlow` |
+| [`CatalogStatusNoticeTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNoticeTest.kt) | 内联提醒的显示条件、无状态与刷新中不占位、首次加载与阻断错误不重复提醒、关闭结果保留待更新提示，以及动画目标不受模型列表变化影响 |
 | [`CatalogSnapshotTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSnapshotTest.kt) | 完整内容比较、忽略抓取时间与字典顺序、增删及参数／报价变化、保留缺失与空集合／零值区别 |
 | [`ModelsDevApiTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApiTest.kt) | MockWebServer 验证真实 Retrofit 路径、`type=all`、两个端点的解析与 HTTP 错误不自动重试 |
 | [`CatalogMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/CatalogMapperTest.kt)、[`ModelListMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelListMapperTest.kt) | 独立 ID、显式关联、完整复杂字段、缺失信息、规范模型去重、列表元数据映射、开放权重与许可三态、发布时间倒序、报价投影挂载与未匹配报价行 |
@@ -115,12 +126,20 @@ DefaultModelRepository.checkForUpdates() / refresh()
 
 测试目录另有仅供 Room KSP 编译检查的 [`CatalogSchemaTestDatabase`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSchemaTestDatabase.kt)，不创建运行时数据库。异步单元测试使用 `kotlinx-coroutines-test` 和手写 fake，不依赖公网。
 
-`androidTest` 中的 `CatalogDatabaseTest` 使用实际 SQLite 验证关联、复合服务 ID、事务回滚、快照替换、文件重开、报价投影只取显式关联且有报价的服务以及未匹配报价行不会变成模型；`ModelListScreenTest` 使用 Compose Test APIs v2 验证真实字段、方向模态标签、缺失值、开放权重与短许可展示（长许可隐藏）、加载、空目录、重试、许可说明与弹窗状态恢复，以及报价不显示官方／第三方标记、输入输出单价与单位、零价与缺失价、价格明细展开收起与状态恢复、档位标题至少 48dp 点击高度和不可直接比较提示，还包括 LAB logo 及兜底图、目录数量、Token 缩写与精确读屏语义、双倍字号下长名称和缩写数值不溢出。`ModelAtlasThemeTest` 验证固定与系统动态浅色／深色调色板，另有 API 30 及以下的备用配色用例。构建与测试命令统一见 [AGENTS.md](../AGENTS.md)。
+`androidTest` 中的 `CatalogDatabaseTest` 使用实际 SQLite 验证关联、复合服务 ID、事务回滚、快照替换、文件重开、报价投影只取显式关联且有报价的服务以及未匹配报价行不会变成模型；`ModelListScreenTest` 使用 Compose Test APIs v2 验证真实字段、方向模态标签、缺失值、开放权重与短许可展示（长许可隐藏）、加载、空目录、重试，以及报价不显示官方／第三方标记、输入输出单价与单位、零价与缺失价、价格明细展开收起与状态恢复、档位标题至少 48dp 触摸高度，还包括 LAB logo 及兜底图、目录数量、Token 缩写与精确读屏语义、双倍字号下长名称和缩写数值不溢出；另确认列表不再出现来源按钮或价格说明。`ModelAtlasThemeTest` 验证固定与系统动态浅色／深色调色板，另有 API 30 及以下的备用配色用例。构建与测试命令统一见 [AGENTS.md](../AGENTS.md)。
 
-状态栏回归用例通过 `ModelListScreen` 的 `windowInsets` 参数固定顶部高刘海与底部安全区，覆盖浅色、深色及双倍字号；除检查初始内容和底部说明避开安全区、标题随列表滚走及回到顶部后恢复外，还比较状态栏区域的实际绘制像素，避免仅验证布局边界而漏掉实色背景遮挡。另有保持手指按下的拖动用例，检查标题与来源许可按钮的实际位移，并确认页头与模型卡片同速滚动；滚动到列表中部后下滑不会单独显示页头，回到顶部仍可打开许可弹窗。
+状态栏回归用例通过 `ModelListScreen` 的 `windowInsets` 参数固定顶部高刘海与底部安全区，覆盖浅色、深色及双倍字号；除检查初始内容和最后一张模型卡片避开安全区、标题随列表滚走及回到顶部后恢复外，还比较状态栏区域的实际绘制像素，避免仅验证布局边界而漏掉实色背景遮挡。另有保持手指按下的拖动用例，检查标题的实际位移，并确认页头与模型卡片同速滚动；滚动到列表中部后下滑不会单独显示页头。
 
 价格区的浅色／深色回归用例比较价格区与外层模型卡片的实际背景像素，并检查标题、价格区与能力分隔线左对齐，防止重新引入内层卡片底色或额外缩进。
 
-刷新回归增加实际下拉手势（有数据与空目录）、更新提示的显式确认操作、刷新失败仍显示本地模型及数量；数据库回归增加完整快照读取与目录存在性查询。
+刷新回归包括实际下拉手势（有数据与空目录）、更新提示的显式确认操作、刷新失败仍显示本地模型及数量；数据库回归包括完整快照读取与目录存在性查询。`androidTest` 中的 `CatalogStatusNoticeTest` 覆盖浅色／深色下各提醒状态、礼貌级读屏语义、刷新期间无内联提醒且仅有一个加载指示器、失败重试与手动关闭、关闭错误保留待更新操作、成功结果约 3 秒后自动消失且无操作区、无障碍延长时长、旧计时不清除新错误或更新中状态、结果离开视口后仍自动清除，以及 320dp 窄屏双倍字号下正文和操作不裁切；列表回归检查提醒位于页头下、排序说明前，待更新提醒随列表滚动消失并在回到顶部后恢复，以及后台更新提示到达时不改变用户当前阅读位置。
 
-`ModelAtlasAppTest` 覆盖真实列表与设置占位的标签切换、页面滑动与导航拖动、选中块对齐、切换后列表位置不变、标签与报价展开状态恢复、列表末尾及更新 Snackbar 避让悬浮栏，以及双倍字号和 RTL 标签布局。
+`CatalogNoticeAnimationTest` 通过手动推进动画时钟，检查浅色／深色入场与退出的中间高度、后续模型的连续位移和实际背景像素淡化，退出后不残留间距；另覆盖错误切换回待更新时的高度过渡与旧读屏内容清理，以及刷新／成功结果快速替换退出动画。`CatalogNoticeReducedMotionTest` 以零动画时长验证直接应用最终布局。
+
+`ModelCardSkeletonTest` 覆盖浅色／深色及 320dp 双倍字号下扫光实际像素变化、卡片背景不被扫光覆盖、唯一加载语义、加载到真实列表／错误与重试切换、已有目录刷新不显示骨架，以及隐藏页暂停与恢复动画。`ModelCardSkeletonReducedMotionTest` 使用零动画时长验证静态占位与加载语义。
+
+`ModelAtlasAppTest` 覆盖真实列表与设置的标签切换、页面滑动与导航拖动、选中块对齐、切换后列表位置不变、标签与报价展开状态恢复、列表末尾避让悬浮栏、页头下更新提醒在标签切换后保留且可确认，以及双倍字号和 RTL 标签布局；另覆盖设置进入独立说明页、原主界面隐藏、价格说明仅显示一份、MIT 全文、按钮及系统返回、子页面与滚动状态恢复，以及深色双倍字号 RTL 正文无裁切。
+
+导航置顶回归使用实际触摸双击，覆盖精确回到页头初始位置、顶部重复双击不刷新、从设置页双击返回并置顶、单击及超时的两次点击保留位置、设置双击不置顶、点击设置中断连续模型点击、导航拖动后点击不误触、列表位置恢复后仍可置顶、报价展开保留、自定义无障碍操作，以及深色双倍字号 RTL 下置顶与选中块对齐。
+
+回顶动画回归手动推进动画时钟，检查普通距离与第 300 项返回时存在中间滚动位置、动画确实进行中，结束后首项与偏移精确归零，避免只验证最终位置而重新引入瞬移。

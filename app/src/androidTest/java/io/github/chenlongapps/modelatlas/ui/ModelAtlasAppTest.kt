@@ -1,22 +1,31 @@
 package io.github.chenlongapps.modelatlas.ui
 
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
@@ -26,6 +35,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.test.espresso.Espresso.pressBack
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
@@ -41,12 +51,12 @@ import org.junit.Test
 class ModelAtlasAppTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun tabsSwitchBetweenRealCatalogAndSettingsPlaceholder() {
+    @Test fun tabsSwitchBetweenRealCatalogAndSettings() {
         show()
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithText("测试模型 0").assertIsDisplayed()
         compose.onNodeWithTag("nav-settings").performClick().assertIsSelected()
-        compose.onNodeWithText("暂无设置项").assertIsDisplayed()
+        compose.onNodeWithText("数据来源与许可").assertIsDisplayed()
         compose.onNodeWithTag("model-list").assertIsNotDisplayed()
         compose.onNodeWithTag("nav-models").performClick().assertIsSelected()
         compose.onNodeWithText("测试模型 0").assertIsDisplayed()
@@ -77,14 +87,191 @@ class ModelAtlasAppTest {
         assertEquals(before, after, 1f)
     }
 
+    @Test fun doubleClickModelsScrollsToExactTopWithoutRefreshing() {
+        var refreshes = 0
+        show(onRefresh = { refreshes++ })
+        val initialTop = compose.onNodeWithTag("catalog-header").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("catalog-header").assertIsNotDisplayed()
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        compose.onNodeWithTag("catalog-header").assertIsDisplayed()
+        compose.onNodeWithText("测试模型 0").assertIsDisplayed()
+        val top = compose.onNodeWithTag("catalog-header").fetchSemanticsNode().boundsInRoot.top
+        assertEquals(initialTop, top, 1f)
+        compose.runOnIdle { assertEquals(0, refreshes) }
+        // 已在顶部时重复双击也不刷新或改变位置。
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        assertEquals(initialTop, compose.onNodeWithTag("catalog-header").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.runOnIdle { assertEquals(0, refreshes) }
+    }
+
+    @Test fun scrollToTopHasIntermediateFramesInsteadOfJumping() = assertAnimatedScrollToTop(12)
+
+    @Test fun distantScrollToTopAlsoAnimatesAndSettlesExactly() = assertAnimatedScrollToTop(300)
+
+    private fun assertAnimatedScrollToTop(startIndex: Int) {
+        lateinit var listState: LazyListState
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelAtlasScaffold { bottomPadding, state ->
+                    listState = state
+                    ModelListScreen(
+                        uiState = ModelListUiState(
+                            models = List(350) { ModelSummary("lab/model-$it", "测试模型 $it") },
+                            isLoading = false,
+                        ),
+                        bottomOverlayPadding = bottomPadding,
+                        listState = state,
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("model-list").performScrollToIndex(startIndex)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        compose.mainClock.advanceTimeBy(80)
+        compose.runOnIdle {
+            assertTrue("回顶必须经过中间滚动位置，而非瞬间跳到顶部", listState.firstVisibleItemIndex in 1 until startIndex)
+            assertTrue("回顶应仍在播放滚动动画", listState.isScrollInProgress)
+        }
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle {
+            assertEquals(0, listState.firstVisibleItemIndex)
+            assertEquals(0, listState.firstVisibleItemScrollOffset)
+            assertFalse(listState.isScrollInProgress)
+        }
+        compose.onNodeWithTag("catalog-header").assertIsDisplayed()
+    }
+
+    @Test fun singleClickAndSlowRepeatedClicksKeepCatalogPosition() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("nav-models").performTouchInput { click() }
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.onNodeWithTag("nav-models").performTouchInput {
+            advanceEventTime(600)
+            click()
+            advanceEventTime(600)
+            click()
+        }
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.onNodeWithTag("catalog-header").assertIsNotDisplayed()
+    }
+
+    @Test fun doubleClickModelsFromSettingsSelectsModelsAndScrollsToTop() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithTag("catalog-header").assertIsDisplayed()
+        compose.onNodeWithText("测试模型 0").assertIsDisplayed()
+        assertIndicatorMatches("nav-models")
+    }
+
+    @Test fun doubleClickSettingsDoesNotResetCatalogPosition() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("nav-settings").performTouchInput { doubleClick() }
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.onNodeWithTag("nav-models").performClick()
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+    }
+
+    @Test fun settingsTapInterruptsConsecutiveModelTaps() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("nav-models").performTouchInput { click() }
+        compose.onNodeWithTag("nav-settings").performTouchInput {
+            advanceEventTime(50)
+            click()
+        }
+        compose.onNodeWithTag("nav-models").performTouchInput {
+            advanceEventTime(50)
+            click()
+        }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+    }
+
+    @Test fun catalogScrollPositionSurvivesStateRestoration() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelAtlasScaffold { bottomPadding, listState ->
+                    ModelListScreen(
+                        ModelListUiState(
+                            models = List(30) { ModelSummary("lab/model-$it", "测试模型 $it") },
+                            isLoading = false,
+                        ),
+                        bottomOverlayPadding = bottomPadding,
+                        listState = listState,
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        restoration.emulateSavedInstanceStateRestore()
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        compose.onNodeWithTag("catalog-header").assertIsDisplayed()
+    }
+
+    @Test fun navigationDragAndFollowingTapDoNotTriggerScrollToTop() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("glass-navigation").performTouchInput {
+            swipe(Offset(width * 0.2f, centerY), Offset(width * 0.8f, centerY), 100)
+        }
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.onNodeWithTag("nav-models").performTouchInput { click() }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+        assertIndicatorMatches("nav-models")
+    }
+
+    @Test fun doubleClickPreservesExpandedPriceDetails() {
+        show(models = listOf(tieredModel) + List(20) { ModelSummary("lab/model-$it", "测试模型 $it") })
+        compose.onNodeWithText("API 价格").performClick()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        compose.onNodeWithText("上下文 ≥ 100 tokens：输入 $0.20 · 输出 $0.30").assertIsDisplayed()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun scrollToTopIsAvailableAsAccessibilityAction() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithTag("nav-models").performCustomAccessibilityActionWithLabel("回到模型列表顶部")
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithTag("catalog-header").assertIsDisplayed()
+    }
+
+    @Test fun doubleClickModelsSupportsDarkThemeLargeFontAndRtl() {
+        show(darkTheme = true, fontScale = 2f, direction = LayoutDirection.Rtl)
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
+        compose.onNodeWithTag("catalog-header").assertIsDisplayed()
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        assertIndicatorMatches("nav-models")
+    }
+
     @Test fun selectedTabAndPriceExpansionSurviveStateRestoration() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding ->
+                ModelAtlasScaffold { bottomPadding, listState ->
                     ModelListScreen(
                         uiState = ModelListUiState(models = listOf(tieredModel), isLoading = false),
                         bottomOverlayPadding = bottomPadding,
+                        listState = listState,
                     )
                 }
             }
@@ -94,27 +281,108 @@ class ModelAtlasAppTest {
         compose.onNodeWithTag("nav-settings").performClick()
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("nav-settings").assertIsSelected()
-        compose.onNodeWithText("暂无设置项").assertIsDisplayed()
+        compose.onNodeWithText("数据来源与许可").assertIsDisplayed()
         compose.onNodeWithTag("nav-models").performClick()
         compose.onNodeWithText("上下文 ≥ 100 tokens：输入 $0.20 · 输出 $0.30").assertIsDisplayed()
     }
 
-    @Test fun catalogFooterCanScrollFullyAboveFloatingNavigation() {
+    @Test fun lastModelCanScrollFullyAboveFloatingNavigation() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("关于这些价格"))
-        // 滚到底部，不仅让标题进入视口，也验证整个价格说明不被悬浮栏挡住。
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText(priceNotice))
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/model-29"))
         compose.onNodeWithTag("model-list").performTouchInput { swipeUp() }
-        val footer = compose.onNodeWithText(priceNotice).fetchSemanticsNode().boundsInRoot
+        val lastModel = compose.onNodeWithTag("model:lab/model-29").fetchSemanticsNode().boundsInRoot
         val navigation = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
-        assertTrue("Footer must remain readable above navigation", footer.bottom <= navigation.top)
+        assertTrue("Last model must remain readable above navigation", lastModel.bottom <= navigation.top)
     }
 
-    @Test fun updateSnackbarStaysAboveNavigationAndStillAppliesUpdate() {
+    @Test fun settingsOpensStandaloneSourcePageWithPricesAndBundledLicense() {
+        show()
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithText("数据来源与许可").performClick()
+        compose.onNodeWithTag("data-source-screen").assertIsDisplayed()
+        compose.onNodeWithTag("main-pager").assertIsNotDisplayed()
+        compose.onNodeWithTag("glass-navigation").assertIsNotDisplayed()
+        compose.onNodeWithText("本应用为独立第三方", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText(priceNotice))
+        compose.onNodeWithText(priceNotice).assertIsDisplayed()
+        compose.onAllNodesWithText(priceNotice).assertCountEquals(1)
+        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("Copyright (c) 2025 models.dev", substring = true))
+        compose.onNodeWithText("Copyright (c) 2025 models.dev", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("THE SOFTWARE IS PROVIDED", substring = true).assertExists()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.onNodeWithTag("settings-screen").assertIsDisplayed()
+        compose.onNodeWithTag("data-source-screen").assertDoesNotExist()
+    }
+
+    @Test fun sourcePageSystemBackPreservesSelectedTabAndCatalogPosition() {
+        show()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithText("数据来源与许可").performClick()
+        compose.onNodeWithTag("data-source-screen").assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.onNodeWithTag("nav-models").performClick()
+        val after = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        assertEquals(before, after, 1f)
+    }
+
+    @Test fun sourcePageAndScrollPositionSurviveStateRestoration() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelAtlasScaffold { bottomPadding, listState ->
+                    ModelListScreen(
+                        ModelListUiState(isLoading = false),
+                        bottomOverlayPadding = bottomPadding,
+                        listState = listState,
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithText("数据来源与许可").performClick()
+        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("Models.dev MIT 许可"))
+        val before = compose.onNodeWithText("Models.dev MIT 许可").fetchSemanticsNode().boundsInRoot.top
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("data-source-screen").assertIsDisplayed()
+        val after = compose.onNodeWithText("Models.dev MIT 许可").fetchSemanticsNode().boundsInRoot.top
+        assertEquals(before, after, 1f)
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+    }
+
+    @Test fun sourcePageSupportsDarkThemeLargeFontAndRtl() {
+        show(darkTheme = true, fontScale = 2f, direction = LayoutDirection.Rtl)
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithText("数据来源与许可").performClick()
+        compose.onNodeWithContentDescription("返回").assertIsDisplayed()
+        for (text in listOf("数据来源与许可", priceNotice)) {
+            if (text == priceNotice) {
+                compose.onNodeWithTag("data-source-content").performScrollToNode(hasText(text))
+            }
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertFalse("Text must not clip vertically", layout.didOverflowHeight)
+            repeat(layout.lineCount) { line ->
+                assertTrue(layout.getLineLeft(line) >= -1f)
+                assertTrue(layout.getLineRight(line) <= layout.size.width + 1f)
+                assertFalse(layout.isLineEllipsized(line))
+            }
+            assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1))
+        }
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+    }
+
+    @Test fun headerNoticeSurvivesTabSwitchAndStillAppliesUpdate() {
         var applies = 0
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding ->
+                ModelAtlasScaffold { bottomPadding, listState ->
                     ModelListScreen(
                         uiState = ModelListUiState(
                             models = listOf(ModelSummary("lab/cached", "本地模型")),
@@ -122,6 +390,7 @@ class ModelAtlasAppTest {
                             updateAvailable = true,
                         ),
                         bottomOverlayPadding = bottomPadding,
+                        listState = listState,
                         onApplyUpdate = { applies++ },
                     )
                 }
@@ -129,6 +398,13 @@ class ModelAtlasAppTest {
         }
         val action = compose.onNodeWithText("立即更新")
         action.assertIsDisplayed()
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithText("立即更新").assertIsNotDisplayed()
+        compose.onNodeWithTag("nav-models").performClick()
+        compose.onNodeWithTag("catalog-notice").assertIsDisplayed()
+        val header = compose.onNodeWithTag("catalog-header").fetchSemanticsNode().boundsInRoot
+        val notice = compose.onNodeWithTag("catalog-notice").fetchSemanticsNode().boundsInRoot
+        assertTrue("Notice must be inline below header", notice.top >= header.bottom)
         val navigation = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
         assertTrue(action.fetchSemanticsNode().boundsInRoot.bottom <= navigation.top)
         action.performClick()
@@ -155,7 +431,7 @@ class ModelAtlasAppTest {
         }
         compose.onNodeWithTag("nav-settings").performClick().assertIsSelected()
         assertIndicatorMatches("nav-settings")
-        compose.onNodeWithText("暂无设置项").assertIsDisplayed()
+        compose.onNodeWithText("数据来源与许可").assertIsDisplayed()
     }
 
     @Test fun darkThemeKeepsBothTabsUsable() {
@@ -163,7 +439,7 @@ class ModelAtlasAppTest {
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithTag("nav-settings").performClick().assertIsSelected()
         assertIndicatorMatches("nav-settings")
-        compose.onNodeWithText("暂无设置项").assertIsDisplayed()
+        compose.onNodeWithText("数据来源与许可").assertIsDisplayed()
     }
 
     private fun assertIndicatorMatches(tabTag: String) {
@@ -177,6 +453,8 @@ class ModelAtlasAppTest {
         fontScale: Float = 1f,
         direction: LayoutDirection = LayoutDirection.Ltr,
         darkTheme: Boolean = false,
+        models: List<ModelSummary> = List(30) { ModelSummary("lab/model-$it", "测试模型 $it") },
+        onRefresh: () -> Unit = {},
     ) {
         compose.setContent {
             val density = LocalDensity.current
@@ -185,13 +463,15 @@ class ModelAtlasAppTest {
                 LocalLayoutDirection provides direction,
             ) {
                 ModelAtlasTheme(darkTheme = darkTheme, dynamicColor = false) {
-                    ModelAtlasScaffold { bottomPadding ->
+                    ModelAtlasScaffold { bottomPadding, listState ->
                         ModelListScreen(
                             uiState = ModelListUiState(
-                                models = List(30) { ModelSummary("lab/model-$it", "测试模型 $it") },
+                                models = models,
                                 isLoading = false,
                             ),
                             bottomOverlayPadding = bottomPadding,
+                            listState = listState,
+                            onRefresh = onRefresh,
                         )
                     }
                 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toPixelMap
@@ -66,6 +67,11 @@ class ModelListScreenTest {
         }
         compose.onNodeWithText("本地模型").assertIsDisplayed()
         compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
+        val header = compose.onNodeWithTag("catalog-header").getUnclippedBoundsInRoot()
+        val notice = compose.onNodeWithTag("catalog-notice").getUnclippedBoundsInRoot()
+        val order = compose.onNodeWithText("按发布时间 · 最新在前").getUnclippedBoundsInRoot()
+        assertTrue("Notice must follow the header", notice.top >= header.bottom)
+        assertTrue("Notice must precede the sort order", notice.bottom <= order.top)
         assertEquals(0, applies)
         compose.onNodeWithText("立即更新").performClick()
         assertEquals(1, applies)
@@ -90,6 +96,40 @@ class ModelListScreenTest {
         compose.onNodeWithText("模型目录 · 1 个模型").assertIsDisplayed()
         compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertIsDisplayed()
         compose.onNodeWithText("暂时无法加载").assertDoesNotExist()
+    }
+
+    @Test fun catalogNoticeScrollsAwayAndReturnsWithTheHeader() {
+        show(ModelListUiState(
+            models = List(40) { ModelSummary("lab/model-$it", "模型 $it") },
+            isLoading = false,
+            updateAvailable = true,
+        ))
+        compose.onNodeWithTag("catalog-notice").assertIsDisplayed()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/model-20"))
+        compose.onNodeWithTag("catalog-notice").assertIsNotDisplayed()
+        compose.onNodeWithText("立即更新").assertIsNotDisplayed()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
+        compose.onNodeWithTag("catalog-notice").assertIsDisplayed()
+        compose.onNodeWithText("立即更新").assertIsDisplayed()
+    }
+
+    @Test fun incomingUpdateNoticeDoesNotScrollTheUserBackToTheHeader() {
+        val state = mutableStateOf(ModelListUiState(
+            models = List(40) { ModelSummary("lab/model-$it", "模型 $it") },
+            isLoading = false,
+        ))
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) { ModelListScreen(state.value) }
+        }
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/model-20"))
+        val model = compose.onNodeWithTag("model:lab/model-20")
+        val before = model.getUnclippedBoundsInRoot().top
+        compose.runOnIdle { state.value = state.value.copy(updateAvailable = true) }
+        model.assertIsDisplayed()
+        assertEquals(before.value, model.getUnclippedBoundsInRoot().top.value, 1f)
+        compose.onNodeWithTag("catalog-notice").assertIsNotDisplayed()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
+        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
     }
 
     private fun assertPullRequestsRefresh(models: List<ModelSummary>) {
@@ -134,9 +174,7 @@ class ModelListScreenTest {
             isLoading = false,
         ))
         val title = compose.onNodeWithText("Model Atlas")
-        val action = compose.onNodeWithContentDescription("数据来源与许可")
         val initialTitleTop = title.fetchSemanticsNode().boundsInRoot.top
-        val initialActionTop = action.fetchSemanticsNode().boundsInRoot.top
         val header = compose.onNodeWithTag("catalog-header")
         val firstModel = compose.onNodeWithTag("model:lab/model-0")
         val initialHeaderTop = header.getUnclippedBoundsInRoot().top
@@ -151,7 +189,6 @@ class ModelListScreenTest {
         }
         try {
             assertTrue("Title must move with the list drag", title.fetchSemanticsNode().boundsInRoot.top < initialTitleTop)
-            assertTrue("Action must move with the list drag", action.fetchSemanticsNode().boundsInRoot.top < initialActionTop)
             val headerMovement = initialHeaderTop - header.getUnclippedBoundsInRoot().top
             val modelMovement = initialModelTop - firstModel.getUnclippedBoundsInRoot().top
             assertEquals("Header must scroll as ordinary list content", modelMovement.value, headerMovement.value, 1f)
@@ -170,17 +207,16 @@ class ModelListScreenTest {
             .performScrollToNode(hasTestTag("model:lab/model-20"))
             .performTouchInput { swipeUp() }
         compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
-        compose.onNodeWithContentDescription("数据来源与许可").assertIsNotDisplayed()
+        compose.onNodeWithContentDescription("数据来源与许可").assertDoesNotExist()
 
         compose.onNodeWithTag("model-list").performTouchInput { swipeDown() }
         compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
-        compose.onNodeWithContentDescription("数据来源与许可").assertIsNotDisplayed()
+        compose.onNodeWithContentDescription("数据来源与许可").assertDoesNotExist()
         compose.onNodeWithTag("model:lab/model-0").assertDoesNotExist()
 
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
         compose.onNodeWithText("Model Atlas").assertIsDisplayed()
-        compose.onNodeWithContentDescription("数据来源与许可").performClick()
-        compose.onNodeWithText("Copyright (c) 2025 models.dev", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
     }
 
     @Test fun showsNameLabCompactMetadataAndDirectionalModalities() {
@@ -530,10 +566,12 @@ class ModelListScreenTest {
             .performScrollTo().assertIsDisplayed()
     }
 
-    @Test fun priceComparabilityNoticeIsShownWithModels() {
+    @Test fun modelListNoLongerShowsPriceNoticeOrSourceAction() {
         show(ModelListUiState(listOf(ModelSummary("lab/model", "模型")), isLoading = false))
+        compose.onNodeWithContentDescription("数据来源与许可").assertDoesNotExist()
+        compose.onNodeWithText("关于这些价格").assertDoesNotExist()
         compose.onNodeWithText("同一模型的不同服务商价格不可直接比较", substring = true)
-            .performScrollTo().assertIsDisplayed()
+            .assertDoesNotExist()
     }
 
     @Test fun emptyCatalogDoesNotShowPriceNotice() {
@@ -554,7 +592,8 @@ class ModelListScreenTest {
 
     @Test fun loadingDoesNotLookLikeEmptyResults() {
         show(ModelListUiState())
-        compose.onNodeWithText("正在加载模型目录…").assertIsDisplayed()
+        compose.onNodeWithContentDescription("正在加载模型目录…").assertIsDisplayed()
+        compose.onNodeWithTag("model-skeleton:0").assertIsDisplayed()
         compose.onNodeWithText("暂无符合收录规则的 LLM 模型。").assertDoesNotExist()
     }
 
@@ -569,25 +608,6 @@ class ModelListScreenTest {
         compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertIsDisplayed()
         compose.onNodeWithText("重试").performClick()
         assertEquals(1, retries)
-    }
-
-    @Test fun displaysBundledUpstreamLicense() {
-        show(ModelListUiState(isLoading = false))
-        compose.onNodeWithContentDescription("数据来源与许可").performClick()
-        compose.onNodeWithText("Copyright (c) 2025 models.dev", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("关闭").performClick()
-        compose.onNodeWithText("Copyright (c) 2025 models.dev", substring = true).assertDoesNotExist()
-    }
-
-    @Test fun restoresOpenLicenseDialog() {
-        val restoration = StateRestorationTester(compose)
-        restoration.setContent {
-            ModelAtlasTheme(dynamicColor = false) { ModelListScreen(ModelListUiState(isLoading = false)) }
-        }
-        compose.onNodeWithContentDescription("数据来源与许可").performClick()
-        restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("Copyright (c) 2025 models.dev", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("关闭").assertIsDisplayed()
     }
 
     @Test fun restoresExpandedPriceDetails() {
@@ -642,7 +662,7 @@ class ModelListScreenTest {
         compose.onNodeWithContentDescription("最大输出：131,072 tokens").assertIsDisplayed()
         assertModalityIcon("input-modalities", "future-modality")
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
-        compose.onNodeWithContentDescription("数据来源与许可").assertIsDisplayed()
+        compose.onNodeWithText("Model Atlas").assertIsDisplayed()
     }
 
     private fun assertPriceChevronPointsDown(pointsDown: Boolean) {
@@ -727,7 +747,7 @@ class ModelListScreenTest {
         }
         listOf(
             compose.onNodeWithText("Model Atlas"),
-            compose.onNodeWithContentDescription("数据来源与许可"),
+            compose.onNodeWithText("模型目录 · 40 个模型"),
             compose.onNodeWithTag("model:lab/model-0"),
         ).forEach { node ->
             assertTrue("Initial content must avoid the top safe area", node.fetchSemanticsNode().boundsInRoot.top >= topInsetPx)
@@ -748,13 +768,13 @@ class ModelListScreenTest {
         compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
         compose.onNodeWithText("Model Atlas").assertIsDisplayed()
-        compose.onNodeWithContentDescription("数据来源与许可").assertIsDisplayed()
+        compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
         compose.onNodeWithTag("model-list")
-            .performScrollToNode(hasText("关于这些价格"))
+            .performScrollToNode(hasTestTag("model:lab/model-39"))
             .performTouchInput { swipeUp() }
-        val notice = compose.onNodeWithText("同一模型的不同服务商价格不可直接比较", substring = true)
-        notice.assertIsDisplayed()
-        assertTrue("Last content must avoid the bottom safe area", notice.fetchSemanticsNode().boundsInRoot.bottom <=
+        val lastModel = compose.onNodeWithTag("model:lab/model-39")
+        lastModel.assertIsDisplayed()
+        assertTrue("Last content must avoid the bottom safe area", lastModel.fetchSemanticsNode().boundsInRoot.bottom <=
             compose.onNodeWithTag("model-list").fetchSemanticsNode().boundsInRoot.bottom - bottomInsetPx)
     }
 
