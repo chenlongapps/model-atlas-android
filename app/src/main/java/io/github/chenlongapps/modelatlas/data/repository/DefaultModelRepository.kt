@@ -47,11 +47,19 @@ class DefaultModelRepository @Inject constructor(
         rows.toModelSummaries(priceRows.groupBy { it.canonicalModelId })
     }.flowOn(ioDispatcher)
 
-    override suspend fun checkForUpdates(): Boolean = refreshMutex.withLock {
+    override suspend fun checkForUpdates(): CatalogUpdateCheckResult = refreshMutex.withLock {
         withContext(ioDispatcher) {
             val snapshot = fetchCatalog()
-            pendingSnapshot = snapshot.takeUnless { it.hasSameContentAs(store.readCatalog()) }
-            pendingSnapshot != null
+            val local = store.readCatalog()
+            if (!snapshot.hasSameModelIdsAs(local)) {
+                pendingSnapshot = snapshot
+                CatalogUpdateCheckResult.UPDATE_AVAILABLE
+            } else {
+                val changed = !snapshot.hasSameContentAs(local)
+                if (changed) store.replaceCatalog(snapshot)
+                pendingSnapshot = null
+                if (changed) CatalogUpdateCheckResult.UPDATED_SILENTLY else CatalogUpdateCheckResult.UNCHANGED
+            }
         }
     }
 

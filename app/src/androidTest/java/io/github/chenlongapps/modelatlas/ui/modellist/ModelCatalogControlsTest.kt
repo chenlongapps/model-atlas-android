@@ -206,6 +206,26 @@ class ModelCatalogControlsTest {
         compose.onNodeWithTag("active-filter:weights").assertDoesNotExist()
     }
 
+    @Test fun labBrandNamesKeepRawIdsInSelectionsAndRemovableTags() {
+        val catalog = listOf(ModelSummary("openai/one", "One"), ModelSummary("deepseek/two", "Two"))
+        val state = mutableStateOf(ModelListUiState(catalog, isLoading = false))
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelListScreen(state.value, onQueryChange = { state.value = state.value.copy(query = it) })
+            }
+        }
+        compose.onNodeWithText("筛选 · 0").performClick()
+        compose.onNodeWithText("研发机构").assertIsDisplayed()
+        compose.onNodeWithTag("filter-lab:openai").performScrollTo().assertTextContains("OpenAI").performClick()
+        compose.onNodeWithTag("filter-lab:deepseek").assertTextContains("DeepSeek")
+        compose.onNodeWithTag("filter-result-count").assertTextContains("预览匹配 1 / 2 个模型")
+        compose.onNodeWithTag("filter-apply").performClick()
+        compose.runOnIdle { assertEquals(setOf("openai"), state.value.query.labs) }
+        compose.onNodeWithTag("active-filter:lab:openai").assertTextContains("研发机构：OpenAI")
+        compose.onNodeWithContentDescription("移除筛选：研发机构：OpenAI").performClick()
+        compose.runOnIdle { assertEquals(emptySet<String>(), state.value.query.labs) }
+    }
+
     @Test fun collapsedLabsPreferWellKnownLabsOverAlphabeticalOrder() {
         val popularLabs = listOf("openai", "anthropic", "google", "deepseek", "alibaba", "meta", "xai", "moonshotai")
         val catalog = (popularLabs + listOf("ai21", "aaa", "mistral")).sorted().map {

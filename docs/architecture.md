@@ -41,6 +41,7 @@
 | [`ui/modellist/CatalogStatusNotice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNotice.kt) | 页头下的内联状态提醒及淡入／淡出、高度过渡，展示待更新、自动消失的成功结果与非阻断错误，提供确认更新、重试和错误手动关闭；刷新期间不显示加载卡片 |
 | [`ui/modellist/ModelCard.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCard.kt) | 紧凑模型卡片及独立预览、图标参数行、方向模态标签、分列价格区与档位、数值格式化 |
 | [`ui/modellist/LabLogo.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/LabLogo.kt) | LAB 前缀到随包彩色 logo 素材的映射与卡片 logo 组件，没有素材时显示兜底图 |
+| [`ui/modellist/LabDisplayName.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/LabDisplayName.kt) | LAB ID 到品牌惯用名称的展示映射，供模型卡片、筛选选项与已选标签共用；未知 LAB 保留原文，不改变底层 ID |
 | [`ui/theme/Theme.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/theme/Theme.kt) | 定义 Compose 主题与颜色；Activity／窗口主题的修改位置见 [AGENTS.md](../AGENTS.md) |
 
 ## 数据与状态流转
@@ -52,7 +53,8 @@ DefaultModelRepository.checkForUpdates() / refresh()
     → 并行请求 models.json?type=all、api.json?type=all
     → CatalogMapper（分别记录两个响应的获取时间）
     → 与本地完整快照比较（忽略本地抓取时间、字典顺序）
-    → 后台检查：仅暂存变化快照、提示可更新 → 用户确认 applyPendingUpdate()
+    → 后台检查：规范模型 ID 集合变化 → 暂存完整快照、提示可更新 → 用户确认 applyPendingUpdate()
+                 ID 集合不变、仅内容变化 → 静默提交完整快照，无提醒；内容一致不写库
     → 主动刷新：直接提交变化快照
     → CatalogStore → CatalogDao.replaceCatalog()（全量快照事务）
     → CatalogDao.observeModelRows()（左连接并去重）
@@ -64,9 +66,9 @@ DefaultModelRepository.checkForUpdates() / refresh()
     → ModelCard(model)
 ```
 
-- `ModelListViewModel` 初始化先读取并观察本地目录；存在任一目录记录时立即展示（即使筛选后的 LLM 列表为空），后台仅检查更新，不自动覆盖数据库。无本地记录时自动获取并提交，首次失败展示分类错误与重试，不使用示例。
+- `ModelListViewModel` 初始化先读取并观察本地目录；存在任一目录记录时立即展示（即使筛选后的 LLM 列表为空），后台检查时仅规范模型增删需要确认，模型 ID 集合不变时静默同步内容。无本地记录时自动获取并提交，首次失败展示分类错误与重试，不使用示例。
 - 无本地目录的首次加载及首次失败重试在刷新提交后重新订阅目录查询，收到首个已提交结果后一次性发布 `models` 与 `isLoading = false`，再持续观察目录；不把网络／写库完成当作列表就绪，避免数据库 Flow 通知滞后时闪现空目录。真实空结果同样结束加载，不等待列表非空，也不人为延迟。
-- 状态区分 `isLoading`、`isRefreshing`、`updateAvailable`、阻断错误 `error` 和非阻断的刷新结果／错误。后台检查失败静默保留本地目录；主动刷新失败用页头下的内联提醒提示，不清空列表。待更新提醒提供“立即更新”，确认后提交已获取快照，不重复下载；下拉刷新直接获取并应用，若正在检查则复用当前请求并在完成后提交。初次加载、检查、提交和主动刷新统一防重入，取消不当作失败。
+- 状态区分 `isLoading`、`isRefreshing`、`updateAvailable`、阻断错误 `error` 和非阻断的刷新结果／错误。后台检查失败静默保留本地目录；主动刷新失败用页头下的内联提醒提示，不清空列表。`checkForUpdates()` 返回 `CatalogUpdateCheckResult`，区分无变化、已静默更新和模型增删待确认；静默更新不设置待更新或成功消息。待更新提醒提供“立即更新”，确认后提交已获取完整快照，不重复下载；下拉刷新直接获取并应用，若正在检查则复用当前请求：待确认时提交暂存快照，已静默更新时不重复写库并反馈“模型目录已更新”，无变化时反馈“已是最新数据”。初次加载、检查、提交和主动刷新统一防重入，取消不当作失败。
 - `ModelListScreen` 通过 Material 3 `PullToRefreshBox` 提供下拉刷新（空目录同样支持），指示器避开顶部系统栏，并为读屏提供“刷新目录”自定义操作。刷新期间只保留上方的下拉刷新指示器，不额外显示内联加载提醒。不再使用 Snackbar；`CatalogHeader` 与提醒动画容器合并在同一个稳定 key 的列表项内，提醒仍位于页头与排序说明／模型列表之间，随列表普通滚动，不固定、不吸顶，不主动滚回顶部。提醒上方的 16dp 间距包含在动画内容内，退出结束后高度与间距都归零，不因空列表项残留间距；阻断错误与空目录继续使用状态卡片。
 - 首次无本地目录及首次失败重试在 `isLoading && models.isEmpty()` 时展示六个惰性模型骨架条目，包含 56dp logo、名称／LAB／标签、参数、模态与价格占位；圆角、背景、内边距及间距贴合真实卡片。骨架不创建假 `ModelSummary`，不改变数据源和 ViewModel；页头保留应用名与“模型目录”，不显示虚假的零模型数量。占位块沿用主题 `onSurface` 的低透明度底色与高亮，整组共用 1.2 秒循环的斜向扫光时钟，仅在绘制阶段读取动画值。应用非 `RESUMED`、切到设置页、打开说明子页面或设计预览时静态展示；系统关闭动画时同样保留静态骨架。第一条骨架提供礼貌级“正在加载模型目录…”与不确定进度语义，其余占位不提供重复读屏节点或操作。加载完成后直接显示真实列表／空目录／错误，不人为延迟；已有数据刷新继续保留真实模型与原下拉刷新指示器，不显示骨架。
 - `AnimatedCatalogStatusNotice` 以不含模型列表的 `CatalogNotice` 展示投影作为可空动画目标，使用 Compose `AnimatedContent` 淡入（200ms）／淡出（180ms）及 `SizeTransform` 高度过渡；出现、消失和错误／待更新／成功内容切换均平滑让位，不加弹跳或大幅滑动，遵循系统动画时长设置。退出内容保留到动画完成，但立即禁用旧操作并清除旧读屏语义，避免重复按钮和过时动作。刷新开始时只退出原提醒，不生成新的加载卡片；快速状态切换可中断过渡并收敛到最新状态。页头离开视口后不为恢复显示而重播入场动画，原有成功清除计时不受动画重建影响。
@@ -98,13 +100,14 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 主题仍使用现有 Material 3 依赖；Android 12 及以上使用系统动态浅色／深色调色板，低版本使用固定备用色。预览关闭动态取色，保持可复现；测试可通过 `ModelAtlasTheme(dynamicColor = false)` 固定配色。加载、空目录、分类错误和来源说明区块统一采用圆角与色调分层。Activity 的 `enableEdgeToEdge()` 继续管理系统栏图标颜色，保留时间、电量等系统信息。模型列表合并系统栏与显示缺口 insets，Scaffold 将安全区传给列表的 `contentPadding`，不在列表或其父容器添加系统栏 padding，因此初始标题和首条内容避开系统图标，滚动内容仍可延伸到状态栏下方；底部安全区不变。来源说明子页面则整体避让安全区，确保固定返回按钮和滚动正文不被系统栏覆盖。
 - 开放权重按 `open_weights` 三态展示：“开放权重”“权重未公开”“开放权重：暂无数据”；仅在权重公开且 `license` 去除首尾空白后为 1–16 个字符时，以中点附带原始许可短名，如“开放权重 · MIT”“开放权重 · Apache-2.0”。长名称不截断、不猜测简称，列表仅显示“开放权重”，完整原文继续保留在模型与本地目录中，未来详情页再展示（详情页尚未实现）。该字段是来源报告的权重可获取状态，不等于开源、允许任意用途或允许商用，界面来源说明已注明这一点。
 - 列表在模型名左侧显示 LAB 彩色 logo：素材来自 Models.dev 的 Logos 服务，随包覆盖 23 个实验室，按稳定 ID 第一个 `/` 前的前缀精确匹配；没有素材（含 LAB 缺失）时显示兜底星光图，不借用其他实验室的素材，也不从服务商 ID 或名称反推对应关系。素材保留品牌原色、不随主题变色，因此使用固定白色圆角底，保证深色图案在深色卡片上同样可读；logo 只是视觉标识，「LAB 为 ID 前缀标签、未经独立核实」的说明保留。
+- LAB 在界面文案中统一称为“研发机构”，包括搜索提示、筛选分组、已选标签、读屏与来源说明；仍保留按模型 ID 前缀展示、未经独立核实的说明。机构名称通过 `LabDisplayName.kt` 将已收录的 23 个前缀映射为品牌惯用写法（如 `openai → OpenAI`、`deepseek → DeepSeek`、`xai → xAI`），模型卡片、筛选选项、已选标签及其读屏使用同一名称；未知 LAB 保留原文，缺失值仍显示“暂无数据”。只调整展示，`ModelSummary.lab`、查询条件、搜索匹配、LAB 排序和 logo 匹配仍使用原始 ID，不改数据库或服务商认定。
 - 列表顺序由映射层固定按发布时间倒序（最新在前）：缺失或空白发布时间的模型排在最后，发布时间相同再按名称（不区分大小写）和稳定 ID 稳定排序。日期只按字符串字典序比较，不解析或补全，因此 `2025` 早于 `2025-06`、`2025-06` 早于 `2025-06-01`；DAO 仍按名称排序，仅作为去重前的稳定输入。当前不提供排序切换。
 - 多模态能力分别展示输入和输出，标签仅显示图标、不显示文字，读屏保留模态描述：已知模态翻译为中文，未知模态保留原值；缺失描述为“暂无数据”，显式空集合描述为“无”。文本模态使用 16dp 的 T 形描边图标（`ic_text`），随主题着色；PDF 保留文档图标。列表字段仅取规范模型，不混用 API 服务商限制；服务商和摘要仍保留在本地目录。仅预览和测试保留合成样本，运行时没有 demo 数据。
 - 卡片展示一条报价：以「API 价格 · 美元 / 1M tokens」为小节标题，分列展示输入、输出及存在时的缓存命中输入单价，逐行展示来源提供的缓存写入、推理、音频输入、音频输出单价；单位统一为 USD / 百万 tokens。价格区直接沿用外层模型卡片的 `surface` 背景，标题和价格使用 `primary`，权重公开标签使用 `tertiaryContainer` / `onTertiaryContainer`，跟随系统动态浅色／深色调色板，不硬编码参考图中的绿色。界面不展示服务商名称，也不标注“官方／第三方”或数据未提供的“非高峰”，选取规则只在 `PriceProviderPolicy` 与 `selectPriceFor` 内部决定展示哪一家，该规则是应用内的展示顺序，不是质量或最低价排行榜。没有可用报价时显示「价格：暂无数据」，不补造零价；明确的 `0` 显示为 `$0.00`。`tiers` 的上下文档位默认折叠，有档位时标题行显示箭头并可点击展开／收起，读屏提供动作与状态；无档位时不显示无效箭头。设置中的「数据来源与许可」独立页面注明同一模型的不同服务商价格不可直接比较，列表不再重复说明。
 - 价格格式化至少保留两位小数（`0.6` → `$0.60`），来源更精确时保留更多位（`0.003` → `$0.003`），避免把高精度报价抹成 `$0.00`。
 - 价格区采用无独立背景的 `PriceSection`，取消内层圆角容器与额外内边距，标题、指标与分隔线左对齐；标题与计价单位统一采用 `labelSmall`（默认 11sp／16sp 行高），弱化说明文字、突出 `titleMedium` 单价，保留系统字号缩放。标题箭头缩至 16dp，不再设置 48dp 的布局最小高度，默认标题行随内容约为 16dp；`clickable` 在布局外扩展触摸区域，维持至少 48dp 的触摸高度，附近无其他可点击控件。标题与指标等区域间距 4dp，指标内部间距 2dp，换行间距 8dp。仍保留输入／输出／缓存分列、完整价格精度、单位及其他类别；档位门槛显示完整数值，不使用 K／M 近似。
 - 档位展开箭头遵循折叠区惯例：收起时朝下，展开后朝上，通过 0°／180° 旋转动画过渡；不使用目录树式的朝右／朝下组合。整行点击和读屏动作／状态不变，UI 回归比较箭头实际绘制的尖端方向，覆盖展开与再次收起。
-- 已实现本地优先与离线浏览：每个新的 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。更新检测涵盖全部模型、服务商和模型服务的新增、删除、参数与报价等变化，不仅限于当前列表字段；不将本地抓取时间或字典顺序变化当作更新。待应用快照仅暂存在仓库内存中，进程重启后重新检查；内容一致时不重复写库。尚未展示更新时间，也未引入 TTL 策略。
+- 已实现本地优先与离线浏览：每个新的 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。仅比较完整规范模型的稳定 ID 集合来决定是否提示增删（同数量替换也提示），不受 LLM 收录结果、搜索或筛选影响。ID 集合不变时，参数、名称、类型、报价以及服务商／模型服务的增删改均静默以完整快照事务同步，列表随 Flow 更新，查询条件保留并重新匹配；不会把内容变化误当成模型增删。不将本地抓取时间或字典顺序变化当作内容更新，内容一致不重复写库。模型增删的待应用完整快照仅暂存在仓库内存中，进程重启后重新检查。尚未展示更新时间，也未引入 TTL 策略。
 - 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
 - 当前只有模型与设置两个顶层标签，以及从设置打开的来源许可说明子页面；没有模型详情、收藏、对比或基于路由的通用导航栈，不因导航入口存在就假定对应业务能力已实现。
@@ -116,17 +119,18 @@ DefaultModelRepository.checkForUpdates() / refresh()
 
 | 测试 | 已覆盖内容 |
 | --- | --- |
-| [`ModelRepositoryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/repository/ModelRepositoryTest.kt) | 完整写入、失败不写半份、取消、数据库 Flow、空目录、限流冷却、检查不写库、应用不重复下载、无变化不写库、手动刷新取代暂存快照与提交失败可重试 |
-| [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 首次加载与重试、提交后查询结果延迟时保持加载且不发布瞬态空目录、真实空结果正常结束加载、本地优先、后台检查、主动应用、刷新失败保留数据、检查中下拉复用请求、刷新去重与取消，不对外暴露 `MutableStateFlow` |
+| [`ModelRepositoryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/repository/ModelRepositoryTest.kt) | 完整写入、失败不写半份、取消、数据库 Flow、空目录、限流冷却、仅模型增删暂存且不写库、内容／服务商／报价变化静默提交、清除过期待更新快照、应用不重复下载、无变化不写库、手动刷新取代暂存快照与提交失败可重试 |
+| [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 首次加载与重试、提交后查询结果延迟时保持加载且不发布瞬态空目录、真实空结果正常结束加载、本地优先、后台检查、静默更新无提醒且重新匹配查询、主动应用、刷新失败保留数据、检查中下拉复用请求并按三种结果反馈、刷新去重与取消，不对外暴露 `MutableStateFlow` |
 | [`ModelListQueryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListQueryTest.kt) | 名称／ID／LAB 搜索、多词与大小写、组合条件、方向模态、权重三态、缺失值与零报价、Long 门槛边界、保序、独立重置与空目录／无结果区别 |
 | [`CatalogStatusNoticeTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNoticeTest.kt) | 内联提醒的显示条件、无状态与刷新中不占位、首次加载与阻断错误不重复提醒、关闭结果保留待更新提示，以及动画目标不受模型列表变化影响 |
-| [`CatalogSnapshotTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSnapshotTest.kt) | 完整内容比较、忽略抓取时间与字典顺序、增删及参数／报价变化、保留缺失与空集合／零值区别 |
+| [`CatalogSnapshotTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSnapshotTest.kt) | 规范模型 ID 集合增删／同数量替换与内容变化分离、完整内容比较、忽略抓取时间与字典顺序、增删及参数／报价变化、保留缺失与空集合／零值区别 |
 | [`ModelsDevApiTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApiTest.kt) | MockWebServer 验证真实 Retrofit 路径、`type=all`、两个端点的解析与 HTTP 错误不自动重试 |
 | [`CatalogMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/CatalogMapperTest.kt)、[`ModelListMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelListMapperTest.kt) | 独立 ID、显式关联、完整复杂字段、缺失信息、规范模型去重、列表元数据映射、开放权重与许可三态、发布时间倒序、报价投影挂载与未匹配报价行 |
 | [`ModelPriceMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelPriceMapperTest.kt) | 官方优先、第三方优先级、同服务商取最低、零价与缺失价、纯档位报价、无服务商名称、缓存／推理／音频与旧版字段 |
 | [`PriceProviderPolicyTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/model/PriceProviderPolicyTest.kt) | 已核实的第一方对应表、无官方对应的 LAB、第三方优先级顺序与未列入者排序 |
 | [`ModelSummaryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/model/ModelSummaryTest.kt) | LAB 的首段前缀提取、无分隔符与空白前缀边界 |
 | [`LabLogoTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/LabLogoTest.kt) | 23 个已收录 LAB 的素材映射、未知与空白 LAB 不借用其他素材、缺失 LAB 使用兜底图、LAB 取稳定 ID 前缀 |
+| [`LabDisplayNameTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/LabDisplayNameTest.kt) | 23 个 LAB 的品牌名称映射、未知与已格式化值保留原文、显示名称不改变原始 ID 与筛选／大小写搜索 |
 | [`LabFilterOrderTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/LabFilterOrderTest.kt) | 前八位固定优先级、其余按模型数量降序、同数量字母序与缺失计数兜底、完整目录 LAB 计数、已选子集排序与不修改原条件、空集合与单项边界 |
 | [`ModelPriceFormatTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelPriceFormatTest.kt) | 零价、至少两位小数、高精度小额报价不被舍入为零 |
 | [`ModelTokenFormatTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelTokenFormatTest.kt) | 列表 K／M 缩写、一位小数与单位进位边界、零值与 Long 极值，以及读屏和档位使用的精确千位分隔格式 |

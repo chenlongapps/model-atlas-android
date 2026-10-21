@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.SavedStateHandle
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.CatalogRateLimitException
+import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.testing.MainDispatcherRule
 import java.io.IOException
@@ -218,6 +219,43 @@ class ModelListViewModelTest {
         assertEquals(null, viewModel.uiState.value.refreshError)
     }
 
+    @Test fun contentOnlyCheckUpdatesObservedModelsAndQueryWithoutAnyNotice() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            remoteModels = models.value.map { it.copy(name = "Updated") }
+        }
+        val viewModel = create(repository)
+        val query = ModelListQuery(search = "Updated")
+        viewModel.setQuery(query)
+        val states = mutableListOf<ModelListUiState>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect { states += it }
+        }
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.visibleModels.isEmpty())
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(repository.remoteModels, viewModel.uiState.value.models)
+        assertEquals(repository.remoteModels, viewModel.uiState.value.visibleModels)
+        assertEquals(query, viewModel.uiState.value.query)
+        assertTrue(states.none { it.updateAvailable || it.message != null || it.refreshError != null || it.isRefreshing })
+        viewModel.applyUpdate()
+        assertEquals(0, repository.applies)
+        assertEquals(0, repository.refreshes)
+        assertEquals(1, repository.checks)
+    }
+
+    @Test fun silentWriteFailurePreservesLocalModelsWithoutNotice() = runTest {
+        val repository = cachedRepository().apply {
+            remoteModels = models.value.map { it.copy(name = "Updated") }
+            applyFailure = IllegalStateException("disk")
+        }
+        val previous = repository.models.value
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(ModelListUiState(previous, isLoading = false), viewModel.uiState.value)
+    }
+
     @Test fun pullDuringCheckReusesRequestAndAppliesItsResult() = runTest {
         val repository = cachedRepository().apply {
             gate = CompletableDeferred()
@@ -233,6 +271,60 @@ class ModelListViewModelTest {
         assertEquals(1, repository.checks)
         assertEquals(0, repository.refreshes)
         assertEquals(1, repository.applies)
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertEquals(ModelListMessage.UPDATED, viewModel.uiState.value.message)
+    }
+
+    @Test fun pullDuringContentOnlyCheckReusesSilentWriteAndReportsUpdated() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            remoteModels = models.value.map { it.copy(name = "Updated") }
+        }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        repeat(5) { viewModel.refresh() }
+        assertTrue(viewModel.uiState.value.isRefreshing)
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(repository.remoteModels, viewModel.uiState.value.models)
+        assertEquals(ModelListMessage.UPDATED, viewModel.uiState.value.message)
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+        assertEquals(0, repository.applies)
+    }
+
+    @Test fun pullDuringUnchangedCheckReportsLatestWithoutApplyingOrDownloading() = runTest {
+        val repository = cachedRepository().apply { gate = CompletableDeferred() }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.refresh()
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ModelListMessage.UP_TO_DATE, viewModel.uiState.value.message)
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+        assertEquals(0, repository.applies)
+    }
+
+    @Test fun failedSilentWritePromotedByPullReportsStorageError() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            remoteModels = models.value.map { it.copy(name = "Updated") }
+            applyFailure = IllegalStateException("disk")
+        }
+        val previous = repository.models.value
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.refresh()
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(previous, viewModel.uiState.value.models)
+        assertEquals(ModelListError.STORAGE, viewModel.uiState.value.refreshError)
         assertFalse(viewModel.uiState.value.updateAvailable)
         assertFalse(viewModel.uiState.value.isRefreshing)
     }
@@ -419,12 +511,21 @@ class ModelListViewModelTest {
             }
         }
         override suspend fun hasLocalCatalog() = local
-        override suspend fun checkForUpdates(): Boolean {
+        override suspend fun checkForUpdates(): CatalogUpdateCheckResult {
             checks++
             gate?.await()
             failure?.let { throw it }
-            pending = remoteModels.takeUnless { it == models.value }
-            return pending != null
+            if (remoteModels.map { it.id }.toSet() != models.value.map { it.id }.toSet()) {
+                pending = remoteModels
+                return CatalogUpdateCheckResult.UPDATE_AVAILABLE
+            }
+            val changed = remoteModels != models.value
+            if (changed) {
+                applyFailure?.let { throw it }
+                models.value = remoteModels
+            }
+            pending = null
+            return if (changed) CatalogUpdateCheckResult.UPDATED_SILENTLY else CatalogUpdateCheckResult.UNCHANGED
         }
         override suspend fun applyPendingUpdate(): Boolean {
             applies++

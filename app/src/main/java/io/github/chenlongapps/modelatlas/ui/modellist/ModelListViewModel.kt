@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.CatalogRateLimitException
+import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import java.io.IOException
 import javax.inject.Inject
@@ -109,10 +110,14 @@ class ModelListViewModel @Inject constructor(
                 }
                 if (backgroundCheck) {
                     checking = true
-                    val available = modelRepository.checkForUpdates()
-                    _uiState.update { it.copy(updateAvailable = available) }
+                    val result = modelRepository.checkForUpdates()
+                    _uiState.update { it.copy(updateAvailable = result == CatalogUpdateCheckResult.UPDATE_AVAILABLE) }
                     if (refreshAfterCheck) {
-                        val changed = modelRepository.applyPendingUpdate()
+                        val changed = when (result) {
+                            CatalogUpdateCheckResult.UPDATE_AVAILABLE -> modelRepository.applyPendingUpdate()
+                            CatalogUpdateCheckResult.UPDATED_SILENTLY -> true
+                            CatalogUpdateCheckResult.UNCHANGED -> false
+                        }
                         refreshed(changed)
                     }
                 } else {

@@ -3,13 +3,15 @@ package io.github.chenlongapps.modelatlas.data.repository
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import kotlinx.coroutines.flow.Flow
 
+enum class CatalogUpdateCheckResult { UNCHANGED, UPDATED_SILENTLY, UPDATE_AVAILABLE }
+
 interface ModelRepository {
     fun observeModels(): Flow<List<ModelSummary>>
 
     suspend fun hasLocalCatalog(): Boolean
 
-    /** 只检查并暂存完整快照，不修改数据库。返回是否有待应用更新。 */
-    suspend fun checkForUpdates(): Boolean
+    /** 模型增删时暂存完整快照等待确认；仅内容变化时静默提交，无变化时不写库。 */
+    suspend fun checkForUpdates(): CatalogUpdateCheckResult
 
     /** 应用已获取的快照，不再次请求；没有待更新内容时返回 false。 */
     suspend fun applyPendingUpdate(): Boolean

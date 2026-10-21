@@ -3,13 +3,13 @@
     <string name="nav_models">模型</string>
     <string name="nav_settings">设置</string>
     <string name="model_list_scroll_to_top">回到模型列表顶部</string>
-    <string name="model_list_source_notice">数据来源：Models.dev（https://models.dev/）。本应用为独立第三方，与数据源及模型提供商无官方隶属关系。LAB 为模型 ID 的前缀标签，未经独立核实。“开放权重”指来源报告训练权重可公开获取，不等于开源或允许商用，具体许可以模型 license 字段为准。</string>
-    <string name="model_list_lab">LAB · %1$s</string>
+    <string name="model_list_source_notice">数据来源：Models.dev（https://models.dev/）。本应用为独立第三方，与数据源及模型提供商无官方隶属关系。研发机构根据模型 ID 的前缀标签展示，未经独立核实。“开放权重”指来源报告训练权重可公开获取，不等于开源或允许商用，具体许可以模型 license 字段为准。</string>
+    <string name="model_list_lab">研发机构 · %1$s</string>
     <string name="model_list_title">模型目录</string>
     <string name="model_list_count">模型目录 · %1$d 个模型</string>
     <string name="model_list_order">按发布时间 · 最新在前</string>
     <string name="model_search_label">搜索模型</string>
-    <string name="model_search_hint">搜索模型名称、ID 或 LAB…</string>
+    <string name="model_search_hint">搜索模型名称或研发机构…</string>
     <string name="model_search_clear">清空搜索</string>
     <string name="model_filter_title">筛选模型</string>
     <string name="model_filter_action">筛选 · %1$d</string>
@@ -18,8 +18,8 @@
     <string name="model_query_count">匹配 %1$d / %2$d 个模型</string>
     <string name="model_query_empty_title">没有匹配的模型</string>
     <string name="model_query_empty">试试其他关键词，或放宽筛选条件。</string>
-    <string name="model_filter_rules">点击应用后生效，关闭放弃本次修改。不同字段取交集，LAB 多选取并集，模态多选需全部具备。缺失数值不满足最低要求。</string>
-    <string name="model_filter_labs">LAB</string>
+    <string name="model_filter_rules">点击应用后生效，关闭放弃本次修改。不同字段取交集，研发机构多选取并集，模态多选需全部具备。缺失数值不满足最低要求。</string>
+    <string name="model_filter_labs">研发机构</string>
     <string name="model_filter_weights">权重公开状态</string>
     <string name="model_filter_input">输入模态</string>
     <string name="model_filter_output">输出模态</string>
@@ -35,7 +35,7 @@
     <string name="model_filter_less">收起</string>
     <string name="model_filter_preview_count">预览匹配 %1$d / %2$d 个模型</string>
     <string name="model_filter_remove">移除筛选：%1$s</string>
-    <string name="model_filter_active_lab">LAB：%1$s</string>
+    <string name="model_filter_active_lab">研发机构：%1$s</string>
     <string name="model_filter_active_weights">权重：%1$s</string>
     <string name="model_filter_active_input">输入：%1$s</string>
     <string name="model_filter_active_output">输出：%1$s</string>

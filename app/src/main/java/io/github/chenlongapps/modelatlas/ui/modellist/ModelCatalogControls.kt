@@ -167,7 +167,7 @@ private fun activeFilters(query: ModelListQuery, labModelCounts: Map<String, Int
         result += ActiveFilter(key, label, stringResource(R.string.model_filter_remove, readableLabel), withoutFilter)
     }
     sortFilterLabs(query.labs, labModelCounts).forEach { lab ->
-        add("lab:$lab", stringResource(R.string.model_filter_active_lab, lab), query.copy(labs = query.labs - lab))
+        add("lab:$lab", stringResource(R.string.model_filter_active_lab, labDisplayName(lab)), query.copy(labs = query.labs - lab))
     }
     if (query.weights != WeightFilter.ALL) {
         add("weights", stringResource(R.string.model_filter_active_weights, weightLabel(query.weights)), query.copy(weights = WeightFilter.ALL))
@@ -287,7 +287,7 @@ private fun ModelFilterSheetContent(
             ) {
                 FilterOption(draft.labs.isEmpty(), stringResource(R.string.model_filter_all), { draft = draft.copy(labs = emptySet()) })
                 visibleLabs.forEach { lab ->
-                    FilterOption(lab in draft.labs, lab, { draft = draft.copy(labs = draft.labs.toggle(lab)) }, "filter-lab:$lab")
+                    FilterOption(lab in draft.labs, labDisplayName(lab), { draft = draft.copy(labs = draft.labs.toggle(lab)) }, "filter-lab:$lab")
                 }
             }
             FilterSection(stringResource(R.string.model_filter_weights)) {

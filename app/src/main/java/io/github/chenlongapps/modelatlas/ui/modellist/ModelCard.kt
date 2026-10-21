@@ -89,7 +89,7 @@ internal fun ModelCard(
                         itemVerticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = model.lab ?: stringResource(R.string.no_data),
+                            text = model.lab?.let(::labDisplayName) ?: stringResource(R.string.no_data),
                             modifier = Modifier.testTag("model-lab"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colors.primary,

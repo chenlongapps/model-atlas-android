@@ -257,10 +257,11 @@ class ModelListScreenTest {
             ModelSummary(id = "openai/gpt-5", name = "有素材模型"),
             ModelSummary(id = "meta/llama-5", name = "另一个有素材模型"),
         ), isLoading = false))
-        listOf("openai/gpt-5", "meta/llama-5").forEach { id ->
+        mapOf("openai/gpt-5" to "OpenAI", "meta/llama-5" to "Meta").forEach { (id, labName) ->
             compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:$id"))
             compose.onNode(hasTestTag(LabLogoTag) and hasAnyAncestor(hasTestTag("model:$id")), useUnmergedTree = true)
                 .performScrollTo().assertIsDisplayed()
+            assertField("model:$id", labName)
         }
         compose.onNodeWithTag(LabLogoFallbackTag).assertDoesNotExist()
     }
