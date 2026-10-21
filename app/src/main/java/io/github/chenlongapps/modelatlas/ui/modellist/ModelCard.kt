@@ -449,7 +449,7 @@ internal fun formatUsdPerMillionTokens(value: Double): String {
 }
 
 @Composable
-private fun formatModality(modality: String): String = when (modality) {
+internal fun formatModality(modality: String): String = when (modality) {
     "text" -> stringResource(R.string.modality_text)
     "image" -> stringResource(R.string.modality_image)
     "audio" -> stringResource(R.string.modality_audio)
@@ -459,7 +459,7 @@ private fun formatModality(modality: String): String = when (modality) {
 }
 
 @DrawableRes
-private fun modalityIcon(modality: String?): Int = when (modality) {
+internal fun modalityIcon(modality: String?): Int = when (modality) {
     "image" -> R.drawable.ic_image
     "audio" -> R.drawable.ic_audio
     "video" -> R.drawable.ic_video

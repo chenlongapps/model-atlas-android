@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.modellist
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
 data class ModelListUiState(
@@ -27,7 +29,10 @@ data class ModelListUiState(
     val updateAvailable: Boolean = false,
     val message: ModelListMessage? = null,
     val refreshError: ModelListError? = null,
-)
+    val query: ModelListQuery = ModelListQuery(),
+) {
+    val visibleModels: List<ModelSummary> = filterModels(models, query)
+}
 
 enum class ModelListError { NETWORK, SERVER, INVALID_DATA, RATE_LIMITED, STORAGE }
 enum class ModelListMessage { UPDATED, UP_TO_DATE }
@@ -35,8 +40,9 @@ enum class ModelListMessage { UPDATED, UP_TO_DATE }
 @HiltViewModel
 class ModelListViewModel @Inject constructor(
     private val modelRepository: ModelRepository,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(ModelListUiState())
+    private val _uiState = MutableStateFlow(ModelListUiState(query = restoreQuery()))
     val uiState: StateFlow<ModelListUiState> = _uiState.asStateFlow()
     private var loadJob: Job? = null
     private var observationJob: Job? = null
@@ -45,6 +51,20 @@ class ModelListViewModel @Inject constructor(
 
     init {
         load(initial = true)
+    }
+
+    fun setQuery(query: ModelListQuery) {
+        if (_uiState.value.query == query) return
+        // 仅保存小型查询条件，不保存目录或派生结果。
+        savedStateHandle[QUERY_KEY] = Json.encodeToString(query)
+        _uiState.update { it.copy(query = query) }
+    }
+
+    private fun restoreQuery(): ModelListQuery = try {
+        savedStateHandle.get<String>(QUERY_KEY)?.let { Json.decodeFromString<ModelListQuery>(it) }
+            ?: ModelListQuery()
+    } catch (_: IllegalArgumentException) {
+        ModelListQuery()
     }
 
     fun retry() {
@@ -141,6 +161,10 @@ class ModelListViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, error = ModelListError.STORAGE) }
             }
         }
+    }
+
+    private companion object {
+        const val QUERY_KEY = "model-list-query"
     }
 }
 

@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.ui.modellist
 
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.SavedStateHandle
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.CatalogRateLimitException
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
@@ -318,12 +319,82 @@ class ModelListViewModelTest {
         assertEquals(0, repository.applies)
     }
 
+    @Test fun queryOnlyFiltersLocalDataAndSurvivesRefreshAndFailure() = runTest {
+        val repository = cachedRepository()
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        val refreshes = repository.refreshes
+        val checks = repository.checks
+        val query = ModelListQuery(search = "missing", weights = WeightFilter.OPEN)
+        viewModel.setQuery(query)
+        assertTrue(viewModel.uiState.value.visibleModels.isEmpty())
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertEquals(refreshes, repository.refreshes)
+        assertEquals(checks, repository.checks)
+
+        val matching = ModelSummary("lab/missing", "Missing", openWeights = true)
+        repository.remoteModels = listOf(matching)
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals(query, viewModel.uiState.value.query)
+        assertEquals(listOf(matching), viewModel.uiState.value.visibleModels)
+
+        repository.failure = IOException("offline")
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals(query, viewModel.uiState.value.query)
+        assertEquals(listOf(matching), viewModel.uiState.value.visibleModels)
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.refreshError)
+        viewModel.setQuery(ModelListQuery())
+        assertEquals(repository.models.value, viewModel.uiState.value.visibleModels)
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.refreshError)
+    }
+
+    @Test fun queryBeforeInitialLoadIsAppliedToCommittedResults() = runTest {
+        val repository = FakeRepository()
+        val viewModel = create(repository)
+        viewModel.setQuery(ModelListQuery(search = "not-found"))
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(repository.remoteModels, viewModel.uiState.value.models)
+        assertTrue(viewModel.uiState.value.visibleModels.isEmpty())
+    }
+
+    @Test fun restoresAllQueryConditionsFromSavedStateWithoutSavingCatalog() = runTest {
+        val handle = SavedStateHandle()
+        val query = ModelListQuery(
+            search = "模型", labs = setOf("alpha", "beta"), weights = WeightFilter.UNKNOWN,
+            inputModalities = setOf("image", "custom"), outputModalities = setOf("text"),
+            minContextTokens = Long.MAX_VALUE, minOutputTokens = 32_000, hasPrice = false,
+        )
+        val first = ModelListViewModel(cachedRepository(), handle).also { store.put("first", it) }
+        first.setQuery(query)
+        val restoredHandle = SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) })
+        val restored = ModelListViewModel(cachedRepository(), restoredHandle).also { store.put("restored", it) }
+        assertEquals(query, restored.uiState.value.query)
+        assertEquals(setOf("model-list-query"), handle.keys())
+        advanceUntilIdle()
+        assertEquals(query, restored.uiState.value.query)
+        restored.setQuery(ModelListQuery())
+        val reset = ModelListViewModel(cachedRepository(), restoredHandle).also { store.put("reset", it) }
+        assertEquals(ModelListQuery(), reset.uiState.value.query)
+    }
+
+    @Test fun malformedSavedQueryFallsBackToUnfilteredCatalog() = runTest {
+        val viewModel = ModelListViewModel(
+            cachedRepository(), SavedStateHandle(mapOf("model-list-query" to "invalid")),
+        ).also { store.put("invalid", it) }
+        advanceUntilIdle()
+        assertEquals(ModelListQuery(), viewModel.uiState.value.query)
+        assertEquals(viewModel.uiState.value.models, viewModel.uiState.value.visibleModels)
+    }
+
     private fun cachedRepository() = FakeRepository().apply {
         local = true
         models.value = remoteModels
     }
 
-    private fun create(repository: ModelRepository) = ModelListViewModel(repository).also {
+    private fun create(repository: ModelRepository) = ModelListViewModel(repository, SavedStateHandle()).also {
         store.put("model-list", it)
     }
 

@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的真实 LLM 列表、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及模型／设置双标签与悬浮玻璃导航。设置页提供“数据来源与许可”独立页面入口；搜索、详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
+本文描述当前已实现的真实 LLM 列表、本地搜索与筛选、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及模型／设置双标签与悬浮玻璃导航。设置页提供“数据来源与许可”独立页面入口；详情、对比、收藏和目录更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
 
 ## 代码入口与职责
 
@@ -31,8 +31,12 @@
 | [`data/local/CatalogStore.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/CatalogStore.kt) | 仓库使用的存储接口及 Room 实现，可替换为测试 fake |
 | [`data/repository/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/) | `ModelRepository` 接口与 `DefaultModelRepository`；请求、获取时间、后台映射、完整内容比较、暂存待更新快照、限流冷却与目录写入 |
 | [`di/DataModule.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/di/DataModule.kt) | 网络客户端、数据库、时钟、IO dispatcher 与接口绑定 |
-| [`ui/modellist/ModelListViewModel.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModel.kt) | 定义 `ModelListUiState`，读取仓库数据并暴露只读 `StateFlow` |
-| [`ui/modellist/ModelListScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListScreen.kt) | 包含 Route、列表界面、首次加载骨架、错误／空目录状态卡片及预览，不再承载来源入口、价格说明卡片或许可弹窗 |
+| [`ui/modellist/ModelListViewModel.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModel.kt) | 定义 `ModelListUiState`，读取仓库数据、管理查询条件与派生结果，以 `SavedStateHandle` 保存查询条件，暴露只读 `StateFlow` |
+| [`ui/modellist/ModelListQuery.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListQuery.kt) | 可序列化查询条件、开放权重筛选与保序的纯匹配函数，不访问网络或数据库 |
+| [`ui/modellist/ModelCatalogControls.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCatalogControls.kt) | 胶囊搜索框、可移除条件标签和确认应用的筛选底部面板，选项由完整目录和草稿已选条件派生 |
+| [`ui/modellist/ModelFilterFormat.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelFilterFormat.kt) | 筛选门槛使用精确 K／M 缩写，不沿用模型卡片的一位小数近似值 |
+| [`ui/modellist/LabFilterOrder.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/LabFilterOrder.kt) | 筛选 LAB 选项和已选标签共用的前八位固定优先级，其余按完整目录模型数量降序，同数量按字母序兜底 |
+| [`ui/modellist/ModelListScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListScreen.kt) | 包含 Route、列表界面、查询入口、首次加载骨架、错误／空目录／无匹配状态卡片及预览，不再承载来源入口、价格说明卡片或许可弹窗 |
 | [`ui/modellist/ModelCardSkeleton.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCardSkeleton.kt) | 模型卡片骨架、整组共享的 Shimmer 动画与加载语义；根据生命周期和分页可见性暂停动画 |
 | [`ui/modellist/CatalogStatusNotice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNotice.kt) | 页头下的内联状态提醒及淡入／淡出、高度过渡，展示待更新、自动消失的成功结果与非阻断错误，提供确认更新、重试和错误手动关闭；刷新期间不显示加载卡片 |
 | [`ui/modellist/ModelCard.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCard.kt) | 紧凑模型卡片及独立预览、图标参数行、方向模态标签、分列价格区与档位、数值格式化 |
@@ -54,7 +58,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
     → CatalogDao.observeModelRows()（左连接并去重）
     → CatalogDao.observeOfferingPriceRows()（显式关联且有报价的模型服务）
     → ModelListMapper + LlmInclusionPolicy（去重、收录、发布时间倒序）+ selectPriceFor（挑选展示报价）→ Flow<List<ModelSummary>>
-    → ModelListViewModel.uiState: StateFlow<ModelListUiState>
+    → ModelListViewModel.uiState: StateFlow<ModelListUiState>（完整 models + query → visibleModels）
     → ModelListRoute（collectAsStateWithLifecycle）
     → ModelListScreen(uiState)
     → ModelCard(model)
@@ -69,6 +73,13 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 内联提醒使用 24dp 圆角、16dp 内边距、主题 `surfaceContainerLow` 背景，正文保持 `onSurface`，图标以 `primary`／`error` 区分状态，文本提供礼貌级读屏更新语义。操作独立排列并支持换行。刷新期间整体隐藏，结束后显示优先级为刷新错误 → 更新结果 → 待更新。“模型目录已更新／已是最新数据”仅显示图标与正文，不显示关闭按钮或空操作区，默认约 3 秒后自动清除，并遵循无障碍服务建议的显示时长。计时由 `ModelListScreen` 在列表外管理，避免条目滚动回收时重置；结果被更新中、错误或其他结果替换时取消旧计时，避免清除新的状态。待更新提示仍需显式确认；失败不自动消失，有待应用快照时继续提供“立即更新”，否则提供“重试”，并保留手动关闭。关闭错误仅清除消息，不丢弃待更新快照，随后恢复待更新提醒。
 - `ModelListRoute` 负责获取 Hilt ViewModel 和生命周期感知的状态收集，不直接请求数据源。
 - `ModelListScreen` 通过参数接收状态，不依赖 Hilt 或 ViewModel。修改时保留这一边界，使预览和后续界面测试可以使用独立数据。
+- 查询条件由 `ModelListViewModel.setQuery()` 更新，在完整 LLM 列表上派生 `visibleModels`，不改变仓库、数据库、LLM 收录或报价选择。搜索去除首尾空白并按空白分词，不区分大小写，每个词须在名称、稳定 ID 或 LAB 中至少命中一处；保留原发布时间排序。不同筛选字段取交集，LAB 多选取并集，输入／输出模态分别要求所选项全部具备，未知模态保留原文；权重为全部／公开／未公开／暂无数据。最低上下文和最大输出门槛采用精确十进制 tokens（上下文预设 32,000／128,000／200,000／1,000,000，输出预设 4,000／16,000／32,000／128,000），包含等号，缺失数值不满足最低要求。门槛胶囊及已选标签使用精确 K／M 缩写（如 128K、1M；非整值 131,072 为 131.072K），不舍入阈值，读屏提供带千位分隔的完整 tokens。报价仅判断列表选定报价是否存在，不将零价当缺失，也不推断免费或服务可用。
+- 搜索区参考胶囊式布局：无描边的填充搜索框、带图标与数量的筛选按钮，以及可逐个移除的已应用条件标签；旁边的“重置”仅清除筛选、保留搜索，搜索框可单独清空，无结果卡片可清除全部条件。搜索框和入口仍是页头提醒之后的普通列表项随内容滚动，不新增固定应用栏、排序功能、收藏或重复设置入口，沿用动态深浅主题，不复制参考图的固定橄榄色。
+- 筛选面板为大圆角底部弹层，标题在上方，不提供关闭图标按钮，分组内容滚动，底部固定等宽“重置／应用”操作，应用按钮不显示条件数；选项使用浅色胶囊，选中项以主题色细描边及淡底强调，输入／输出模态附原有图标。普通字号面板约占可用高度 75%，大字号提高到 90%。打开时从已应用条件建立独立草稿，实时预览匹配数量，但点击“应用”前不修改列表或 ViewModel；面板内重置只修改草稿并保留搜索，点击遮罩、系统返回和滑动关闭放弃未应用修改。草稿及 LAB 展开状态通过 UI 的 `rememberSaveable` 恢复，不将草稿写入业务保存状态。LAB 默认显示至多八个选项，已选项始终可见，超过时可“更多／收起”；已选项超过八个则全部保留。
+- `ModelCatalogControls.kt` 提供搜索／筛选入口、已选条件和筛选面板内容的独立深浅色预览，并覆盖窄屏双倍字号；面板预览直接复用内容组件，不依赖弹层窗口、ViewModel 或网络，合成样本仅供预览使用。
+- LAB 筛选选项及已应用 LAB 标签采用 `LabFilterOrder.kt` 的混合排序：前八位固定为 `openai → anthropic → google → deepseek → alibaba → meta → xai → moonshotai`，其余 LAB（包括新出现的 LAB）按完整 LLM 目录的模型数量从多到少排列，同数量按原始 ID 字母序稳定兜底。仅展示目录或已选条件中实际存在的值，刷新后消失但仍选中的 LAB 按零个模型处理；计数使用 `uiState.models`，不随当前搜索或筛选结果缩小。不新增热度请求，也不代表模型能力排名或改变列表发布时间排序；面板收起时仍优先保留所有已选项，已选和未选组内分别沿用该顺序。
+- 条件数将 LAB 多选计作一组、每个必需模态计作一个条件，其他字段各计一个。可选 LAB／模态从完整目录生成，不因当前结果缩小而消失，刷新后已选但消失的值仍可取消。活动查询下页头显示匹配数／总数；原目录为空仍显示空目录，原目录非空且无匹配才显示无结果，不能误触发首次加载骨架。
+- `SavedStateHandle` 仅保存查询条件的 JSON 字符串，不保存目录或结果；默认／损坏的保存值回退到无条件。刷新、确认更新、失败及切换标签均保留条件，目录 Flow 变化重新匹配，不额外发起请求。列表位置和面板显示仍是 UI 可保存状态；离开模型页关闭面板并清除输入焦点。Activity 声明 `adjustResize`，模型页通过 Scaffold 外层单次 `imePadding()` 缩小键盘打开时的实际列表视口，已消费的 IME 安全区不再由 Scaffold 重复计算；其余系统栏／刘海安全区仍传给列表 `contentPadding`，搜索键收起键盘。
 - `ModelAtlasApp` 承载两个标签：模型列表与设置。外壳通过内容插槽保持可独立预览和测试，真实模型页继续使用 `ModelListRoute`，不新增业务数据源。`rememberPagerState` 保存当前页面，两个页面都保留在分页器中，切换时不重建列表或主动清除已有状态提醒；成功结果的自动清除计时继续进行。列表位置和报价展开状态继续使用各自可保存状态。
 - 双击悬浮导航的“模型”标签通过 `animateScrollToItem(0, 0)` 平滑滚回目录最顶部（首项、偏移均为 0），替代瞬间跳转；长列表沿用 Compose 的远距离滚动处理，不自行逐条执行动画。从设置页双击时，切页动画与列表回顶同时进行。`ModelAtlasScaffold` 通过 `rememberLazyListState` 保存列表滚动状态并沿内容插槽、Route 传给 Screen，置顶仅操作 UI 状态，不经过 ViewModel、不刷新数据，也不清除报价展开或状态提醒。单击和普通切页仍保留阅读位置。
 - 导航以不消费事件的指针监听按系统双击时间阈值识别模型标签双击；单击继续由 `selectable` 立即处理，不等待双击超时。拖动、多指、长按、越界或点击设置会中断连续模型点击，保留 Tab 单选语义与既有横向拖动切页；设置标签不提供双击操作。模型标签另提供“回到模型列表顶部”自定义无障碍操作，避免要求读屏用户执行触摸双击手势。
@@ -107,6 +118,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 | --- | --- |
 | [`ModelRepositoryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/repository/ModelRepositoryTest.kt) | 完整写入、失败不写半份、取消、数据库 Flow、空目录、限流冷却、检查不写库、应用不重复下载、无变化不写库、手动刷新取代暂存快照与提交失败可重试 |
 | [`ModelListViewModelTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListViewModelTest.kt) | 首次加载与重试、提交后查询结果延迟时保持加载且不发布瞬态空目录、真实空结果正常结束加载、本地优先、后台检查、主动应用、刷新失败保留数据、检查中下拉复用请求、刷新去重与取消，不对外暴露 `MutableStateFlow` |
+| [`ModelListQueryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListQueryTest.kt) | 名称／ID／LAB 搜索、多词与大小写、组合条件、方向模态、权重三态、缺失值与零报价、Long 门槛边界、保序、独立重置与空目录／无结果区别 |
 | [`CatalogStatusNoticeTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNoticeTest.kt) | 内联提醒的显示条件、无状态与刷新中不占位、首次加载与阻断错误不重复提醒、关闭结果保留待更新提示，以及动画目标不受模型列表变化影响 |
 | [`CatalogSnapshotTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSnapshotTest.kt) | 完整内容比较、忽略抓取时间与字典顺序、增删及参数／报价变化、保留缺失与空集合／零值区别 |
 | [`ModelsDevApiTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApiTest.kt) | MockWebServer 验证真实 Retrofit 路径、`type=all`、两个端点的解析与 HTTP 错误不自动重试 |
@@ -115,6 +127,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 | [`PriceProviderPolicyTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/model/PriceProviderPolicyTest.kt) | 已核实的第一方对应表、无官方对应的 LAB、第三方优先级顺序与未列入者排序 |
 | [`ModelSummaryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/model/ModelSummaryTest.kt) | LAB 的首段前缀提取、无分隔符与空白前缀边界 |
 | [`LabLogoTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/LabLogoTest.kt) | 23 个已收录 LAB 的素材映射、未知与空白 LAB 不借用其他素材、缺失 LAB 使用兜底图、LAB 取稳定 ID 前缀 |
+| [`LabFilterOrderTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/LabFilterOrderTest.kt) | 前八位固定优先级、其余按模型数量降序、同数量字母序与缺失计数兜底、完整目录 LAB 计数、已选子集排序与不修改原条件、空集合与单项边界 |
 | [`ModelPriceFormatTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelPriceFormatTest.kt) | 零价、至少两位小数、高精度小额报价不被舍入为零 |
 | [`ModelTokenFormatTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelTokenFormatTest.kt) | 列表 K／M 缩写、一位小数与单位进位边界、零值与 Long 极值，以及读屏和档位使用的精确千位分隔格式 |
 | [`ModelLicenseFormatTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelLicenseFormatTest.kt) | 保留原始许可短名、首尾空白、16 字符边界及空白／长名称不展示，不推测许可简称 |
@@ -125,6 +138,8 @@ DefaultModelRepository.checkForUpdates() / refresh()
 | [`CatalogEntitiesTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/entity/CatalogEntitiesTest.kt) | 本地实体的默认未知值、独立标识、显式获取时间及模型／服务元数据边界 |
 
 测试目录另有仅供 Room KSP 编译检查的 [`CatalogSchemaTestDatabase`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSchemaTestDatabase.kt)，不创建运行时数据库。异步单元测试使用 `kotlinx-coroutines-test` 和手写 fake，不依赖公网。
+
+查询相关的 `ModelListViewModelTest` 还覆盖条件修改不增加网络请求、首次加载前设置条件、目录更新重新匹配、刷新成功／失败保留查询与数据、条件完整保存恢复及损坏保存值兜底。`ModelFilterFormatTest` 验证预设缩写和非整值／Long 极值不丢精度。`androidTest` 的 `ModelCatalogControlsTest` 覆盖搜索与匹配数量、独立清空搜索、无结果重置、空目录区别、LAB 多选与方向模态组合、未知模态、草稿预览数量、确认前不提交、关闭及系统返回丢弃草稿、重置保留搜索、已应用标签单独移除及独立重置、LAB 更多／收起保留选中项、深色大字号下滚动到数值和报价条件、刷新后仍可取消消失的选项，以及切页和面板草稿恢复；业务条件的恢复另由 ViewModel 保存状态测试验证。
 
 `androidTest` 中的 `CatalogDatabaseTest` 使用实际 SQLite 验证关联、复合服务 ID、事务回滚、快照替换、文件重开、报价投影只取显式关联且有报价的服务以及未匹配报价行不会变成模型；`ModelListScreenTest` 使用 Compose Test APIs v2 验证真实字段、方向模态标签、缺失值、开放权重与短许可展示（长许可隐藏）、加载、空目录、重试，以及报价不显示官方／第三方标记、输入输出单价与单位、零价与缺失价、价格明细展开收起与状态恢复、档位标题至少 48dp 触摸高度，还包括 LAB logo 及兜底图、目录数量、Token 缩写与精确读屏语义、双倍字号下长名称和缩写数值不溢出；另确认列表不再出现来源按钮或价格说明。`ModelAtlasThemeTest` 验证固定与系统动态浅色／深色调色板，另有 API 30 及以下的备用配色用例。构建与测试命令统一见 [AGENTS.md](../AGENTS.md)。
 

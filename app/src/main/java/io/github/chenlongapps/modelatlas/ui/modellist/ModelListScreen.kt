@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -35,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,6 +47,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -80,6 +83,7 @@ fun ModelListRoute(
         onRefresh = viewModel::refresh,
         onApplyUpdate = viewModel::applyUpdate,
         onDismissNotice = viewModel::clearMessage,
+        onQueryChange = viewModel::setQuery,
         modifier = modifier,
         bottomOverlayPadding = bottomOverlayPadding,
         listState = listState,
@@ -97,6 +101,7 @@ internal fun ModelListScreen(
     onDismissNotice: () -> Unit = {},
     bottomOverlayPadding: Dp = 0.dp,
     listState: LazyListState = rememberLazyListState(),
+    onQueryChange: (ModelListQuery) -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -104,6 +109,24 @@ internal fun ModelListScreen(
     val shimmerProgress = rememberModelSkeletonShimmer(showSkeletons)
     // 展开状态提到列表层，避免滚动回收卡片后丢失，同时便于状态恢复。
     var expandedPriceModelId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    val isVisible = LocalModelListVisible.current
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(isVisible) {
+        if (!isVisible) {
+            focusManager.clearFocus()
+            showFilters = false
+        }
+    }
+    // 条件变化时离开旧结果位置；已可见的搜索框不回滚，避免将焦点推到键盘后。
+    // 目录刷新、提醒到达和状态恢复不触发回顶。
+    var previousQuery by remember { mutableStateOf(uiState.query) }
+    LaunchedEffect(uiState.query) {
+        if (previousQuery != uiState.query) {
+            previousQuery = uiState.query
+            if (listState.firstVisibleItemIndex > 1) listState.scrollToItem(0)
+        }
+    }
     val pullState = rememberPullToRefreshState()
     val refreshLabel = stringResource(R.string.model_list_refresh)
     val accessibilityManager = LocalAccessibilityManager.current
@@ -127,6 +150,7 @@ internal fun ModelListScreen(
 
     Scaffold(
         modifier = modifier
+            .imePadding()
             .drawWithContent {
                 drawContent()
                 // 最后绘制半透明保护层，不占布局空间，也不拦截触摸。
@@ -195,6 +219,16 @@ internal fun ModelListScreen(
                         )
                     }
                 }
+                if (!uiState.isLoading && uiState.error == null) {
+                    item(key = "catalog-query") {
+                        ModelCatalogControls(
+                            query = uiState.query,
+                            models = uiState.models,
+                            onQueryChange = onQueryChange,
+                            onShowFilters = { showFilters = true },
+                        )
+                    }
+                }
                 when {
                     showSkeletons -> items(count = 6, key = { "skeleton:$it" }) { index ->
                         ModelCardSkeleton(shimmerProgress = shimmerProgress, index = index)
@@ -213,8 +247,15 @@ internal fun ModelListScreen(
                             message = stringResource(R.string.model_list_empty),
                         )
                     }
+                    uiState.visibleModels.isEmpty() -> item(key = "no-results") {
+                        CatalogStateCard(
+                            title = stringResource(R.string.model_query_empty_title),
+                            message = stringResource(R.string.model_query_empty),
+                            onClearQuery = { onQueryChange(ModelListQuery()) },
+                        )
+                    }
                 }
-                if (uiState.models.isNotEmpty()) {
+                if (uiState.visibleModels.isNotEmpty()) {
                     item(key = "sort-order") {
                         Text(
                             text = stringResource(R.string.model_list_order),
@@ -224,7 +265,7 @@ internal fun ModelListScreen(
                         )
                     }
                 }
-                items(items = uiState.models, key = { "model:${it.id}" }) { model ->
+                items(items = uiState.visibleModels, key = { "model:${it.id}" }) { model ->
                     ModelCard(
                         model = model,
                         priceDetailsExpanded = expandedPriceModelId == model.id,
@@ -236,6 +277,14 @@ internal fun ModelListScreen(
                 }
             }
         }
+    }
+    if (showFilters && isVisible && !uiState.isLoading && uiState.error == null) {
+        ModelFilterSheet(
+            models = uiState.models,
+            query = uiState.query,
+            onQueryChange = onQueryChange,
+            onDismiss = { showFilters = false },
+        )
     }
 }
 
@@ -263,7 +312,11 @@ private fun CatalogHeader(uiState: ModelListUiState) {
         )
         Text(
             text = if (!uiState.isLoading && uiState.error == null) {
-                stringResource(R.string.model_list_count, uiState.models.size)
+                if (uiState.query.isActive) {
+                    stringResource(R.string.model_query_count, uiState.visibleModels.size, uiState.models.size)
+                } else {
+                    stringResource(R.string.model_list_count, uiState.models.size)
+                }
             } else {
                 stringResource(R.string.model_list_title)
             },
@@ -278,6 +331,7 @@ private fun CatalogStateCard(
     title: String,
     message: String,
     onRetry: (() -> Unit)? = null,
+    onClearQuery: (() -> Unit)? = null,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -312,6 +366,9 @@ private fun CatalogStateCard(
             )
             if (onRetry != null) {
                 Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+            }
+            if (onClearQuery != null) {
+                Button(onClick = onClearQuery) { Text(stringResource(R.string.model_query_reset)) }
             }
         }
     }
@@ -420,4 +477,17 @@ private fun ModelListErrorPreview() {
 @Composable
 private fun ModelListEmptyPreview() {
     ModelAtlasTheme { ModelListScreen(ModelListUiState(isLoading = false)) }
+}
+
+@Preview(name = "No results · Light", showBackground = true)
+@Preview(name = "No results · Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun ModelListNoResultsPreview() {
+    ModelAtlasTheme {
+        ModelListScreen(ModelListUiState(
+            models = listOf(ModelSummary("lab/atlas", "Atlas")),
+            isLoading = false,
+            query = ModelListQuery(search = "vision"),
+        ))
+    }
 }
