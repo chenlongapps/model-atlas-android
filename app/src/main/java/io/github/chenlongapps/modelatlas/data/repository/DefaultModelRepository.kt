@@ -4,6 +4,7 @@ import io.github.chenlongapps.modelatlas.data.local.CatalogSnapshot
 import io.github.chenlongapps.modelatlas.data.local.CatalogStore
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
 import io.github.chenlongapps.modelatlas.data.mapper.toModelSummaries
+import io.github.chenlongapps.modelatlas.data.mapper.toModelDetail
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
 import io.github.chenlongapps.modelatlas.di.IoDispatcher
 import java.io.IOException
@@ -16,6 +17,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -46,6 +49,11 @@ class DefaultModelRepository @Inject constructor(
     ) { rows, priceRows ->
         rows.toModelSummaries(priceRows.groupBy { it.canonicalModelId })
     }.flowOn(ioDispatcher)
+
+    override fun observeModelDetail(id: String) = store.observeModelDetail(id)
+        .map { it?.toModelDetail() }
+        .distinctUntilChanged()
+        .flowOn(ioDispatcher)
 
     override suspend fun checkForUpdates(): CatalogUpdateCheckResult = refreshMutex.withLock {
         withContext(ioDispatcher) {

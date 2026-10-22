@@ -113,7 +113,7 @@ class ModelAtlasAppTest {
         lateinit var listState: LazyListState
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding, state ->
+                ModelAtlasScaffold { bottomPadding, state, _ ->
                     listState = state
                     ModelListScreen(
                         uiState = ModelListUiState(
@@ -201,7 +201,7 @@ class ModelAtlasAppTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding, listState ->
+                ModelAtlasScaffold { bottomPadding, listState, _ ->
                     ModelListScreen(
                         ModelListUiState(
                             models = List(30) { ModelSummary("lab/model-$it", "测试模型 $it") },
@@ -267,7 +267,7 @@ class ModelAtlasAppTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding, listState ->
+                ModelAtlasScaffold { bottomPadding, listState, _ ->
                     ModelListScreen(
                         uiState = ModelListUiState(models = listOf(tieredModel), isLoading = false),
                         bottomOverlayPadding = bottomPadding,
@@ -333,7 +333,7 @@ class ModelAtlasAppTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding, listState ->
+                ModelAtlasScaffold { bottomPadding, listState, _ ->
                     ModelListScreen(
                         ModelListUiState(isLoading = false),
                         bottomOverlayPadding = bottomPadding,
@@ -382,7 +382,7 @@ class ModelAtlasAppTest {
         var applies = 0
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { bottomPadding, listState ->
+                ModelAtlasScaffold { bottomPadding, listState, _ ->
                     ModelListScreen(
                         uiState = ModelListUiState(
                             models = listOf(ModelSummary("lab/cached", "本地模型")),
@@ -463,7 +463,7 @@ class ModelAtlasAppTest {
                 LocalLayoutDirection provides direction,
             ) {
                 ModelAtlasTheme(darkTheme = darkTheme, dynamicColor = false) {
-                    ModelAtlasScaffold { bottomPadding, listState ->
+                    ModelAtlasScaffold { bottomPadding, listState, _ ->
                         ModelListScreen(
                             uiState = ModelListUiState(
                                 models = models,

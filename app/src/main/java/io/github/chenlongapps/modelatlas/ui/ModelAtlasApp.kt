@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,13 +50,14 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationBar
 import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
 import io.github.chenlongapps.modelatlas.ui.settings.SettingsScreen
+import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailRoute
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun ModelAtlasApp(modifier: Modifier = Modifier) {
-    ModelAtlasScaffold(modifier = modifier) { bottomOverlayPadding, listState ->
-        ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState)
+    ModelAtlasScaffold(modifier = modifier) { bottomOverlayPadding, listState, onModelClick ->
+        ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
     }
 }
 
@@ -63,7 +65,8 @@ fun ModelAtlasApp(modifier: Modifier = Modifier) {
 @Composable
 internal fun ModelAtlasScaffold(
     modifier: Modifier = Modifier,
-    modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState) -> Unit,
+    detailContent: @Composable (modelId: String, onBack: () -> Unit) -> Unit = { id, onBack -> ModelDetailRoute(id, onBack) },
+    modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
     val modelListState = rememberLazyListState()
@@ -77,13 +80,17 @@ internal fun ModelAtlasScaffold(
     var navigationHeight by remember { mutableStateOf(64.dp) }
     val bottomOverlayPadding = navigationHeight + 32.dp
     var showDataSource by rememberSaveable { mutableStateOf(false) }
+    var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
+    val subpageVisible = showDataSource || selectedModelId != null
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     // 设计预览没有 Activity 提供的返回事件 dispatcher。
     if (!LocalInspectionMode.current) {
         NavigationBackHandler(
             state = backState,
-            isBackEnabled = showDataSource,
-            onBackCompleted = { showDataSource = false },
+            isBackEnabled = subpageVisible,
+            onBackCompleted = {
+                if (selectedModelId != null) selectedModelId = null else showDataSource = false
+            },
         )
     }
 
@@ -91,11 +98,11 @@ internal fun ModelAtlasScaffold(
         // 保留分页器的组合与状态，但子页面打开时不放置主界面，避免绘制、触摸和读屏穿透。
         Box(
             Modifier.fillMaxSize()
-                .then(if (showDataSource) Modifier.clearAndSetSemantics {} else Modifier)
+                .then(if (subpageVisible) Modifier.clearAndSetSemantics {} else Modifier)
                 .layout { measurable, constraints ->
                     val placeable = measurable.measure(constraints)
                     layout(placeable.width, placeable.height) {
-                        if (!showDataSource) placeable.placeRelative(0, 0)
+                        if (!subpageVisible) placeable.placeRelative(0, 0)
                     }
                 },
         ) {
@@ -108,9 +115,9 @@ internal fun ModelAtlasScaffold(
             ) { page ->
                 when (page) {
                     0 -> CompositionLocalProvider(
-                        LocalModelListVisible provides (!showDataSource && pagerState.currentPage == 0),
+                        LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == 0),
                     ) {
-                        modelContent(bottomOverlayPadding, modelListState)
+                        modelContent(bottomOverlayPadding, modelListState) { selectedModelId = it }
                     }
                     1 -> SettingsScreen(
                         bottomOverlayPadding = bottomOverlayPadding,
@@ -149,6 +156,9 @@ internal fun ModelAtlasScaffold(
         if (showDataSource) {
             DataSourceScreen(onBack = { showDataSource = false })
         }
+        selectedModelId?.let { id ->
+            key(id) { detailContent(id) { selectedModelId = null } }
+        }
     }
 }
 
@@ -158,11 +168,12 @@ internal fun ModelAtlasScaffold(
 @Composable
 private fun ModelAtlasAppPreview() {
     ModelAtlasTheme(dynamicColor = false) {
-        ModelAtlasScaffold { bottomPadding, listState ->
+        ModelAtlasScaffold { bottomPadding, listState, onModelClick ->
             ModelListScreen(
                 ModelListUiState(isLoading = false),
                 bottomOverlayPadding = bottomPadding,
                 listState = listState,
+                onModelClick = onModelClick,
             )
         }
     }

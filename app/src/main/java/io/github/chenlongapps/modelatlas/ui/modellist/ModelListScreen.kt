@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,6 +76,7 @@ fun ModelListRoute(
     bottomOverlayPadding: Dp = 0.dp,
     viewModel: ModelListViewModel = hiltViewModel(),
     listState: LazyListState = rememberLazyListState(),
+    onModelClick: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     ModelListScreen(
@@ -87,6 +89,7 @@ fun ModelListRoute(
         modifier = modifier,
         bottomOverlayPadding = bottomOverlayPadding,
         listState = listState,
+        onModelClick = onModelClick,
     )
 }
 
@@ -102,6 +105,7 @@ internal fun ModelListScreen(
     bottomOverlayPadding: Dp = 0.dp,
     listState: LazyListState = rememberLazyListState(),
     onQueryChange: (ModelListQuery) -> Unit = {},
+    onModelClick: (String) -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -219,13 +223,28 @@ internal fun ModelListScreen(
                         )
                     }
                 }
-                if (!uiState.isLoading && uiState.error == null) {
-                    item(key = "catalog-query") {
+                if (showSkeletons || (!uiState.isLoading && uiState.error == null)) {
+                    item(key = "catalog-query", contentType = "catalog-query") {
                         ModelCatalogControls(
                             query = uiState.query,
                             models = uiState.models,
                             onQueryChange = onQueryChange,
                             onShowFilters = { showFilters = true },
+                            skeletonProgress = shimmerProgress.takeIf { showSkeletons },
+                        )
+                    }
+                }
+                if (showSkeletons || uiState.visibleModels.isNotEmpty()) {
+                    item(key = "sort-order", contentType = "sort-order") {
+                        Text(
+                            text = stringResource(R.string.model_list_order),
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                                .modelSkeletonPlaceholder(
+                                    shimmerProgress.takeIf { showSkeletons },
+                                    RoundedCornerShape(4.dp),
+                                ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -255,19 +274,10 @@ internal fun ModelListScreen(
                         )
                     }
                 }
-                if (uiState.visibleModels.isNotEmpty()) {
-                    item(key = "sort-order") {
-                        Text(
-                            text = stringResource(R.string.model_list_order),
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
                 items(items = uiState.visibleModels, key = { "model:${it.id}" }) { model ->
                     ModelCard(
                         model = model,
+                        onOpenDetail = { onModelClick(model.id) },
                         priceDetailsExpanded = expandedPriceModelId == model.id,
                         onTogglePriceDetails = {
                             expandedPriceModelId =

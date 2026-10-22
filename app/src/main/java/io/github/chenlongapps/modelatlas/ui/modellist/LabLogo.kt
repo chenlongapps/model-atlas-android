@@ -62,10 +62,9 @@ internal fun labLogoRes(lab: String?): Int = labLogoResOrNull(lab) ?: R.drawable
 private val LabLogoBackground: Color = Color.White
 
 private val LabLogoChipSize: Dp = 56.dp
-private val LabLogoIconSize: Dp = 44.dp
 
 /**
- * 列表卡片中的 LAB logo。
+ * 列表与详情共用的 LAB logo，放大时保持相同图形比例和圆角比例。
  *
  * 与模型名并列，仅作视觉标识；旁侧已显示同一 LAB 的文字，因此不重复提供无障碍描述。
  */
@@ -73,12 +72,13 @@ private val LabLogoIconSize: Dp = 44.dp
 internal fun LabLogo(
     lab: String?,
     modifier: Modifier = Modifier,
+    size: Dp = LabLogoChipSize,
 ) {
     val hasLabLogo = labLogoResOrNull(lab) != null
     Box(
         modifier = modifier
-            .size(LabLogoChipSize)
-            .clip(RoundedCornerShape(14.dp))
+            .size(size)
+            .clip(RoundedCornerShape(size / 4))
             .background(LabLogoBackground),
         contentAlignment = Alignment.Center,
     ) {
@@ -86,7 +86,7 @@ internal fun LabLogo(
             painter = painterResource(labLogoRes(lab)),
             contentDescription = null,
             modifier = Modifier
-                .size(LabLogoIconSize)
+                .size(size * (44f / 56f))
                 .testTag(if (hasLabLogo) LabLogoTag else LabLogoFallbackTag),
         )
     }

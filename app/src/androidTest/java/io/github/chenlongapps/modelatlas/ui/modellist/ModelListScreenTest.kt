@@ -233,7 +233,7 @@ class ModelListScreenTest {
             isLoading = false,
         ))
         compose.onNodeWithText("规范模型").assertIsDisplayed()
-        compose.onNodeWithTag("model-lab").assertIsDisplayed()
+        compose.onNodeWithTag("model-lab", useUnmergedTree = true).assertIsDisplayed()
         assertField("model:lab/model/version", "lab")
         assertField("release-date", "2026-10")
         assertField("context-limit", "5000M")
@@ -271,16 +271,16 @@ class ModelListScreenTest {
             id = "acme/atlas-mini",
             name = "无素材模型",
         )), isLoading = false))
-        compose.onNodeWithTag(LabLogoFallbackTag).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag(LabLogoFallbackTag, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag(LabLogoTag).assertDoesNotExist()
         assertField("model:acme/atlas-mini", "acme")
     }
 
     @Test fun labLogoFallsBackWhenLabIsMissing() {
         show(ModelListUiState(listOf(ModelSummary("unlinked", "未关联模型")), isLoading = false))
-        compose.onNodeWithTag(LabLogoFallbackTag).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag(LabLogoFallbackTag, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag(LabLogoTag).assertDoesNotExist()
-        compose.onNode(hasTestTag("model-lab") and hasText("暂无数据")).assertIsDisplayed()
+        compose.onNode(hasTestTag("model-lab") and hasText("暂无数据"), useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test fun missingMetadataIsNotInvented() {
@@ -382,7 +382,9 @@ class ModelListScreenTest {
         assertField("price-cache-read", "缓存命中输入")
         assertField("price-cache-read", "$0.003")
         compose.onNodeWithText("非高峰", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("DeepSeek").assertDoesNotExist()
+        // 机构名允许显示在卡片身份区；仅检查价格区没有额外服务商名称。
+        compose.onNode(hasText("DeepSeek") and hasAnyAncestor(hasTestTag("model-price-section")),
+            useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("官方").assertDoesNotExist()
         compose.onNodeWithText("第三方").assertDoesNotExist()
     }
@@ -466,7 +468,7 @@ class ModelListScreenTest {
         }
         listOf("API 价格", "美元 / 1M tokens").forEach { text ->
             val layouts = mutableListOf<TextLayoutResult>()
-            compose.onNodeWithText(text).performScrollTo()
+            compose.onNodeWithText(text, useUnmergedTree = true).performScrollTo()
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val layout = layouts.single()
             assertEquals("Price header must use compact typography", headerStyle.fontSize, layout.layoutInput.style.fontSize)

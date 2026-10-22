@@ -28,6 +28,20 @@ class CatalogDatabaseTest {
 
     @After fun close() = database.close()
 
+    @Test fun detailReadsExplicitServicesIncludingUnpricedOnesAndTracksRemoval() = runBlocking {
+        val initial = snapshot()
+        dao.replaceCatalog(initial.copy(offerings = initial.offerings.map { it.copy(pricing = null) }))
+        val detail = dao.observeModelDetail("model").first()!!
+        assertEquals("model", detail.model.id)
+        assertEquals(3, detail.offerings.size)
+        assertEquals(setOf("p1", "p2"), detail.offerings.map { it.provider.id }.toSet())
+        assertTrue(detail.offerings.all { it.offering.canonicalModelId == "model" && it.offering.pricing == null })
+        assertTrue(dao.observeModelDetail("no-provider").first()!!.offerings.isEmpty())
+        assertNull(dao.observeModelDetail("missing").first())
+        dao.replaceCatalog(CatalogSnapshot(emptyList(), emptyList(), emptyList()))
+        assertNull(dao.observeModelDetail("model").first())
+    }
+
     @Test fun readsCompleteSnapshotIncludingUnlinkedOfferings() = runBlocking {
         assertTrue(dao.readCatalog().isEmpty)
         assertEquals(false, dao.hasCatalog())

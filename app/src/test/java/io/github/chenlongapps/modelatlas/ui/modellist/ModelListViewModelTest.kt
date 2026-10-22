@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.ui.modellist
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.SavedStateHandle
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.repository.CatalogRateLimitException
 import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
@@ -13,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -491,6 +493,7 @@ class ModelListViewModelTest {
     }
 
     private class FakeRepository : ModelRepository {
+        override fun observeModelDetail(id: String) = flowOf<ModelDetail?>(null)
         val models = MutableStateFlow<List<ModelSummary>>(emptyList())
         var remoteModels = listOf(ModelSummary("lab/canonical", "Remote model"))
         var local = false

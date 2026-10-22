@@ -13,13 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,9 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +42,9 @@ import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.ui.model.ModelCoreMetrics
+import io.github.chenlongapps.modelatlas.ui.model.ModelIdentity
+import io.github.chenlongapps.modelatlas.ui.model.ModelModalities
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -58,10 +57,17 @@ internal fun ModelCard(
     priceDetailsExpanded: Boolean,
     onTogglePriceDetails: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenDetail: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
-        modifier = modifier.fillMaxWidth().testTag("model:${model.id}"),
+        modifier = modifier.fillMaxWidth().testTag("model:${model.id}").then(
+            if (onOpenDetail != null) Modifier.clickable(
+                interactionSource = null,
+                indication = null,
+                onClickLabel = stringResource(R.string.detail_open), role = Role.Button, onClick = onOpenDetail,
+            ) else Modifier,
+        ),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = colors.surface),
     ) {
@@ -69,99 +75,9 @@ internal fun ModelCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                LabLogo(lab = model.lab)
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = model.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        itemVerticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = model.lab?.let(::labDisplayName) ?: stringResource(R.string.no_data),
-                            modifier = Modifier.testTag("model-lab"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.primary,
-                        )
-                        val weights = formatOpenWeights(model.openWeights)
-                        val license = shortLicenseLabel(model.license)
-                        InfoBadge(
-                            text = if (model.openWeights == true && license != null) {
-                                stringResource(R.string.model_list_weights_with_license, weights, license)
-                            } else {
-                                weights
-                            },
-                            highlighted = model.openWeights == true,
-                        )
-                    }
-
-                }
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CompactMetric(
-                    icon = R.drawable.ic_calendar,
-                    label = stringResource(R.string.model_list_release_date_label),
-                    value = model.releaseDate ?: stringResource(R.string.no_data),
-                    modifier = Modifier.testTag("release-date"),
-                )
-                CompactMetric(
-                    icon = R.drawable.ic_context_window,
-                    label = stringResource(R.string.model_list_context_label),
-                    value = model.contextLimitTokens?.let(::formatCompactTokenCount) ?: stringResource(R.string.no_data),
-                    unit = model.contextLimitTokens?.let { stringResource(R.string.model_list_token_unit) },
-                    accessibilityValue = model.contextLimitTokens?.let(::formatTokenCount),
-                    modifier = Modifier.testTag("context-limit"),
-                )
-                CompactMetric(
-                    icon = R.drawable.ic_output_limit,
-                    label = stringResource(R.string.model_list_output_limit_label),
-                    value = model.outputLimitTokens?.let(::formatCompactTokenCount) ?: stringResource(R.string.no_data),
-                    unit = model.outputLimitTokens?.let { stringResource(R.string.model_list_token_unit) },
-                    accessibilityValue = model.outputLimitTokens?.let(::formatTokenCount),
-                    modifier = Modifier.testTag("output-limit"),
-                )
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                ModalitiesRow(
-                    label = stringResource(R.string.model_list_input_label),
-                    modalities = model.inputModalities,
-                    modifier = Modifier.testTag("input-modalities"),
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_arrow_forward),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp).testTag("modalities-direction"),
-                        tint = colors.onSurfaceVariant,
-                    )
-                    ModalitiesRow(
-                        label = stringResource(R.string.model_list_output_label),
-                        modalities = model.outputModalities,
-                        modifier = Modifier.weight(1f, fill = false).testTag("output-modalities"),
-                    )
-                }
-            }
+            ModelIdentity(model.name, model.lab, model.openWeights, model.license)
+            ModelCoreMetrics(model.releaseDate, model.contextLimitTokens, model.outputLimitTokens)
+            ModelModalities(model.inputModalities, model.outputModalities)
             HorizontalDivider(
                 modifier = Modifier.testTag("model-price-divider"),
                 color = colors.outlineVariant.copy(alpha = 0.5f),
@@ -176,93 +92,6 @@ internal fun ModelCard(
             } else {
                 PriceSection(price, priceDetailsExpanded, onTogglePriceDetails)
             }
-        }
-    }
-}
-
-@Composable
-private fun CompactMetric(
-    @DrawableRes icon: Int,
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    unit: String? = null,
-    accessibilityValue: String? = null,
-) {
-    Row(
-        modifier = modifier.then(
-            if (accessibilityValue != null) {
-                Modifier.clearAndSetSemantics {
-                    contentDescription = "$label：$accessibilityValue${unit?.let { " $it" }.orEmpty()}"
-                }
-            } else Modifier.semantics(mergeDescendants = true) {},
-        ),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painter = painterResource(icon),
-            // 参数视觉可缩写，行级读屏语义保留字段、完整数值与 token 单位。
-            contentDescription = if (unit == null) label else "$label ($unit)",
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            modifier = Modifier.weight(1f, fill = false),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun ModalitiesRow(
-    label: String,
-    modalities: List<String>?,
-    modifier: Modifier = Modifier,
-) {
-    FlowRow(
-        modifier = modifier.semantics { contentDescription = label },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        val values = when {
-            modalities == null -> listOf(null to stringResource(R.string.no_data))
-            modalities.isEmpty() -> listOf(null to stringResource(R.string.model_list_no_modalities))
-            else -> modalities.map { it to formatModality(it) }
-        }
-        values.forEach { (modality, text) ->
-            InfoBadge(
-                text = text,
-                icon = modalityIcon(modality),
-                showText = false,
-            )
-        }
-    }
-}
-
-/** 非交互标签，不借用 FilterChip，避免让人误以为可以筛选。 */
-@Composable
-private fun InfoBadge(
-    text: String,
-    highlighted: Boolean = false,
-    @DrawableRes icon: Int? = null,
-    showText: Boolean = true,
-) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = if (highlighted) colors.tertiaryContainer else colors.surfaceContainerLow,
-        contentColor = if (highlighted) colors.onTertiaryContainer else colors.onSurfaceVariant,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) Icon(painterResource(icon), contentDescription = if (showText) null else text, modifier = Modifier.size(16.dp))
-            if (showText) Text(text, modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -407,13 +236,6 @@ private fun PriceTiers(tiers: List<ModelPriceTierSummary>) {
             )
         }
     }
-}
-
-@Composable
-private fun formatOpenWeights(openWeights: Boolean?): String = when (openWeights) {
-    true -> stringResource(R.string.model_list_open_weights_yes)
-    false -> stringResource(R.string.model_list_open_weights_no)
-    null -> stringResource(R.string.model_list_open_weights, stringResource(R.string.no_data))
 }
 
 @Composable

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -27,9 +28,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
@@ -148,26 +150,36 @@ private fun SkeletonBlock(
     modifier: Modifier,
     cornerRadius: Dp = 4.dp,
 ) {
+    Box(modifier.modelSkeletonPlaceholder(shimmerProgress, RoundedCornerShape(cornerRadius)))
+}
+
+/** 保留真实控件的测量结果，仅以占位轮廓替代绘制和读屏语义。调用方仍须禁用交互。 */
+@Composable
+internal fun Modifier.modelSkeletonPlaceholder(
+    shimmerProgress: State<Float>?,
+    shape: Shape,
+): Modifier {
+    if (shimmerProgress == null) return this
     val colors = MaterialTheme.colorScheme
     val baseColor = colors.onSurface.copy(alpha = 0.08f)
     val highlightColor = colors.onSurface.copy(alpha = 0.16f)
-    Box(modifier.drawWithCache {
-        val radius = CornerRadius(cornerRadius.toPx())
-        onDrawBehind {
+    return clearAndSetSemantics {}.drawWithCache {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        onDrawWithContent {
             val progress = shimmerProgress.value
             if (progress < 0f) {
-                drawRoundRect(color = baseColor, cornerRadius = radius)
+                drawOutline(outline, color = baseColor)
             } else {
                 val offset = size.width * progress
-                drawRoundRect(
+                drawOutline(
+                    outline = outline,
                     brush = Brush.linearGradient(
                         colors = listOf(baseColor, highlightColor, baseColor),
                         start = Offset(offset - size.width, 0f),
                         end = Offset(offset, size.height),
                     ),
-                    cornerRadius = radius,
                 )
             }
         }
-    })
+    }
 }

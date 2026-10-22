@@ -137,7 +137,7 @@ class ModelCatalogControlsTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { padding, listState ->
+                ModelAtlasScaffold { padding, listState, _ ->
                     ModelListScreen(
                         state.value, bottomOverlayPadding = padding, listState = listState,
                         onQueryChange = { state.value = state.value.copy(query = it) },
@@ -151,7 +151,7 @@ class ModelCatalogControlsTest {
         compose.onNodeWithTag("nav-models").performClick()
         compose.onNodeWithTag("model-search").assertTextContains("atlas")
         compose.onNodeWithText("筛选 · 0").performClick()
-        compose.onNodeWithTag("filter-weights:UNKNOWN").performScrollTo().performClick()
+        compose.onNodeWithTag("filter-weights:UNKNOWN").performScrollTo().performClick().assertIsSelected()
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("filter-weights:UNKNOWN").performScrollTo().assertIsSelected()
         compose.runOnIdle { assertEquals(WeightFilter.ALL, state.value.query.weights) }

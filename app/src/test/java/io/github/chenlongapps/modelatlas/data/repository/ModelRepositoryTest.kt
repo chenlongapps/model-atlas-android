@@ -4,6 +4,8 @@ import io.github.chenlongapps.modelatlas.data.local.CatalogSnapshot
 import io.github.chenlongapps.modelatlas.data.local.CatalogStore
 import io.github.chenlongapps.modelatlas.data.local.ModelListRow
 import io.github.chenlongapps.modelatlas.data.local.ModelOfferingPriceRow
+import io.github.chenlongapps.modelatlas.data.local.ModelDetailRecord
+import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
@@ -38,6 +40,17 @@ class ModelRepositoryTest {
     private val api = FakeApi()
     private val store = FakeStore()
     private val clock = Clock.fixed(Instant.parse("2026-10-19T00:00:00Z"), ZoneOffset.UTC)
+
+    @Test fun observesLocalDetailByStableIdWithoutNetworkOrWrites() = runTest {
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        store.detail.value = ModelDetailRecord(ModelEntity("lab/saved", "remote", "Saved", 100, type = "llm"), emptyList())
+        assertEquals("Saved", repository.observeModelDetail("lab/saved").first()!!.name)
+        assertEquals("lab/saved", store.detailId)
+        store.detail.value = null
+        assertNull(repository.observeModelDetail("lab/saved").first())
+        assertEquals(0, api.providerRequests)
+        assertEquals(0, store.writes)
+    }
 
     @Test fun refreshMapsBothResponsesAndWritesOneSnapshot() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
@@ -348,6 +361,8 @@ class ModelRepositoryTest {
     private class FakeStore : CatalogStore {
         val rows = MutableStateFlow<List<ModelListRow>>(emptyList())
         val priceRows = MutableStateFlow<List<ModelOfferingPriceRow>>(emptyList())
+        val detail = MutableStateFlow<ModelDetailRecord?>(null)
+        var detailId: String? = null
         var snapshot: CatalogSnapshot? = null
         var writes = 0
         var writeFailure: Exception? = null
@@ -355,6 +370,7 @@ class ModelRepositoryTest {
         override suspend fun readCatalog() = snapshot ?: CatalogSnapshot(emptyList(), emptyList(), emptyList())
         override fun observeModelRows() = rows
         override fun observeOfferingPriceRows() = priceRows
+        override fun observeModelDetail(id: String) = detail.also { detailId = id }
         override suspend fun replaceCatalog(snapshot: CatalogSnapshot) {
             writeFailure?.let { throw it }
             writes++

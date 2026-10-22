@@ -1,12 +1,14 @@
 package io.github.chenlongapps.modelatlas.data.repository
 
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import kotlinx.coroutines.flow.Flow
 
 enum class CatalogUpdateCheckResult { UNCHANGED, UPDATED_SILENTLY, UPDATE_AVAILABLE }
 
 interface ModelRepository {
     fun observeModels(): Flow<List<ModelSummary>>
+    fun observeModelDetail(id: String): Flow<ModelDetail?>
 
     suspend fun hasLocalCatalog(): Boolean
 

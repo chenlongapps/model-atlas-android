@@ -40,6 +40,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,7 +72,9 @@ internal fun ModelCatalogControls(
     models: List<ModelSummary>,
     onQueryChange: (ModelListQuery) -> Unit,
     onShowFilters: () -> Unit,
+    skeletonProgress: State<Float>? = null,
 ) {
+    val enabled = skeletonProgress == null
     val focusManager = LocalFocusManager.current
     val colors = MaterialTheme.colorScheme
     val searchLabel = stringResource(R.string.model_search_label)
@@ -79,12 +82,13 @@ internal fun ModelCatalogControls(
     Column(modifier = Modifier.testTag("catalog-query"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
             value = query.search,
+            enabled = enabled,
             onValueChange = { onQueryChange(query.copy(search = it)) },
             placeholder = { Text(stringResource(R.string.model_search_hint)) },
             leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
             trailingIcon = if (query.search.isNotEmpty()) {
                 {
-                    IconButton(onClick = { onQueryChange(query.copy(search = "")) }) {
+                    IconButton(enabled = enabled, onClick = { onQueryChange(query.copy(search = "")) }) {
                         Icon(painterResource(R.drawable.ic_close), stringResource(R.string.model_search_clear))
                     }
                 }
@@ -101,9 +105,13 @@ internal fun ModelCatalogControls(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("model-search")
+                .modelSkeletonPlaceholder(skeletonProgress, CircleShape)
                 .semantics { contentDescription = searchLabel },
         )
         FilledTonalButton(
+            enabled = enabled,
+            modifier = Modifier.testTag("model-filter")
+                .modelSkeletonPlaceholder(skeletonProgress, CircleShape),
             onClick = {
                 focusManager.clearFocus()
                 onShowFilters()
@@ -128,6 +136,7 @@ internal fun ModelCatalogControls(
                 activeFilters(query, labModelCounts).forEach { filter ->
                     InputChip(
                         selected = true,
+                        enabled = enabled,
                         onClick = { onQueryChange(filter.withoutFilter) },
                         label = { Text(filter.label) },
                         trailingIcon = {
@@ -140,12 +149,17 @@ internal fun ModelCatalogControls(
                             selectedTrailingIconColor = colors.onSecondaryContainer,
                         ),
                         border = BorderStroke(0.dp, Color.Transparent),
-                        modifier = Modifier.testTag("active-filter:${filter.key}").semantics {
-                            contentDescription = filter.removeLabel
-                        },
+                        modifier = Modifier.testTag("active-filter:${filter.key}")
+                            .modelSkeletonPlaceholder(skeletonProgress, CircleShape)
+                            .semantics { contentDescription = filter.removeLabel },
                     )
                 }
-                TextButton(onClick = { onQueryChange(query.resetFilters()) }, modifier = Modifier.testTag("reset-filters")) {
+                TextButton(
+                    enabled = enabled,
+                    onClick = { onQueryChange(query.resetFilters()) },
+                    modifier = Modifier.testTag("reset-filters")
+                        .modelSkeletonPlaceholder(skeletonProgress, CircleShape),
+                ) {
                     Text(stringResource(R.string.model_filter_reset))
                 }
             }
@@ -211,6 +225,10 @@ internal fun ModelFilterSheet(
     onQueryChange: (ModelListQuery) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // 在页面的保存状态域中持有草稿，不依赖弹层窗口自己的保存注册表。
+    // 整个 Sheet 关闭后这些状态离开组合，下次打开仍从已应用条件重新建立草稿。
+    var draft by rememberSaveable(stateSaver = FilterDraftSaver) { mutableStateOf(query) }
+    var labsExpanded by rememberSaveable { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -220,6 +238,10 @@ internal fun ModelFilterSheet(
         ModelFilterSheetContent(
             models = models,
             query = query,
+            draft = draft,
+            onDraftChange = { draft = it },
+            labsExpanded = labsExpanded,
+            onLabsExpandedChange = { labsExpanded = it },
             onQueryChange = onQueryChange,
             onDismiss = onDismiss,
             modifier = Modifier.fillMaxHeight(if (LocalDensity.current.fontScale > 1.5f) 0.9f else 0.75f),
@@ -231,13 +253,14 @@ internal fun ModelFilterSheet(
 private fun ModelFilterSheetContent(
     models: List<ModelSummary>,
     query: ModelListQuery,
+    draft: ModelListQuery,
+    onDraftChange: (ModelListQuery) -> Unit,
+    labsExpanded: Boolean,
+    onLabsExpandedChange: (Boolean) -> Unit,
     onQueryChange: (ModelListQuery) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 草稿只属于本次面板；关闭不提交，重建时仅保存小型条件，不保存目录。
-    var draft by rememberSaveable(stateSaver = FilterDraftSaver) { mutableStateOf(query) }
-    var labsExpanded by rememberSaveable { mutableStateOf(false) }
     val previewQuery = draft.copy(search = query.search)
     val labModelCounts = remember(models) { countModelsByLab(models) }
     val labs = remember(labModelCounts, draft.labs) {
@@ -279,43 +302,43 @@ private fun ModelFilterSheetContent(
                 title = stringResource(R.string.model_filter_labs),
                 action = if (labs.size > 8) {
                     {
-                        TextButton(onClick = { labsExpanded = !labsExpanded }, modifier = Modifier.testTag("filter-labs-more")) {
+                        TextButton(onClick = { onLabsExpandedChange(!labsExpanded) }, modifier = Modifier.testTag("filter-labs-more")) {
                             Text(stringResource(if (labsExpanded) R.string.model_filter_less else R.string.model_filter_more))
                         }
                     }
                 } else null,
             ) {
-                FilterOption(draft.labs.isEmpty(), stringResource(R.string.model_filter_all), { draft = draft.copy(labs = emptySet()) })
+                FilterOption(draft.labs.isEmpty(), stringResource(R.string.model_filter_all), { onDraftChange(draft.copy(labs = emptySet())) })
                 visibleLabs.forEach { lab ->
-                    FilterOption(lab in draft.labs, labDisplayName(lab), { draft = draft.copy(labs = draft.labs.toggle(lab)) }, "filter-lab:$lab")
+                    FilterOption(lab in draft.labs, labDisplayName(lab), { onDraftChange(draft.copy(labs = draft.labs.toggle(lab))) }, "filter-lab:$lab")
                 }
             }
             FilterSection(stringResource(R.string.model_filter_weights)) {
                 WeightFilter.entries.forEach { weights ->
-                    FilterOption(draft.weights == weights, weightLabel(weights), { draft = draft.copy(weights = weights) }, "filter-weights:$weights")
+                    FilterOption(draft.weights == weights, weightLabel(weights), { onDraftChange(draft.copy(weights = weights)) }, "filter-weights:$weights")
                 }
             }
             ModalityFilters(
                 title = stringResource(R.string.model_filter_input),
                 options = inputs, selected = draft.inputModalities, tag = "input",
-                onChange = { draft = draft.copy(inputModalities = it) },
+                onChange = { onDraftChange(draft.copy(inputModalities = it)) },
             )
             ModalityFilters(
                 title = stringResource(R.string.model_filter_output),
                 options = outputs, selected = draft.outputModalities, tag = "output",
-                onChange = { draft = draft.copy(outputModalities = it) },
+                onChange = { onDraftChange(draft.copy(outputModalities = it)) },
             )
             TokenFilters(
                 title = stringResource(R.string.model_filter_context),
                 options = listOf(32_000L, 128_000L, 200_000L, 1_000_000L),
                 selected = draft.minContextTokens, tag = "context",
-                onChange = { draft = draft.copy(minContextTokens = it) },
+                onChange = { onDraftChange(draft.copy(minContextTokens = it)) },
             )
             TokenFilters(
                 title = stringResource(R.string.model_filter_output_limit),
                 options = listOf(4_000L, 16_000L, 32_000L, 128_000L),
                 selected = draft.minOutputTokens, tag = "output-limit",
-                onChange = { draft = draft.copy(minOutputTokens = it) },
+                onChange = { onDraftChange(draft.copy(minOutputTokens = it)) },
             )
             FilterSection(stringResource(R.string.model_filter_price)) {
                 listOf(null, true, false).forEach { hasPrice ->
@@ -326,7 +349,7 @@ private fun ModelFilterSheetContent(
                             true -> R.string.model_filter_price_yes
                             false -> R.string.model_filter_price_no
                         }),
-                        onClick = { draft = draft.copy(hasPrice = hasPrice) },
+                        onClick = { onDraftChange(draft.copy(hasPrice = hasPrice)) },
                         tag = "filter-price:$hasPrice",
                     )
                 }
@@ -343,7 +366,7 @@ private fun ModelFilterSheetContent(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedButton(
-                onClick = { draft = draft.resetFilters() },
+                onClick = { onDraftChange(draft.resetFilters()) },
                 modifier = Modifier.weight(1f).fillMaxHeight().heightIn(min = 56.dp).testTag("filter-reset"),
             ) { Text(stringResource(R.string.model_filter_reset)) }
             Button(
@@ -482,6 +505,8 @@ private fun ModelCatalogActiveFiltersPreview() {
 @Preview(name = "Filter sheet · Large font", widthDp = 320, heightDp = 800, fontScale = 2f)
 @Composable
 private fun ModelFilterSheetPreview() {
+    var draft by remember { mutableStateOf(filterPreviewQuery()) }
+    var labsExpanded by remember { mutableStateOf(false) }
     ModelAtlasTheme {
         Surface(shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)) {
             ModelFilterSheetContent(
@@ -500,6 +525,10 @@ private fun ModelFilterSheetPreview() {
                     ),
                 ),
                 query = filterPreviewQuery(),
+                draft = draft,
+                onDraftChange = { draft = it },
+                labsExpanded = labsExpanded,
+                onLabsExpandedChange = { labsExpanded = it },
                 onQueryChange = {},
                 onDismiss = {},
                 modifier = Modifier.fillMaxSize(),

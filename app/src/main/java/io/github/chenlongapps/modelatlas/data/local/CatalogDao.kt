@@ -66,6 +66,10 @@ abstract class CatalogDao {
     )
     abstract fun observeOfferingPriceRows(): Flow<List<ModelOfferingPriceRow>>
 
+    @Transaction
+    @Query("SELECT * FROM models WHERE id = :id")
+    abstract fun observeModelDetail(id: String): Flow<ModelDetailRecord?>
+
     @Insert
     protected abstract suspend fun insertModels(models: List<ModelEntity>)
 
