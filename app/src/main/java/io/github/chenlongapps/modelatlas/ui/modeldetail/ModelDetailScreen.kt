@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.ui.modeldetail
 
 import android.content.res.Configuration
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,13 +15,17 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -34,22 +39,28 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -74,6 +85,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun ModelDetailRoute(modelId: String, onBack: () -> Unit, viewModel: ModelDetailViewModel = hiltViewModel()) {
@@ -104,8 +116,6 @@ internal fun ModelDetailScreen(
 private enum class DetailTab(val label: Int) {
     OVERVIEW(R.string.detail_tab_overview),
     PROVIDERS(R.string.detail_tab_prices),
-    CAPABILITIES(R.string.detail_tab_capabilities),
-    PARAMETERS(R.string.detail_tab_parameters),
     BENCHMARKS(R.string.detail_tab_benchmarks),
 }
 
@@ -117,15 +127,15 @@ private fun ModelDetailBody(
     onRetry: () -> Unit,
     windowInsets: WindowInsets,
 ) {
-    var selectedTab by rememberSaveable { mutableStateOf(DetailTab.OVERVIEW) }
-    // 惰性内容的构建／测量可能晚于点击；捕获本次组合的标签，避免旧列表先测量新标签正文而夹回滚动位置。
-    val activeTab = selectedTab
+    val pagerState = rememberPagerState(pageCount = { DetailTab.entries.size })
+    val scope = rememberCoroutineScope()
+    val activeTab = DetailTab.entries[pagerState.currentPage]
+    val sharedListState = rememberLazyListState()
     // 列表状态留在标签内容外，避免切换／恢复时惰性布局的首次测量重置锚点。
     val overviewListState = rememberLazyListState()
     val providersListState = rememberLazyListState()
-    val capabilitiesListState = rememberLazyListState()
-    val parametersListState = rememberLazyListState()
     val benchmarksListState = rememberLazyListState()
+    val listStates = listOf(overviewListState, providersListState, benchmarksListState)
     val statusListState = rememberLazyListState()
     // 展开状态放在惰性条目外；即使条目离屏、切换标签或恢复时尚未测量，也不会丢失。
     var expandedSections by rememberSaveable(stateSaver = Saver<Set<String>, ArrayList<String>>(
@@ -137,82 +147,129 @@ private fun ModelDetailBody(
     val stateHolder = rememberSaveableStateHolder()
     val layoutDirection = LocalLayoutDirection.current
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
+    val hasContent = uiState.status == ModelDetailStatus.CONTENT
+    val model = uiState.detail.takeIf { hasContent }
+    var nameBounds by remember { mutableStateOf<Rect?>(null) }
+    val collapseProgress by rememberDetailCollapseProgress(sharedListState, nameBounds)
+    val sectionScrollConnection = remember(sharedListState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // 上滑先滚走公共头部，再滚正文；下滑由正文先消费，到顶后交还外层列表。
+                if (available.y >= 0f) return Offset.Zero
+                val consumed = sharedListState.dispatchRawDelta(-available.y)
+                return Offset(0f, -consumed)
+            }
+        }
+    }
     Scaffold(
-        modifier = modifier.testTag("model-detail-screen").drawWithContent {
-            drawContent()
-            val height = windowInsets.getTop(this) * 1.2f
-            if (height > 0f) drawRect(
-                Brush.verticalGradient(listOf(background.copy(alpha = 0.8f), background.copy(alpha = 0.4f), Color.Transparent),
-                    endY = height),
-                size = Size(size.width, height),
-            )
-        },
+        modifier = modifier.testTag("model-detail-screen"),
         containerColor = background,
         contentWindowInsets = windowInsets,
     ) { padding ->
-        val hasContent = uiState.status == ModelDetailStatus.CONTENT
-        // 每个标签保留自己的布局节点，避免复用上一标签的测量／锚点缓存。
-        key(if (hasContent) activeTab.name else "status") {
-            stateHolder.SaveableStateProvider(if (hasContent) activeTab.name else "status") {
-                LazyColumn(
-                    state = if (!hasContent) statusListState else when (activeTab) {
-                        DetailTab.OVERVIEW -> overviewListState
-                        DetailTab.PROVIDERS -> providersListState
-                        DetailTab.CAPABILITIES -> capabilitiesListState
-                        DetailTab.PARAMETERS -> parametersListState
-                        DetailTab.BENCHMARKS -> benchmarksListState
-                    },
-                    modifier = Modifier.fillMaxSize().testTag("model-detail-content").consumeWindowInsets(padding),
-                    // 顶部安全区在头图内部避让，背景可延伸到状态栏；正文与末尾仍避让侧边和底部。
-                    contentPadding = PaddingValues(
-                        start = padding.calculateStartPadding(layoutDirection),
-                        end = padding.calculateEndPadding(layoutDirection),
-                        bottom = padding.calculateBottomPadding() + 24.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    item(key = "header") {
-                        ModelDetailHeader(uiState.detail.takeIf { hasContent }, onBack, padding.calculateTopPadding())
-                    }
-                    if (hasContent) item(key = "tabs") {
-                        DetailTabs(activeTab, onSelect = { selectedTab = it })
-                    }
-                    when (uiState.status) {
-                        ModelDetailStatus.LOADING -> item(key = "loading") {
-                            DetailSection(stringResource(R.string.detail_loading)) { CircularProgressIndicator() }
+        Column(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
+            DetailHeaderBar(onBack, padding.calculateTopPadding(), model?.name, { if (hasContent) collapseProgress else 0f },
+                Modifier.padding(start = padding.calculateStartPadding(layoutDirection),
+                    end = padding.calculateEndPadding(layoutDirection)))
+            if (model != null) {
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                    val viewportHeight = maxHeight
+                    LazyColumn(
+                        state = sharedListState,
+                        modifier = Modifier.fillMaxSize().testTag("model-detail-scroll"),
+                        contentPadding = PaddingValues(
+                            start = padding.calculateStartPadding(layoutDirection),
+                            end = padding.calculateEndPadding(layoutDirection),
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        item(key = "header") {
+                            ModelDetailHeader(model, { collapseProgress }, onNameBoundsChanged = { nameBounds = it })
                         }
-                        ModelDetailStatus.ERROR -> item(key = "error") {
-                            DetailSection(stringResource(R.string.model_list_error_title)) {
-                                Text(stringResource(R.string.detail_read_error))
-                                Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
-                            }
+                        item(key = "tabs") {
+                            DetailTabs(activeTab, onSelect = { selected ->
+                                scope.launch { pagerState.animateScrollToPage(selected.ordinal) }
+                            })
                         }
-                        ModelDetailStatus.NOT_FOUND -> item(key = "missing") {
-                            DetailSection(stringResource(R.string.detail_missing_title)) {
-                                Text(stringResource(R.string.detail_missing))
-                                Button(onClick = onBack) { Text(stringResource(R.string.navigate_back)) }
-                            }
-                        }
-                        ModelDetailStatus.CONTENT -> uiState.detail?.let { model ->
-                            when (activeTab) {
-                                DetailTab.OVERVIEW -> overviewItems(model)
-                                DetailTab.PROVIDERS -> providerItems(model, expandedSections, onToggleSection)
-                                DetailTab.CAPABILITIES -> item(key = "capabilities") {
-                                    DetailSection(stringResource(R.string.detail_capabilities)) { MetadataCapabilities(model.metadata) }
-                                }
-                                DetailTab.PARAMETERS -> item(key = "parameters") {
-                                    DetailSection(stringResource(R.string.detail_parameters)) {
-                                        DetailField(stringResource(R.string.detail_model_id), model.id)
-                                        DetailField(stringResource(R.string.detail_family), model.metadata.family)
-                                        MetadataParameters(model.metadata)
+                        item(key = "sections") {
+                            // 只有标签正文参与横向分页；有界视口让正文继续使用惰性列表。
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxWidth().height(viewportHeight)
+                                    .testTag("model-detail-pager").nestedScroll(sectionScrollConnection),
+                                key = { DetailTab.entries[it].name },
+                            ) { page ->
+                                val tab = DetailTab.entries[page]
+                                stateHolder.SaveableStateProvider(tab.name) {
+                                    LazyColumn(
+                                        state = listStates[page],
+                                        modifier = Modifier.fillMaxSize().then(
+                                            if (tab == activeTab) Modifier.testTag("model-detail-content")
+                                            else Modifier.clearAndSetSemantics {},
+                                        ),
+                                        contentPadding = PaddingValues(bottom = padding.calculateBottomPadding() + 24.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                                    ) {
+                                        when (tab) {
+                                            DetailTab.OVERVIEW -> overviewItems(model)
+                                            DetailTab.PROVIDERS -> providerItems(model, expandedSections, onToggleSection)
+                                            DetailTab.BENCHMARKS -> benchmarkItems(model)
+                                        }
                                     }
                                 }
-                                DetailTab.BENCHMARKS -> benchmarkItems(model)
                             }
                         }
                     }
                 }
+            } else {
+                stateHolder.SaveableStateProvider("status") {
+                    LazyColumn(
+                        state = statusListState,
+                        modifier = Modifier.weight(1f).fillMaxWidth().testTag("model-detail-content"),
+                        // 返回栏独立占据顶部安全区，列表视口从其下方开始，滚动定位不会被固定栏遮挡。
+                        contentPadding = PaddingValues(
+                            start = padding.calculateStartPadding(layoutDirection),
+                            end = padding.calculateEndPadding(layoutDirection),
+                            top = 16.dp,
+                            bottom = padding.calculateBottomPadding() + 24.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        when (uiState.status) {
+                            ModelDetailStatus.LOADING -> item(key = "loading") {
+                                DetailSection(stringResource(R.string.detail_loading)) { CircularProgressIndicator() }
+                            }
+                            ModelDetailStatus.ERROR -> item(key = "error") {
+                                DetailSection(stringResource(R.string.model_list_error_title)) {
+                                    Text(stringResource(R.string.detail_read_error))
+                                    Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+                                }
+                            }
+                            ModelDetailStatus.NOT_FOUND -> item(key = "missing") {
+                                DetailSection(stringResource(R.string.detail_missing_title)) {
+                                    Text(stringResource(R.string.detail_missing))
+                                    Button(onClick = onBack) { Text(stringResource(R.string.navigate_back)) }
+                                }
+                            }
+                            ModelDetailStatus.CONTENT -> Unit
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun rememberDetailCollapseProgress(listState: LazyListState, nameBounds: Rect?): State<Float> {
+    val approachDistance = with(LocalDensity.current) { 24.dp.toPx() }
+    return remember(listState, nameBounds, approachDistance) {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 1f else nameBounds?.let { bounds ->
+                // 标题接近列表顶边时开始交接，完全滚出后收起；不受描述／参数卡高度影响。
+                val progress = ((listState.firstVisibleItemScrollOffset - bounds.top + approachDistance) /
+                    (bounds.height + approachDistance)).coerceIn(0f, 1f)
+                FastOutSlowInEasing.transform(progress)
+            } ?: 0f
         }
     }
 }
@@ -251,6 +308,16 @@ private fun DetailTabs(selected: DetailTab, onSelect: (DetailTab) -> Unit) {
 }
 
 private fun LazyListScope.overviewItems(model: ModelDetail) {
+    item(key = "capabilities") {
+        DetailSection(stringResource(R.string.detail_capabilities)) { MetadataCapabilities(model.metadata) }
+    }
+    item(key = "parameters") {
+        DetailSection(stringResource(R.string.detail_parameters)) {
+            DetailField(stringResource(R.string.detail_model_id), model.id)
+            DetailField(stringResource(R.string.detail_family), model.metadata.family)
+            MetadataParameters(model.metadata)
+        }
+    }
     item(key = "weights") { WeightsSection(model) }
     item(key = "links") { LinksSection(model) }
     item(key = "source") {

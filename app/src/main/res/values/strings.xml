@@ -97,8 +97,6 @@
     <string name="detail_title">模型详情</string>
     <string name="detail_tab_overview">概览</string>
     <string name="detail_tab_prices">价格</string>
-    <string name="detail_tab_capabilities">能力</string>
-    <string name="detail_tab_parameters">技术参数</string>
     <string name="detail_tab_benchmarks">评测</string>
     <string name="detail_header_brand" translatable="false">MODEL ATLAS</string>
     <string name="detail_metric_tokens">%1$s · tokens</string>
@@ -118,7 +116,7 @@
     <string name="detail_read_error">无法读取本地模型详情，请重试。</string>
     <string name="detail_missing_title">模型已不在当前目录中</string>
     <string name="detail_missing">该模型可能已被移除或不再符合 LLM 收录规则。请返回列表查看当前目录。</string>
-    <string name="detail_parameters">基础参数</string>
+    <string name="detail_parameters">技术参数</string>
     <string name="detail_capabilities">模型能力</string>
     <string name="detail_model_id">模型 ID</string>
     <string name="detail_description">描述</string>

@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -36,6 +38,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -59,6 +66,8 @@ class ModelDetailScreenTest {
             ModelDetailScreen(state.value, onBack = { backs++ }, onRetry = { retries++ })
         } }
         compose.onNodeWithText("正在读取模型详情…").assertIsDisplayed()
+        compose.onNodeWithContentDescription("模型详情").assertIsDisplayed()
+        compose.onNodeWithTag("model-detail-collapsed-name").assertDoesNotExist()
         compose.runOnIdle { state.value = ModelDetailUiState("lab/a", ModelDetailStatus.ERROR) }
         compose.onNodeWithText("重试").performClick()
         compose.runOnIdle {
@@ -70,17 +79,20 @@ class ModelDetailScreenTest {
         compose.runOnIdle { assertEquals(1, backs) }
     }
 
-    @Test fun displaysExactParametersCapabilityTristateAndFullLicense() {
+    @Test fun overviewDisplaysCapabilitiesExactParametersAndFullLicense() {
         show(detail())
-        selectTab("PARAMETERS")
-        scrollTo("131,072 tokens")
-        compose.onNodeWithText("131,072 tokens").assertIsDisplayed()
-        selectTab("CAPABILITIES")
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:OVERVIEW").assertIsSelected()
         scrollTo("支持")
         compose.onNodeWithText("支持").assertIsDisplayed()
         scrollTo("不支持")
         compose.onNodeWithText("不支持").assertIsDisplayed()
-        selectTab("OVERVIEW")
+        scrollTo("工具调用")
+        compose.onNode(hasText("工具调用") and hasText("暂无数据")).assertIsDisplayed()
+        scrollTo("技术参数")
+        compose.onNodeWithText("技术参数").assertIsDisplayed()
+        scrollTo("131,072 tokens")
+        compose.onNodeWithText("131,072 tokens").assertIsDisplayed()
         scrollTo("Complete model license longer than sixteen characters")
         compose.onNodeWithText("Complete model license longer than sixteen characters").assertIsDisplayed()
         selectTab("PROVIDERS")
@@ -88,7 +100,7 @@ class ModelDetailScreenTest {
         compose.onNodeWithText("暂无显式关联的 API 服务。").assertIsDisplayed()
     }
 
-    @Test fun centeredHeroAndIndependentCompactMetricsPrecedeAllFiveTabs() {
+    @Test fun centeredHeroAndIndependentCompactMetricsPrecedeAllThreeTabs() {
         val model = detail().copy(
             id = "deepseek/example", name = "DeepSeek Example", license = "MIT",
             metadata = detail().metadata.copy(
@@ -97,15 +109,19 @@ class ModelDetailScreenTest {
             ),
         )
         show(model)
-        listOf("OVERVIEW", "PROVIDERS", "CAPABILITIES", "PARAMETERS", "BENCHMARKS").forEach { tab ->
+        scrollToTabs()
+        compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag("model-detail-tabs"))).assertCountEquals(3)
+        listOf("OVERVIEW", "PROVIDERS", "BENCHMARKS").forEach { tab ->
             selectTab(tab)
-            compose.onNodeWithTag("model-detail-content").performScrollToIndex(0)
+            compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(0)
             compose.onNodeWithText("DeepSeek Example").assertIsDisplayed()
             compose.onNodeWithText("DeepSeek").assertIsDisplayed()
             compose.onNodeWithText("开放权重 · MIT").assertIsDisplayed()
             compose.onNodeWithText("来自规范模型的描述").assertIsDisplayed()
             compose.onNodeWithText("2026-10-01").assertDoesNotExist()
-            val logo = compose.onNodeWithTag("lab-logo", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val sharedHeader = hasAnyAncestor(hasTestTag("model-detail-summary"))
+            val logo = compose.onNode(hasTestTag("lab-logo") and sharedHeader, useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot
             val name = compose.onNodeWithTag("model-name").fetchSemanticsNode().boundsInRoot
             val lab = compose.onNodeWithTag("model-lab").fetchSemanticsNode().boundsInRoot
             assertEquals(logo.center.x, name.center.x, 1f)
@@ -118,11 +134,11 @@ class ModelDetailScreenTest {
             assertTrue(summary.bottom <= tabs.top)
             scrollToMetric("上下文长度：131,072 tokens")
             compose.onNodeWithContentDescription("上下文长度：131,072 tokens").assertIsDisplayed()
-            compose.onNodeWithText("131.1K", useUnmergedTree = true).assertIsDisplayed()
-            compose.onNodeWithText("384K", useUnmergedTree = true).assertIsDisplayed()
-            compose.onNode(hasText("future") and hasAnyAncestor(hasTestTag("input-modalities")), useUnmergedTree = true)
+            compose.onNode(hasText("131.1K") and sharedHeader, useUnmergedTree = true).assertIsDisplayed()
+            compose.onNode(hasText("384K") and sharedHeader, useUnmergedTree = true).assertIsDisplayed()
+            compose.onNode(hasText("future") and sharedHeader and hasAnyAncestor(hasTestTag("input-modalities")), useUnmergedTree = true)
                 .assertExists()
-            compose.onNode(hasText("无") and hasAnyAncestor(hasTestTag("output-modalities")), useUnmergedTree = true)
+            compose.onNode(hasText("无") and sharedHeader and hasAnyAncestor(hasTestTag("output-modalities")), useUnmergedTree = true)
                 .assertExists()
         }
     }
@@ -160,25 +176,29 @@ class ModelDetailScreenTest {
         compose.onNodeWithText("长上下文").assertDoesNotExist()
     }
 
-    @Test fun technicalTabRestoresExactValuesAndItsOwnScrollThroughAsyncLoading() {
+    @Test fun overviewRestoresExactValuesAndItsOwnScrollThroughAsyncLoading() {
         val restoration = StateRestorationTester(compose)
         val model = detail()
         val state = mutableStateOf(content(model))
         restoration.setContent { ModelAtlasTheme(dynamicColor = false) { ModelDetailScreen(state.value, {}) } }
-        selectTab("PARAMETERS")
         scrollTo("131,072 tokens")
         val before = compose.onNodeWithText("131,072 tokens").fetchSemanticsNode().boundsInRoot.top
+        // 恢复概览内的精确参数阅读位置时，也应保留当时的标题状态。
+        val compactTitleBefore = compose.onNodeWithContentDescription(model.name).isDisplayed()
         compose.runOnIdle { state.value = ModelDetailUiState(model.id) }
         restoration.emulateSavedInstanceStateRestore()
         compose.runOnIdle { state.value = content(model) }
         compose.onNodeWithText("131,072 tokens").assertIsDisplayed()
+        assertEquals(compactTitleBefore, compose.onNodeWithContentDescription(model.name).isDisplayed())
         assertEquals(before, compose.onNodeWithText("131,072 tokens").fetchSemanticsNode().boundsInRoot.top, 1f)
         scrollToTabs()
-        compose.onNodeWithTag("detail-tab:PARAMETERS").performScrollTo().assertIsSelected()
-        selectTab("CAPABILITIES")
-        scrollTo("不支持")
-        compose.onNodeWithText("不支持").assertIsDisplayed()
-        selectTab("PARAMETERS")
+        compose.onNodeWithTag("detail-tab:OVERVIEW").assertIsSelected()
+        val tabsBefore = compose.onNodeWithTag("model-detail-tabs").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("detail-tab:BENCHMARKS").performClick()
+        scrollTo("暂无评测数据。")
+        compose.onNodeWithText("暂无评测数据。").assertIsDisplayed()
+        selectTab("OVERVIEW")
+        assertEquals(tabsBefore, compose.onNodeWithTag("model-detail-tabs").fetchSemanticsNode().boundsInRoot.top, 1f)
         scrollTo("131,072 tokens")
         compose.onNodeWithText("131,072 tokens").assertIsDisplayed()
     }
@@ -271,21 +291,60 @@ class ModelDetailScreenTest {
         compose.onNodeWithText("正在读取模型详情…").assertIsDisplayed()
         compose.runOnIdle { state.value = content(model) }
         compose.onNodeWithText("本地获取时间").assertIsDisplayed()
+        compose.onNodeWithContentDescription(model.name).assertIsDisplayed()
         assertEquals(before, compose.onNodeWithText("本地获取时间").fetchSemanticsNode().boundsInRoot.top, 1f)
     }
 
-    @Test fun headerAndTabsScrollAwayWithContent() {
-        show(detail().copy(links = List(12) { ModelLink("https://example.org/$it", "Link $it", null) }))
-        compose.onNodeWithTag("model-detail-header").assertIsDisplayed()
+    @Test fun headerBecomesModelNameAndStaysReachableWhileTabsScrollAway() {
+        var backs = 0
+        val model = detail().copy(links = List(12) { ModelLink("https://example.org/$it", "Link $it", null) })
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            ModelDetailScreen(content(model), { backs++ })
+        } }
+        val header = compose.onNodeWithTag("model-detail-header")
+        val initialBounds = header.fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithContentDescription("模型详情").assertIsDisplayed()
+        compose.onNodeWithContentDescription(model.name).assertDoesNotExist()
         scrollToTabs()
         compose.onNodeWithTag("model-detail-tabs").assertIsDisplayed()
         scrollTo("本地获取时间")
-        compose.onNodeWithTag("model-detail-header").assertIsNotDisplayed()
+        header.assertIsDisplayed()
+        assertEquals(initialBounds, header.fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithContentDescription(model.name).assertIsDisplayed()
+        compose.onNodeWithContentDescription("模型详情").assertDoesNotExist()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.runOnIdle { assertEquals(1, backs) }
         compose.onNodeWithTag("model-detail-tabs").assertIsNotDisplayed()
-        compose.onNodeWithTag("model-detail-content").performScrollToIndex(0)
-        compose.onNodeWithTag("model-detail-header").assertIsDisplayed()
+        compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(0)
+        compose.onNodeWithContentDescription("模型详情").assertIsDisplayed()
+        compose.onNodeWithContentDescription(model.name).assertDoesNotExist()
+        compose.onNodeWithText(model.name).assertIsDisplayed()
         scrollToTabs()
         compose.onNodeWithTag("model-detail-tabs").assertIsDisplayed()
+    }
+
+    @Test fun titleCrossfadesAtIntermediateScrollAndReversesAtTheSamePosition() {
+        show(detail().copy(links = List(12) { ModelLink("https://example.org/$it", "Link $it", null) }))
+        val header = compose.onNodeWithTag("model-detail-header")
+        val list = compose.onNodeWithTag("model-detail-scroll")
+        val initialHeaderBounds = header.fetchSemanticsNode().boundsInRoot
+        val listBounds = list.fetchSemanticsNode().boundsInRoot
+        val nameBounds = compose.onNodeWithTag("model-name").fetchSemanticsNode().boundsInRoot
+        val expanded = header.captureToImage()
+        // 大标题到达视口顶边时截取交接的中间帧，再向前／反向滚动同一距离。
+        val distance = nameBounds.top - listBounds.top
+        list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, distance) }
+        val middle = header.captureToImage()
+        list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, nameBounds.height) }
+        val collapsed = header.captureToImage()
+        compose.onNodeWithContentDescription("Model A").assertIsDisplayed()
+        assertTrue("The intermediate title must differ from both endpoints", imageDiffers(middle, expanded) && imageDiffers(middle, collapsed))
+        assertEquals(initialHeaderBounds, header.fetchSemanticsNode().boundsInRoot)
+        assertEquals(listBounds, list.fetchSemanticsNode().boundsInRoot)
+        list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -nameBounds.height) }
+        assertFalse("Returning to the same scroll position restores the same title", imageDiffers(middle, header.captureToImage()))
+        list.performScrollToIndex(0)
+        assertFalse(imageDiffers(expanded, header.captureToImage()))
     }
 
     @Test fun benchmarkTabShowsRawScoresMetadataAndSafeSourceWithoutInventingUnits() {
@@ -337,6 +396,7 @@ class ModelDetailScreenTest {
         scrollToTabs()
         val before = compose.onNodeWithTag("model-detail-tabs").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("detail-tab:OVERVIEW").performClick()
+        selectTab("BENCHMARKS")
         selectTab("PROVIDERS")
         assertEquals(before, compose.onNodeWithTag("model-detail-tabs").fetchSemanticsNode().boundsInRoot.top, 1f)
         scrollTo("上下文长度档位门槛：272,000 tokens")
@@ -349,6 +409,106 @@ class ModelDetailScreenTest {
         compose.runOnIdle { state.value = content(model) }
         compose.onNodeWithText("收起服务参数与来源").assertIsDisplayed()
         assertEquals(contentBefore, compose.onNodeWithText("收起服务参数与来源").fetchSemanticsNode().boundsInRoot.top, 1f)
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:PROVIDERS").assertIsSelected()
+    }
+
+    @Test fun swipingSectionsPreservesDeepScrollExpansionAndRestoresSelectedPage() {
+        val restoration = StateRestorationTester(compose)
+        val offering = ModelDetailOffering("s", "Service", ModelDetailMetadata(), null,
+            ModelDetailPrice(input = 0.0, tiers = listOf(
+                ModelDetailPriceTier("context", 272_000, ModelDetailPrice(input = 0.003)),
+            )), null, null, null, "models.dev", 100)
+        val model = detail().copy(providers = listOf(ModelDetailProvider("p", "Provider", null, listOf(offering))))
+        restoration.setContent { ModelAtlasTheme(dynamicColor = false) { ModelDetailScreen(content(model), {}) } }
+        // 首末页不能越界；正文竖滑仍只滚动当前页。
+        swipeContent(toLeft = false)
+        compose.onNodeWithTag("model-detail-content").performTouchInput { swipeUp() }
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:OVERVIEW").assertIsSelected()
+        scrollTo("本地获取时间")
+        val overviewTop = compose.onNodeWithText("本地获取时间").fetchSemanticsNode().boundsInRoot.top
+        swipeContent()
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:PROVIDERS").assertIsSelected()
+        scrollTo("展开档位价格")
+        compose.onNodeWithText("展开档位价格").performClick()
+        val tier = "上下文长度档位门槛：272,000 tokens"
+        scrollTo(tier)
+        val tierTop = compose.onNodeWithText(tier).fetchSemanticsNode().boundsInRoot.top
+        // 标签栏滚出视口后仍可直接横滑，并恢复每页原来的内容位置。
+        swipeContent(toLeft = false)
+        compose.onNodeWithText("本地获取时间").assertIsDisplayed()
+        assertEquals(overviewTop, compose.onNodeWithText("本地获取时间").fetchSemanticsNode().boundsInRoot.top, 1f)
+        swipeContent()
+        compose.onNodeWithText(tier).assertIsDisplayed()
+        assertEquals(tierTop, compose.onNodeWithText(tier).fetchSemanticsNode().boundsInRoot.top, 1f)
+        swipeContent()
+        scrollTo("暂无评测数据。")
+        swipeContent()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("暂无评测数据。").assertIsDisplayed()
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:BENCHMARKS").assertIsSelected()
+        // 点击可跨页跳转，随后横滑仍按当前页面继续。
+        selectTab("OVERVIEW")
+        swipeContent()
+        compose.onNodeWithText(tier).assertIsDisplayed()
+        assertEquals(tierTop, compose.onNodeWithText(tier).fetchSemanticsNode().boundsInRoot.top, 1f)
+    }
+
+    @Test fun onlySectionsMoveHorizontallyWhileSharedHeaderAndTabsStayInPlace() {
+        show(detail())
+        scrollToTabs()
+        val sharedTags = listOf("model-detail-summary", "model-detail-metrics", "model-detail-tabs", "model-detail-header")
+        val before = sharedTags.associateWith { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
+        // 在身份区横滑不会切换正文。
+        compose.onNodeWithTag("model-detail-summary").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("detail-tab:OVERVIEW").assertIsSelected()
+        // 手指尚未抬起时检查公共区域，避免只验证切页结束后的静止画面。
+        compose.onNodeWithTag("model-detail-content").performTouchInput {
+            down(Offset(width * 0.85f, height * 0.5f))
+            moveTo(Offset(width * 0.5f, height * 0.5f), delayMillis = 300)
+        }
+        sharedTags.forEach { assertEquals(before.getValue(it), compose.onNodeWithTag(it).getUnclippedBoundsInRoot()) }
+        compose.onAllNodes(hasTestTag("model-detail-summary"), useUnmergedTree = true).assertCountEquals(1)
+        compose.onNodeWithTag("model-detail-content").performTouchInput {
+            moveBy(Offset(-width * 0.35f, 0f), delayMillis = 100)
+            up()
+        }
+        compose.onNodeWithTag("detail-tab:PROVIDERS").assertIsSelected()
+        sharedTags.forEach { assertEquals(before.getValue(it), compose.onNodeWithTag(it).getUnclippedBoundsInRoot()) }
+        compose.onNodeWithTag("detail-tab:BENCHMARKS").performClick()
+        compose.onNodeWithTag("detail-tab:BENCHMARKS").assertIsSelected()
+        sharedTags.forEach { assertEquals(before.getValue(it), compose.onNodeWithTag(it).getUnclippedBoundsInRoot()) }
+    }
+
+    @Test fun verticalSectionGesturesCollapseAndRestoreSharedHeader() {
+        show(detail())
+        scrollToTabs()
+        repeat(4) { compose.onNodeWithTag("model-detail-content").performTouchInput { swipeUp() } }
+        compose.onNodeWithTag("model-detail-tabs").assertIsNotDisplayed()
+        compose.onNodeWithContentDescription("Model A").assertIsDisplayed()
+        // 正文回到顶部之后，同一方向手势继续向外层交接并恢复头部。
+        repeat(8) { compose.onNodeWithTag("model-detail-content").performTouchInput { swipeDown() } }
+        compose.onNodeWithText("Model A").assertIsDisplayed()
+        compose.onNodeWithContentDescription("模型详情").assertIsDisplayed()
+        compose.onNodeWithTag("detail-tab:OVERVIEW").assertIsSelected()
+    }
+
+    @Test fun rtlSwipesFollowTabOrderInBothDirections() {
+        compose.setContent {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                ModelAtlasTheme(dynamicColor = false) { ModelDetailScreen(content(detail()), {}) }
+            }
+        }
+        swipeContent(toLeft = false)
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:PROVIDERS").assertIsSelected()
+        swipeContent(toLeft = false)
+        scrollToTabs()
+        compose.onNodeWithTag("detail-tab:BENCHMARKS").assertIsSelected()
+        swipeContent()
         scrollToTabs()
         compose.onNodeWithTag("detail-tab:PROVIDERS").assertIsSelected()
     }
@@ -367,18 +527,20 @@ class ModelDetailScreenTest {
             }
         }
         val name = "A very long model name that must wrap without truncation"
-        scrollTo(name)
+        val headerBounds = compose.onNodeWithTag("model-detail-header").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("model-detail-scroll").performScrollToNode(hasText(name))
         assertTextNotClipped(name)
-        selectTab("PARAMETERS")
         scrollTo("131,072 tokens")
         assertTextNotClipped("131,072 tokens")
-        selectTab("OVERVIEW")
         listOf("Complete model license longer than sixteen characters").forEach { text ->
             scrollTo(text)
             assertTextNotClipped(text)
         }
         scrollTo("本地获取时间")
         compose.onNodeWithText("本地获取时间").assertIsDisplayed()
+        compose.onNodeWithContentDescription(name).assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").assertIsDisplayed()
+        assertEquals(headerBounds, compose.onNodeWithTag("model-detail-header").fetchSemanticsNode().boundsInRoot)
     }
 
     @Test fun darkNarrowLargeFontBenchmarkLabelsAndLongMetadataDoNotClip() {
@@ -394,8 +556,7 @@ class ModelDetailScreenTest {
             }
         }
         scrollToTabs()
-        listOf("OVERVIEW" to "概览", "PROVIDERS" to "价格", "CAPABILITIES" to "能力",
-            "PARAMETERS" to "技术参数", "BENCHMARKS" to "评测").forEach { (tab, label) ->
+        listOf("OVERVIEW" to "概览", "PROVIDERS" to "价格", "BENCHMARKS" to "评测").forEach { (tab, label) ->
             compose.onNodeWithTag("detail-tab:$tab").performScrollTo()
             assertTextNotClipped(label)
         }
@@ -422,6 +583,14 @@ class ModelDetailScreenTest {
         assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1))
     }
 
+    private fun imageDiffers(first: androidx.compose.ui.graphics.ImageBitmap, second: androidx.compose.ui.graphics.ImageBitmap): Boolean {
+        assertEquals(first.width, second.width)
+        assertEquals(first.height, second.height)
+        val a = first.toPixelMap()
+        val b = second.toPixelMap()
+        return (0 until a.height).any { y -> (0 until a.width).any { x -> a[x, y] != b[x, y] } }
+    }
+
     private fun assertHeaderMetricsAndInsets(darkTheme: Boolean) {
         var background = Color.Unspecified
         compose.setContent {
@@ -433,7 +602,7 @@ class ModelDetailScreenTest {
                 )), {}, windowInsets = WindowInsets(0, 72, 0, 48))
             }
         }
-        compose.onNodeWithTag("model-detail-content").performScrollToIndex(0)
+        compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(0)
         assertTrue(compose.onNodeWithContentDescription("返回").fetchSemanticsNode().boundsInRoot.top >= 72f)
         val screen = compose.onNodeWithTag("model-detail-screen")
         val screenBounds = screen.fetchSemanticsNode().boundsInRoot
@@ -451,6 +620,7 @@ class ModelDetailScreenTest {
         assertEquals(date.center.y, context.center.y, 1f)
         assertEquals(context.center.y, output.center.y, 1f)
         val notice = compose.onNode(hasText("完整来源和 MIT 许可见设置", substring = true))
+        scrollToSections()
         compose.onNodeWithTag("model-detail-content").performScrollToNode(hasText("完整来源和 MIT 许可见设置", substring = true))
         val bottom = with(compose.density) { notice.getUnclippedBoundsInRoot().bottom.toPx() }
         assertTrue("Last text must avoid the navigation bar", bottom <= screenBounds.bottom - 48f)
@@ -460,7 +630,15 @@ class ModelDetailScreenTest {
         compose.setContent { ModelAtlasTheme(dynamicColor = false) { ModelDetailScreen(content(model), {}) } }
     }
     private fun scrollTo(text: String) {
+        scrollToSections()
         compose.onNodeWithTag("model-detail-content").performScrollToNode(hasText(text))
+    }
+    private fun swipeContent(toLeft: Boolean = true) {
+        scrollToSections()
+        compose.onNodeWithTag("model-detail-content").performTouchInput {
+            if (toLeft) swipeLeft(startX = width * 0.85f, endX = width * 0.15f)
+            else swipeRight(startX = width * 0.15f, endX = width * 0.85f)
+        }
     }
     private fun selectTab(name: String) {
         scrollToTabs()
@@ -469,11 +647,14 @@ class ModelDetailScreenTest {
         tab.performClick()
     }
     private fun scrollToMetric(description: String) {
-        compose.onNodeWithTag("model-detail-content")
+        compose.onNodeWithTag("model-detail-scroll")
             .performScrollToNode(androidx.compose.ui.test.hasContentDescription(description))
     }
     private fun scrollToTabs() {
-        compose.onNodeWithTag("model-detail-content").performScrollToNode(hasTestTag("model-detail-tabs"))
+        compose.onNodeWithTag("model-detail-scroll").performScrollToNode(hasTestTag("model-detail-tabs"))
+    }
+    private fun scrollToSections() {
+        compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(2)
     }
     private fun content(model: ModelDetail) = ModelDetailUiState(model.id, ModelDetailStatus.CONTENT, model)
     private fun detail() = ModelDetail(

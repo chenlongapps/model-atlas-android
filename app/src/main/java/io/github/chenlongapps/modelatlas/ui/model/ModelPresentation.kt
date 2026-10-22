@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.model
 
+import android.content.res.Configuration
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
@@ -39,6 +41,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.labDisplayName
 import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
 import io.github.chenlongapps.modelatlas.ui.modellist.shortLicenseLabel
+import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 /** 列表与详情共用身份结构；元素各自接收 Modifier，便于以后在页面宿主接入共享元素。 */
 @Composable
@@ -181,7 +184,7 @@ private fun ModalityBadges(label: String, modalities: List<String>?, showText: B
     }
 }
 
-/** 只接收规范模型字段；参数卡使用同一缩写与精确读屏值，完整参数另在技术参数标签展示。 */
+/** 只接收规范模型字段；参数卡使用同一缩写与精确读屏值，完整参数另在概览的技术参数分区展示。 */
 @Composable
 internal fun ModelCoreMetrics(
     releaseDate: String?,
@@ -266,5 +269,97 @@ private fun CompactMetric(metric: CoreMetric) {
         Icon(painterResource(metric.icon), metric.label, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(metric.compactValue, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Preview(name = "Model presentation · List", showBackground = true, widthDp = 400)
+@Preview(name = "Model presentation · List dark", showBackground = true, widthDp = 400,
+    uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "Model presentation · List narrow", showBackground = true, widthDp = 320)
+@Preview(name = "Model presentation · List large font", showBackground = true, widthDp = 360, fontScale = 2f)
+@Composable
+private fun ModelPresentationListPreview() {
+    ModelAtlasTheme(dynamicColor = false) {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Column(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ModelIdentity(
+                    name = "DeepSeek V4.1 Flash",
+                    lab = "deepseek",
+                    openWeights = true,
+                    license = "MIT",
+                )
+                ModelCoreMetrics(
+                    releaseDate = "2025-06-17",
+                    contextLimitTokens = 128_000,
+                    outputLimitTokens = 16_384,
+                )
+                ModelModalities(input = listOf("text", "image"), output = listOf("text"))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModelWeightsBadge(openWeights = true, license = "MIT")
+                    ModelWeightsBadge(openWeights = false, license = null)
+                    ModelWeightsBadge(openWeights = null, license = null)
+                }
+            }
+        }
+    }
+}
+
+@Preview(name = "Model presentation · Detail", showBackground = true, widthDp = 400)
+@Preview(name = "Model presentation · Detail dark", showBackground = true, widthDp = 400,
+    uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "Model presentation · Detail narrow", showBackground = true, widthDp = 320)
+@Preview(name = "Model presentation · Detail large font", showBackground = true, widthDp = 360, fontScale = 2f)
+@Composable
+private fun ModelPresentationDetailPreview() {
+    ModelAtlasTheme(dynamicColor = false) {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ModelIdentity(
+                    name = "DeepSeek V4.1 Flash",
+                    lab = "deepseek",
+                    openWeights = true,
+                    license = "MIT",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    nameStyle = MaterialTheme.typography.headlineMedium,
+                    centered = true,
+                )
+                ModelModalities(
+                    input = listOf("text", "image", "audio"),
+                    output = listOf("text"),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    showText = true,
+                    centered = true,
+                )
+                FlowRow(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ModelInfoBadge("推理")
+                    ModelInfoBadge("工具调用")
+                    ModelInfoBadge("结构化输出")
+                }
+                Surface(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 2.dp,
+                ) {
+                    ModelCoreMetrics(
+                        releaseDate = "2025-06-17",
+                        contextLimitTokens = 128_000,
+                        outputLimitTokens = 16_384,
+                        modifier = Modifier.padding(16.dp),
+                        prominent = true,
+                    )
+                }
+            }
+        }
     }
 }

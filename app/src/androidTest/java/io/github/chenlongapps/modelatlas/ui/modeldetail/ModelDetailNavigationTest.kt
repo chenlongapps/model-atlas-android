@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.espresso.Espresso.pressBack
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
@@ -46,6 +47,7 @@ class ModelDetailNavigationTest {
         val restoration = StateRestorationTester(compose)
         show(restoration)
         compose.onNodeWithText("Model 0").performClick()
+        compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(2)
         compose.onNodeWithTag("model-detail-content").performScrollToNode(hasText("本地获取时间"))
         val before = compose.onNodeWithText("本地获取时间").fetchSemanticsNode().boundsInRoot.top
         restoration.emulateSavedInstanceStateRestore()
