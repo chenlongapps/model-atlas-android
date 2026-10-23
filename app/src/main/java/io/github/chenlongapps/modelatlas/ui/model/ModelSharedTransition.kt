@@ -5,17 +5,16 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -70,10 +69,13 @@ internal val LocalModelSharedTransition = compositionLocalOf<ModelSharedTransiti
  * 是否放置页面、屏蔽交互以及退出后的详情清理由外壳统一管理。
  */
 @Composable
-internal fun rememberRetainedModelVisibility(visible: Boolean): AnimatedVisibilityScope {
-    val state = remember { MutableTransitionState(if (visible) EnterExitState.Visible else EnterExitState.PreEnter) }
-    state.targetState = if (visible) EnterExitState.Visible else EnterExitState.PostExit
+internal fun rememberRetainedModelVisibility(
+    state: SeekableTransitionState<EnterExitState>,
+    onTargetComposed: (EnterExitState) -> Unit,
+): AnimatedVisibilityScope {
     val transition = rememberTransition(state, label = "model-page-visibility")
+    val target = state.targetState
+    SideEffect { onTargetComposed(target) }
     return remember(transition) {
         object : AnimatedVisibilityScope {
             override val transition = transition
@@ -93,18 +95,25 @@ private class ModelContainerShape(val progress: () -> Float) : Shape {
 internal fun modelCardContainerModifier(modelId: String): Modifier {
     val context = LocalModelSharedTransition.current ?: return Modifier
     if (!context.enabled) return Modifier
+    // PostExit → Visible 的重入不会使用 fadeIn 的 spec，而会回退到默认 spring。
+    // 显式绑定同一 Transition，保证预测性慢拖中来源正文仍按原定时序交接。
+    val contentOpacity by context.visibilityScope.transition.animateFloat(
+        transitionSpec = { tween(120, delayMillis = if (targetState == EnterExitState.Visible) 280 else 0) },
+        label = "model-card-content",
+    ) { if (it == EnterExitState.Visible) 1f else 0f }
     return with(context.sharedScope) {
         val shape = remember(context.expansionProgress) { ModelContainerShape(context.expansionProgress) }
+        val state = rememberSharedContentState(ModelContainerKey(modelId))
         Modifier.sharedBounds(
-            rememberSharedContentState(ModelContainerKey(modelId)), context.visibilityScope,
+            state, context.visibilityScope,
             // 内容只在容器交接时短暂切换；主列表本身不淡出。
-            enter = fadeIn(tween(120, delayMillis = 280)),
-            exit = fadeOut(tween(120)),
+            enter = EnterTransition.None,
+            exit = ExitTransition.None,
             boundsTransform = { _, _ -> tween(ModelTransitionDurationMillis) },
             resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(ContentScale.FillWidth, Alignment.TopStart),
             zIndexInOverlay = 1f,
             clipInOverlayDuringTransition = OverlayClip(shape),
-        )
+        ).graphicsLayer { alpha = if (state.isMatchFound) contentOpacity else 1f }
     }
 }
 
@@ -125,14 +134,17 @@ internal fun modelSharedModifier(modelId: String?, role: ModelIdentityRole, enab
                 zIndexInOverlay = 2f,
             )
         } else {
+            val identityOpacity by context.visibilityScope.transition.animateFloat(
+                transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-identity-opacity:$role",
+            ) { if (it == EnterExitState.Visible) 1f else 0f }
             Modifier.testTag("model-shared:$modelId:$role").sharedBounds(
                 state, context.visibilityScope,
-                enter = fadeIn(tween(ModelTransitionDurationMillis)),
-                exit = fadeOut(tween(ModelTransitionDurationMillis)),
+                enter = EnterTransition.None,
+                exit = ExitTransition.None,
                 boundsTransform = { _, _ -> tween(ModelTransitionDurationMillis) },
                 resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(),
                 zIndexInOverlay = 2f,
-            )
+            ).graphicsLayer { alpha = if (state.isMatchFound) identityOpacity else 1f }
         }
     }
 }
@@ -151,7 +163,8 @@ internal fun ModelDetailContainer(modelId: String, content: @Composable BoxScope
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val contentOpacity by visibility.transition.animateFloat(
         transitionSpec = {
-            tween(120, delayMillis = if (targetState == EnterExitState.Visible) 60 else 260)
+            // 退出先清出非共享正文，避免慢拖时固定返回栏与正在归位的身份互相叠压。
+            tween(120, delayMillis = if (targetState == EnterExitState.Visible) 60 else 0)
         }, label = "model-container-content",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val cardColor = MaterialTheme.colorScheme.surface

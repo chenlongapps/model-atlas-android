@@ -11,6 +11,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.PixelMap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.assertIsDisplayed
@@ -28,12 +29,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.navigationevent.NavigationEvent
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.test.espresso.Espresso.pressBack
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentityRole
+import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
+import io.github.chenlongapps.modelatlas.ui.model.ModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListMessage
@@ -53,6 +58,10 @@ class ModelSharedTransitionTest {
     private var listDisposals = 0
     private var noticesDismissed = 0
     private var foregroundColor = 0
+    private var cardColor = Color.Unspecified
+    private var pageColor = Color.Unspecified
+    private val backInput = ModelBackTestInput()
+    private lateinit var detailTransition: ModelSharedTransition
     private val catalog = mutableStateOf(listOf(
         ModelSummary("openai/one", "First model", openWeights = true, license = "MIT"),
         ModelSummary("openai/two", "Second model", openWeights = true, license = "MIT"),
@@ -330,6 +339,226 @@ class ModelSharedTransitionTest {
         }
     }
 
+    @Test fun predictiveProgressSeeksContainerLogoCornersAndColorTogetherIncludingPausedEndpoints() {
+        show(dark = true)
+        val source = compose.onNodeWithTag("model:openai/one").fetchSemanticsNode().boundsInRoot
+        val sourceLogo = drawnLogoBounds()
+        val catalog = compose.onRoot().captureToImage().toPixelMap()
+        compose.onNodeWithTag("model:openai/one").performClick()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val targetLogo = drawnLogoBounds()
+        var previousColor = pageColor
+        compose.mainClock.autoAdvance = false
+        startBack()
+        for (fraction in listOf(0f, .25f, .5f, .75f, 1f)) {
+            progressBack(fraction)
+            val expansion = 1f - FastOutSlowInEasing.transform(fraction)
+            compose.runOnIdle { assertEquals(expansion, detailTransition.expansionProgress(), .001f) }
+            val expected = lerp(source, root, expansion)
+            val pixels = compose.onRoot().captureToImage().toPixelMap()
+            val color = pixels[expected.center.x.toInt(), expected.top.toInt() + 4]
+            if (fraction <= .5f) assertEquals("来源卡片延迟淡入前，底色必须与容器扩展进度精确同步",
+                androidx.compose.ui.graphics.lerp(cardColor, pageColor, expansion).toArgb(), color.toArgb())
+            // 实际像素还合成了来源卡片的局部淡入（其表面仍为 surface），不能把最终
+            // 合成色误当成详情 drawBehind 的单层 lerp。精确插值另在独立原型中验证。
+            for ((previous, current, target) in listOf(
+                Triple(previousColor.red, color.red, cardColor.red),
+                Triple(previousColor.green, color.green, cardColor.green),
+                Triple(previousColor.blue, color.blue, cardColor.blue),
+            )) {
+                assertTrue("返回底色应向卡片颜色连续收敛，不能越界或反向跳变：$fraction",
+                    current in minOf(previous, target) - .004f..maxOf(previous, target) + .004f)
+            }
+            previousColor = color
+            val changed = changedBoundsOrNull(catalog, pixels, channelTolerance = 4)
+            if (fraction > 0f && fraction < 1f) {
+                assertTrue("实际容器应随进度收缩：$fraction $changed $expected", changed != null &&
+                    changed.left >= expected.left - 3 && changed.top >= expected.top - 3 &&
+                    changed.right <= expected.right + 3 && changed.bottom <= expected.bottom + 3)
+                assertRectNear(lerp(sourceLogo, targetLogo, expansion), drawnLogoBounds(container = expected))
+                val x = expected.left.toInt() + 1
+                val y = expected.top.toInt() + 1
+                assertEquals("动态圆角外应透出原目录", catalog[x, y].toArgb(), pixels[x, y].toArgb())
+            }
+            if (fraction == 1f) {
+                assertPixelMapsNear(catalog, pixels)
+                assertRectEquals(sourceLogo, drawnLogoBounds())
+            }
+            // 停在 100% 仍是活动手势：保留详情组合，不能把 isRunning=false 当作完成。
+            compose.mainClock.advanceTimeBy(500)
+            compose.runOnIdle { assertEquals(0, detailsDisposed) }
+            assertPixelMapsNear(pixels, compose.onRoot().captureToImage().toPixelMap())
+        }
+        compose.runOnIdle { backInput.complete() }
+        compose.mainClock.advanceTimeBy(96)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+        assertPixelMapsNear(catalog, compose.onRoot().captureToImage().toPixelMap())
+    }
+
+    @Test fun predictiveCancelAt25And50And90RestoresTheSameDetailWithoutFlickerOrDisposal() {
+        show(dark = true)
+        val source = compose.onNodeWithTag("model:openai/one").fetchSemanticsNode().boundsInRoot
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val catalog = compose.onRoot().captureToImage().toPixelMap()
+        compose.onNodeWithTag("model:openai/one").performClick()
+        val full = compose.onRoot().captureToImage().toPixelMap()
+        compose.mainClock.autoAdvance = false
+        for (fraction in listOf(.25f, .5f, .9f)) {
+            startBack()
+            progressBack(fraction)
+            val startExpansion = detailTransition.expansionProgress()
+            compose.runOnIdle { backInput.cancel() }
+            var previous = startExpansion
+            val settleFrame = kotlin.math.ceil(ModelTransitionDurationMillis * fraction / 16f).toInt() + 5
+            repeat(36) { frame ->
+                compose.mainClock.advanceTimeByFrame()
+                val value = detailTransition.expansionProgress()
+                assertTrue("取消应沿当前共享时间轴恢复，不能闪回目录", value >= previous - .001f)
+                previous = value
+                if (frame == settleFrame) {
+                    assertEquals("恢复端点不能额外等待一次不可见的完整动画",
+                        androidx.compose.animation.EnterExitState.Visible, detailTransition.visibilityScope.transition.currentState)
+                    assertEquals(detailTransition.visibilityScope.transition.currentState, detailTransition.visibilityScope.transition.targetState)
+                }
+                // 每帧实际绘制应有且只有一个共享 Logo。
+                try {
+                    val container = lerp(source, root, value)
+                    drawnLogoBounds(container)
+                    val changed = changedBoundsOrNull(catalog, compose.onRoot().captureToImage().toPixelMap(), 4)
+                    assertTrue("取消途中详情不能闪出扩展容器", changed != null &&
+                        changed.left >= container.left - 3 && changed.top >= container.top - 3 &&
+                        changed.right <= container.right + 3 && changed.bottom <= container.bottom + 3)
+                } catch (failure: AssertionError) {
+                    throw AssertionError("取消 fraction=$fraction frame=$frame expansion=$value", failure)
+                }
+            }
+            assertEquals(1f, detailTransition.expansionProgress(), .001f)
+            assertPixelMapsNear(full, compose.onRoot().captureToImage().toPixelMap())
+            compose.runOnIdle { assertEquals(0, detailsDisposed) }
+        }
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("model-detail-hero").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(1, listCompositions)
+            assertEquals(0, listDisposals)
+        }
+    }
+
+    @Test fun predictiveCommitContinuesOnlyTheRemainderAndCleansUpOnceOnEitherEdge() {
+        show(dark = true)
+        compose.runOnIdle { assertTrue("根页面应交还系统 Back", !backInput.hasEnabledHandlers) }
+        val catalog = compose.onRoot().captureToImage().toPixelMap()
+        for ((index, fraction) in listOf(.25f, .5f, .9f).withIndex()) {
+            compose.onNodeWithTag("model:openai/one").performClick()
+            compose.mainClock.autoAdvance = false
+            backInput.edge = if (index % 2 == 0) NavigationEvent.EDGE_LEFT else NavigationEvent.EDGE_RIGHT
+            startBack()
+            progressBack(fraction)
+            var previous = detailTransition.expansionProgress()
+            compose.runOnIdle {
+                backInput.complete()
+                backInput.complete() // 结算中的重复普通 Back 不能重复退出或穿透到应用根页面。
+            }
+            compose.mainClock.advanceTimeByFrame()
+            compose.runOnIdle { assertEquals("不能在确认时提前释放详情", index, detailsDisposed) }
+            val remainingFrames = kotlin.math.ceil(ModelTransitionDurationMillis * (1f - fraction) / 16f).toInt() + 4
+            repeat(remainingFrames) {
+                compose.mainClock.advanceTimeByFrame()
+                val value = detailTransition.expansionProgress()
+                assertTrue("确认不能重播全程返回", value <= previous + .001f)
+                previous = value
+            }
+            compose.runOnIdle { assertEquals("必须在剩余时长内完成清理，不让自动时钟掩盖全程重播", index + 1, detailsDisposed) }
+            compose.mainClock.autoAdvance = true
+            compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+            assertPixelMapsNear(catalog, compose.onRoot().captureToImage().toPixelMap())
+            compose.runOnIdle {
+                assertEquals(index + 1, detailsDisposed)
+                assertEquals(1, listCompositions)
+                assertEquals(0, listDisposals)
+                assertTrue("退出后不能继续拦截根页面 Back", !backInput.hasEnabledHandlers)
+            }
+        }
+    }
+
+    @Test fun predictiveGestureDuringEntryCanCancelThenCommitWithoutJumpingToFullScreen() {
+        show(dark = true)
+        val catalog = compose.onRoot().captureToImage().toPixelMap()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("model:openai/one").performClick()
+        compose.mainClock.advanceTimeBy(96)
+        val entering = detailTransition.expansionProgress()
+        startBack()
+        assertEquals("开始手势不能先跳到全屏", entering, detailTransition.expansionProgress(), .001f)
+        progressBack(.5f)
+        assertTrue(detailTransition.expansionProgress() < entering)
+        compose.runOnIdle { backInput.cancel() }
+        compose.mainClock.advanceTimeBy(64)
+        val cancelling = detailTransition.expansionProgress()
+        startBack()
+        assertEquals("取消结算中再次拖动应从当前帧开始", cancelling, detailTransition.expansionProgress(), .001f)
+        progressBack(.75f)
+        compose.runOnIdle { backInput.complete() }
+        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+        assertPixelMapsNear(catalog, compose.onRoot().captureToImage().toPixelMap())
+    }
+
+    @Test fun predictiveCancelPreservesScrolledTabAndLoadingHandoffAndMissingSourceCanStillExit() {
+        status.value = ModelDetailStatus.LOADING
+        show(dark = true, fontScale = 2f, rtl = true)
+        compose.onNodeWithTag("model:openai/one").performClick()
+        compose.mainClock.autoAdvance = false
+        startBack()
+        progressBack(.4f)
+        compose.runOnIdle { status.value = ModelDetailStatus.CONTENT }
+        compose.mainClock.advanceTimeBy(64)
+        compose.runOnIdle { backInput.cancel() }
+        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithText("价格").performClick()
+        compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(2)
+        val before = compose.onRoot().captureToImage().toPixelMap()
+        compose.mainClock.autoAdvance = false
+        startBack()
+        progressBack(.9f)
+        compose.runOnIdle { backInput.cancel() }
+        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.autoAdvance = true
+        assertPixelMapsNear(before, compose.onRoot().captureToImage().toPixelMap())
+        compose.runOnIdle {
+            assertEquals(0, detailsDisposed)
+            catalog.value = emptyList()
+            status.value = ModelDetailStatus.NOT_FOUND
+        }
+        compose.mainClock.autoAdvance = false
+        startBack()
+        progressBack(.5f)
+        compose.runOnIdle { backInput.complete() }
+        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+        compose.onNodeWithTag("model-list").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, detailsDisposed) }
+    }
+
+    private fun startBack() {
+        compose.runOnIdle { backInput.start() }
+        compose.mainClock.advanceTimeBy(64)
+    }
+
+    private fun progressBack(value: Float) {
+        compose.runOnIdle { backInput.progress(value) }
+        compose.mainClock.advanceTimeBy(64)
+    }
+
+    private fun assertPixelMapsNear(expected: PixelMap, actual: PixelMap) {
+        assertEquals("共享层交接不能残留全屏表面或丢失原画面", null,
+            changedBoundsOrNull(expected, actual, channelTolerance = 4))
+    }
+
     private fun nameBounds(): Rect = compose.onNode(
         (hasTestTag("model-name") or hasTestTag("model-shared:openai/one:NAME")) and
             hasAnyAncestor(hasTestTag("model-detail-screen")), useUnmergedTree = true,
@@ -452,8 +681,16 @@ class ModelSharedTransitionTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale),
                 LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
                 ModelAtlasTheme(darkTheme = dark, dynamicColor = false) {
+                    val dispatcher = LocalNavigationEventDispatcherOwner.current!!.navigationEventDispatcher
+                    DisposableEffect(dispatcher) {
+                        dispatcher.addInput(backInput)
+                        onDispose { dispatcher.removeInput(backInput) }
+                    }
                     foregroundColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                    cardColor = MaterialTheme.colorScheme.surface
+                    pageColor = MaterialTheme.colorScheme.surfaceContainerLowest
                     ModelAtlasScaffold(detailContent = { id, back ->
+                        detailTransition = checkNotNull(LocalModelSharedTransition.current)
                         DisposableEffect(id) { onDispose { detailsDisposed++ } }
                         val name = if (id == "openai/one") "First model" else "Second model"
                         ModelDetailScreen(ModelDetailUiState(id, status.value, if (status.value == ModelDetailStatus.CONTENT)
@@ -481,7 +718,13 @@ class ModelSharedTransitionReducedMotionTest {
     })
 
     @Test fun disabledAnimationsSettleBothDirectionsAndDisposeTheDetail() {
+        val backInput = ModelBackTestInput()
         compose.setContent {
+            val dispatcher = LocalNavigationEventDispatcherOwner.current!!.navigationEventDispatcher
+            DisposableEffect(dispatcher) {
+                dispatcher.addInput(backInput)
+                onDispose { dispatcher.removeInput(backInput) }
+            }
             ModelAtlasTheme(dynamicColor = false) {
                 ModelAtlasScaffold(detailContent = { id, back ->
                     ModelDetailScreen(ModelDetailUiState(id, ModelDetailStatus.CONTENT,
@@ -497,7 +740,24 @@ class ModelSharedTransitionReducedMotionTest {
         compose.mainClock.advanceTimeBy(64)
         compose.onNodeWithTag("model-detail-hero").assertIsDisplayed()
         compose.onNodeWithTag("main-pager").assertIsNotDisplayed()
+        compose.runOnIdle { backInput.start() }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { backInput.progress(.5f) }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { backInput.cancel() }
+        compose.mainClock.advanceTimeBy(64)
+        compose.onNodeWithTag("model-detail-hero").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
+        compose.mainClock.advanceTimeBy(64)
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+        compose.onNodeWithTag("model:openai/one").assertIsDisplayed()
+        compose.onNodeWithTag("model:openai/one").performClick()
+        compose.mainClock.advanceTimeBy(64)
+        compose.runOnIdle { backInput.start() }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { backInput.progress(.5f) }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { backInput.complete() }
         compose.mainClock.advanceTimeBy(64)
         compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
         compose.onNodeWithTag("model:openai/one").assertIsDisplayed()

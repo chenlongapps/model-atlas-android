@@ -42,6 +42,7 @@
 | [`ui/modellist/ModelCard.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCard.kt) | 紧凑模型卡片及独立预览、图标参数行、方向模态标签、分列价格区与档位、数值格式化 |
 | [`ui/model/ModelPresentation.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/model/ModelPresentation.kt) | 列表与详情共用的横排／居中身份、权重许可和方向模态标签、紧凑／突出参数；缩写保留精确读屏语义，不依赖 DTO、Entity 或注入，身份元素保留独立 Modifier 接口，并提供列表／详情浅深色、窄屏和大字号预览 |
 | [`ui/model/ModelSharedTransition.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/model/ModelSharedTransition.kt) | 按规范模型 ID 匹配整卡与全屏详情的容器变换，以及按模型 ID + 角色匹配的嵌套身份共享过渡；动态圆角裁剪与底色、临时身份快照及保留内容的可见性 Transition，无宿主时保留独立预览 |
+| [`ui/model/ModelDetailTransitionController.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/model/ModelDetailTransitionController.kt) | 统一驱动两套 Seekable 可见性状态，协调常规进入／退出、预测性拖动／取消／确认与端点交接；不持有业务数据 |
 | [`ui/modeldetail/ModelDetailHeader.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modeldetail/ModelDetailHeader.kt) | 固定返回栏的品牌／模型名滚动交接，以及放大的居中身份、描述、能力标签与独立参数卡；回报大标题在首条内的实测位置，绘制沿用页面背景 |
 | [`ui/modellist/LabLogo.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/LabLogo.kt) | LAB 前缀到随包彩色 logo 素材的映射与卡片 logo 组件，没有素材时显示兜底图 |
 | [`ui/modellist/LabDisplayName.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/LabDisplayName.kt) | LAB ID 到品牌惯用名称的展示映射，供模型卡片、筛选选项与已选标签共用；未知 LAB 保留原文，不改变底层 ID |
@@ -130,7 +131,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - `ModelDetailMapper` 将全部服务分组，第一方服务商优先、第三方按已有优先级及 ID 兜底；同服务商的服务按稳定 ID 排序，不筛选最低价。规范模型与服务分别保留元数据，完整保存七类价格、精确档位和独立模式价到应用模型，不计算费用或合并模式，不展示／执行请求 body、headers 等配置。规范模型已有的 `benchmarks` 映射为独立 `ModelBenchmark` 应用模型，保留缺失／空列表、来源顺序、重复名称、全部元数据和分数原值，不变更数据库或新增网络请求。
 - `ModelDetailViewModel` 的 `open(id)` 订阅本地 Flow，首个结果到达前保持加载；null 显示不存在／已移除，读取异常显示可重试错误，取消不当作错误。`retry()` 只重新订阅本地查询，不联网、不提交待更新目录。Route 进入时打开、退出时关闭，切换模型取消旧订阅，避免 Activity 级 Hilt ViewModel 累积全部已浏览模型。详情随目录提交更新，模型被移除后不继续显示旧内容。
 - 外壳通过 `rememberSaveable` 保存选中的稳定模型 ID，回调沿 Scaffold → Route → Screen → Card 传递；`SharedTransitionLayout` 统一承载列表与详情。`ModelContainerKey(modelId)` 匹配 `ModelCard` 外层与外壳的 `ModelDetailContainer`，使用 `sharedBounds` 在约 450ms 内将整卡扩展到全屏／缩回原卡片。内部 `ModelSharedElementKey(modelId, role)` 与容器键隔离：Logo 使用 `sharedElement`，名称／机构／权重使用 `sharedBounds` 及 `scaleToBounds`，与容器同为 450ms；身份在根覆盖层的层级为 2，高于卡片容器的 1 和详情容器的 0，默认继承最近父容器的动态裁剪路径，不叠加父级缩放与局部内容淡化，也不留两份身份。外层 `scaleToBounds(ContentScale.FillWidth, Alignment.TopStart)` 保持最终布局与等比缩放，避免逐帧文字重排或非等比拉伸；默认内容占位不影响其他列表项。两端使用同一扩展进度驱动根覆盖层圆角（24dp → 0dp），详情不透明表面在绘制阶段插值 `surface` → `surfaceContainerLowest`，其 Scaffold 在宿主中透明、独立预览仍保留背景；其他卡片及详情内容以 120ms 局部淡化交接，背景目录和悬浮导航不再整页淡出。可见性使用公开的 `Transition<EnterExitState>` 实现保留内容的 `AnimatedVisibilityScope`，不让通用页面切换容器销毁主分页器；动画期间两页参与放置，结束后隐藏主分页器但继续组合。退出页面立即清除可访问语义并阻挡触摸，列表不可见时暂停骨架、清除焦点／筛选面板。复用现有 `NavigationBackHandler` 统一处理说明／详情返回，不引入 Navigation 3 或通用导航栈。返回保留目录、查询、滚动、价格展开与提醒计时；详情退出动画结束后才移除组合并取消本地订阅，动画中再次返回不会退出应用。详情按模型 ID 创建 UI 状态，正文位置、服务参数与档位展开可恢复，不把目录对象写入保存状态。
-- 点击卡片时仅捕获 `ModelIdentitySnapshot`（ID、名称、LAB、权重状态和许可）到外壳内存，经动画作用域供详情的加载头部使用，不构造假的 `ModelDetail`、不写入 ViewModel 或保存状态、不阻塞跳转等待读库。容器目标挂在稳定外壳上，不随加载／真实内容切换重建；加载和内容头部使用一致的布局起点，真实 Flow 到达后原位接管身份，错误／不存在状态不保留快照头部。恢复导航只保存 ID，不恢复或重播快照。详情公共头部有任何纵向滚动时停用身份共享匹配，但外层容器仍缩回原卡片，不强制恢复任一端滚动位置；来源卡片消失或无可见容器匹配时才使用 180ms 页面淡出兜底。快速返回可中断动画，系统关闭动画时立即完成布局和清理；预测性返回进度联动仍未实现。
+- 点击卡片时仅捕获 `ModelIdentitySnapshot`（ID、名称、LAB、权重状态和许可）到外壳内存，经动画作用域供详情的加载头部使用，不构造假的 `ModelDetail`、不写入 ViewModel 或保存状态、不阻塞跳转等待读库。容器目标挂在稳定外壳上，不随加载／真实内容切换重建；加载和内容头部使用一致的布局起点，真实 Flow 到达后原位接管身份，错误／不存在状态不保留快照头部。恢复导航只保存 ID，不恢复或重播快照。详情公共头部有任何纵向滚动时停用身份共享匹配，但外层容器仍缩回原卡片，不强制恢复任一端滚动位置；来源卡片消失或无可见容器匹配时才使用 180ms 页面淡出兜底。快速返回可中断动画，系统关闭动画时立即完成布局和清理；模型详情已接入预测性返回，协调机制见下文。
 - 详情 Screen 不依赖 Hilt；分为“概览／价格／评测”三个标签，默认概览。概览由 `overviewItems` 依次组织能力、技术参数、权重许可、相关资料和来源时效五个独立惰性条目。价格内部保留 `PROVIDERS` 稳定 UI 状态名与全部关联服务，不筛掉无价服务；常规宽度标签等分，窄屏或大字体空间不足时使用 `PrimaryScrollableTabRow`。返回栏位于列表外固定显示，身份区、参数卡与标签栏仍为 `LazyColumn` 的普通滚动内容。三份 `rememberLazyListState` 留在切换内容外独立保存滚动位置；服务参数与各基础／模式档位的展开键集合由页面 `rememberSaveable` 保存，不依赖离屏条目的组合生命周期，避免恢复时因折叠内容变短而夹回位置；`rememberSaveableStateHolder` 另按标签保留链接错误等局部状态。所选标签可恢复，状态列表使用独立状态，异步读取不夹回正文位置。概览的技术参数展示精确 tokens，完整许可、模态文字和能力三态均可换行。单价保留原精度，按窗口宽度和字号使用 1–3 列；服务限制与来源默认折叠，档位门槛不自行解释等号归属。外链只允许具有主机且不带用户信息的 HTTP(S)，非法资料链接禁用，无法打开时提供行内错误。评测来源只有安全 HTTP(S) 可点击，其他出处保留文字；不生成排名或推断分数方向／百分比。
 - 正文与加载／错误／不存在状态分别持有列表滚动状态，避免进程恢复后异步读库期间的单条加载列表把正文位置夹回顶部。筛选面板的草稿及机构展开状态也保存在弹层窗口外的页面保存状态域中，内容组件只接收值与回调；弹层关闭后丢弃草稿，不影响已应用条件。
 - 详情的外层 `LazyColumn` 只保留一份公共身份区、参数卡和标签栏，最后一个条目中的 `HorizontalPager` 仅承载标签下方的 `DetailSection` 正文。正文可左右滑动切换，点击公共标签通过 `animateScrollToPage()` 动画切页；头部与标签栏不参与横移，也不因切页改变公共纵向位置。`rememberPagerState` 作为当前页与选中标签的唯一来源并保存恢复，RTL 下由分页器处理方向。分页器按返回栏下的可用视口限定高度，各页继续使用独立惰性列表；`nestedScroll` 上滑时先消费外层剩余滚动，再滚正文，下滑时正文到顶后交还外层，身份区及标签栏仍可滚出视口，不吸顶。每页以标签名为稳定 key，正文绑定不可变标签，离屏页清除读屏语义；公共列表状态、三份正文列表状态、展开集合及局部状态容器均保留在分页器外，加载／错误／不存在使用独立列表。UI 回归覆盖拖动中公共区域位置不变、身份区横滑不切页、上下滚动交接、首末页边界、点击与滑动联动、RTL，以及阅读位置／展开状态／异步恢复。
@@ -139,6 +140,19 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 详情显示规范模型及各服务的上游条目更新时间、本地获取时间，获取时间不是价格生效时间；与现有写库规则一致，相同内容未再次写库时保留原获取时间。目录页统一更新时间仍未实现。
 
 返回绘制交接：详情的 `sharedBounds` 使用 `ExitTransition.None`，不能依赖它自动隐藏仍在组合中的全屏表面。容器在绘制阶段检查可见性 Transition，完成退出后立即将自身透明度归零，再由外壳取消组合和本地订阅，避免共享覆盖层结束到清理之间闪回全屏详情；入场中反向返回仍保留进行中的收缩，不用固定延时隐藏页面。
+
+### 模型详情预测性返回
+
+- `ui/model/ModelDetailTransitionController.kt` 只负责 UI 过渡，不引入导航栈或业务状态。保留主列表／详情两套 `Transition<EnterExitState>` 与 `AnimatedVisibilityScope`，底层改为稳定公开的 `SeekableTransitionState`；共享匹配键、450ms `tween`、缩放模式、覆盖层层级及动态裁剪不变，没有额外整页 scale／offset。
+- 控制器区分 Idle、Entering、BackDragging、BackCancelling、BackCommitting 与 Exiting。一个 `collectLatest` 仅在阶段／手势代次变化时取消并等待旧任务；拖动任务通过 `snapshotFlow` 合并高频进度，串行等待两端 `seekTo()`，不按每次进度重启结算协程。普通按钮／无进度系统返回走 Exiting；重复退出被忽略。
+- 外壳用既有 `rememberNavigationEventState` 和 `NavigationBackHandler`，从 `InProgress.latestEvent.progress` 获取并限定进度；Idle 不触发重置，取消／确认回调明确选择结算方向。清单显式开启 `enableOnBackInvokedCallback`，Activity 沿用内置 dispatcher。来源说明页仍为普通返回，筛选弹层沿用自身窗口的处理器，根页面不拦截 Back。
+- 拖动时不清除 `selectedModelId`。活动阶段显式参与 `placeMain` 判断，即使暂停或到达 100% 也保留两端放置；主分页器不重建，底层列表屏蔽触摸、焦点和读屏。详情在拖动及结算中也禁用交互，取消后恢复原有标签、滚动和展开状态。
+- 常规进入保持原 450ms 曲线；返回手势寻址其返回时间轴，圆角、底色、身份及内容淡化都来自同一 Transition 时间。确认只推进剩余时间，取消则倒放当前时间轴并在端点 `snapTo()`。入场未完成时沿入场时间轴倒放，避免切换 target 导致初值追赶；取消结算中再次拖动从实际 fraction 开始。帧时钟实时遵循 `MotionDurationScale`，不以固定 delay 判定完成。
+- `PostExit → Visible` 重入时 Compose 的 `fadeIn` 会回退到默认 spring，不能用于需要精确寻址的局部淡化。卡片正文与文字身份因此用同一可见性 Transition 的显式透明度，仍保持原 120ms／450ms 时长与覆盖层配置；仅匹配元素应用透明度，不淡化其余目录。非共享详情正文在退出最初 120ms 清出，避免慢拖时返回栏与归位身份叠压；来源正文仍在时间轴后段淡入，容器不透明表面与共享身份始终保留。
+- 当前 Compose 1.12.1 中直接 `animateTo()` 完成后，fraction 会归零，而共享层交接重建可能改变 `totalDurationNanos`，继而将零进度重新应用到旧 segment。已在独立原型与完整页面像素回归中定位此差异；生产控制器用帧时钟推进 Seekable 时间轴，到端点直接 `snapTo()` 重置子动画缓存，不以视觉遮盖规避。没有使用仍属实验性的 `createChildTransition()`。
+- 倒放到 current 端点时还需处理 Logo 渲染权交接：直接 `snapTo(current)` 会先结束旧 target 的子动画，造成一帧 Logo 无人绘制。因此先在最终端点执行新方向的 `seekTo(1)`，由两端可见性作用域的 `SideEffect` 确认目标已组合，再经过下一布局帧边界，取消不可见的旧初值追赶并 snap。不等待额外完整动画、不覆盖系统动画倍率，也不采用固定毫秒延时；交接被新手势打断时先完成待归整端点再接受新进度。逐帧断言检查这一交接中 Logo 不消失或重复。
+- 确认动画实际完成后才清除所选 ID；随后等待原有共享层交接完成，清理 `retainedModelId`、临时身份与详情组合／本地订阅。绘制层继续先隐藏已退出全屏表面，防止清理间隙回闪。配置恢复只保存导航 ID 与既有 UI 状态，不持久化半途手势，恢复为稳定详情。
+- 验证区分：`ModelSeekableTransitionTest` 为独立公开 API 原型；`ModelSharedTransitionTest` 使用 `NavigationEventInput` 经真实 dispatcher／Handler 注入进度并检查实际像素、身份同步、暂停、取消／确认和清理。这些测试不能替代 Android 系统左右边缘手势的端到端验收，实际设备验证范围另记于 TODO。
 
 ## 现有单元测试
 

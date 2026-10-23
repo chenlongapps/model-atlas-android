@@ -34,8 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -48,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -64,6 +67,7 @@ import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailRoute
 import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
 import io.github.chenlongapps.modelatlas.ui.model.ModelDetailContainer
+import io.github.chenlongapps.modelatlas.ui.model.ModelDetailTransitionController
 import io.github.chenlongapps.modelatlas.ui.model.ModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
 import io.github.chenlongapps.modelatlas.ui.model.rememberRetainedModelVisibility
@@ -109,28 +113,41 @@ internal fun ModelAtlasScaffold(
     // ID 是可保存的导航状态；身份快照仅在当前进程的页面交接期间使用。
     var retainedModelId by remember { mutableStateOf(selectedModelId) }
     var initialIdentity by remember { mutableStateOf<ModelIdentitySnapshot?>(null) }
-    val mainVisibility = rememberRetainedModelVisibility(selectedModelId == null)
-    val detailVisibility = rememberRetainedModelVisibility(selectedModelId != null)
+    val detailTransition = remember { ModelDetailTransitionController(selectedModelId != null) }
+    val mainVisibility = rememberRetainedModelVisibility(detailTransition.main, detailTransition::onMainTargetComposed)
+    val detailVisibility = rememberRetainedModelVisibility(detailTransition.detail, detailTransition::onDetailTargetComposed)
+    LaunchedEffect(detailTransition) {
+        detailTransition.run { selectedModelId = null }
+    }
     val expansionProgress by detailVisibility.transition.animateFloat(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || selectedModelId != null
+    val subpageVisible = showDataSource || retainedModelId != null
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+    LaunchedEffect(backState, detailTransition) {
+        snapshotFlow { backState.transitionState }.collect { state ->
+            if (state is NavigationEventTransitionState.InProgress && selectedModelId != null) {
+                detailTransition.seekBack(state.latestEvent.progress)
+            }
+            // Idle 不重置动画；取消／确认回调明确决定结算方向。
+        }
+    }
     // 设计预览没有 Activity 提供的返回事件 dispatcher。
     if (!LocalInspectionMode.current) {
         NavigationBackHandler(
             state = backState,
-            isBackEnabled = subpageVisible || retainedModelId != null,
+            isBackEnabled = subpageVisible,
+            onBackCancelled = { detailTransition.cancelBack() },
             onBackCompleted = {
-                if (selectedModelId != null) selectedModelId = null else showDataSource = false
+                if (retainedModelId != null) detailTransition.exit() else showDataSource = false
             },
         )
     }
 
     SharedTransitionLayout(modifier.fillMaxSize().background(background)) {
         val sharedScope = this
-        val transitioning = mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
+        val transitioning = detailTransition.active || mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
             detailVisibility.transition.currentState != detailVisibility.transition.targetState ||
             mainVisibility.transition.isRunning || detailVisibility.transition.isRunning || isTransitionActive
         val placeMain = !showDataSource && (selectedModelId == null || transitioning)
@@ -144,7 +161,7 @@ internal fun ModelAtlasScaffold(
             CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
                 sharedScope, mainVisibility, enabled = placeMain,
                 expansionProgress = expansion,
-                captureIdentity = { initialIdentity = it },
+                captureIdentity = { if (retainedModelId == null) initialIdentity = it },
             )) {
                 HorizontalPager(
                     state = pagerState,
@@ -159,8 +176,11 @@ internal fun ModelAtlasScaffold(
                         ) {
                             modelContent(bottomOverlayPadding, modelListState) {
                                 // 同一帧挂载详情目标，源页面一直保留到共享过渡完成。
-                                retainedModelId = it
-                                selectedModelId = it
+                                if (retainedModelId == null) {
+                                    retainedModelId = it
+                                    selectedModelId = it
+                                    detailTransition.enter()
+                                }
                             }
                         }
                         1 -> SettingsScreen(
@@ -204,14 +224,14 @@ internal fun ModelAtlasScaffold(
             DataSourceScreen(onBack = { showDataSource = false })
         }
         retainedModelId?.let { id ->
-            RetainedModelPage(placed = true, interactive = selectedModelId != null) {
+            RetainedModelPage(placed = true, interactive = selectedModelId != null && detailTransition.interactive) {
                 CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
                     sharedScope, detailVisibility, enabled = true,
                     expansionProgress = expansion,
                     initialIdentity = initialIdentity?.takeIf { it.id == id },
                 )) {
                     key(id) {
-                        ModelDetailContainer(id) { detailContent(id) { selectedModelId = null } }
+                        ModelDetailContainer(id) { detailContent(id, detailTransition::exit) }
                     }
                 }
             }
@@ -228,7 +248,7 @@ private fun RetainedModelPage(
 ) {
     Box(
         Modifier.fillMaxSize()
-            .then(if (!interactive) Modifier.clearAndSetSemantics {} else Modifier)
+            .then(if (!interactive) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height) {

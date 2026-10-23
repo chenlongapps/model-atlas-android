@@ -185,6 +185,26 @@ class ModelCatalogControlsTest {
         compose.onNodeWithTag("active-filter:weights").assertIsDisplayed()
     }
 
+    @Test fun systemBackInScaffoldClosesTheSheetBeforeAnyPageNavigation() {
+        val initial = ModelListQuery(weights = WeightFilter.OPEN)
+        val state = mutableStateOf(ModelListUiState(models, isLoading = false, query = initial))
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelAtlasScaffold { padding, listState, open ->
+                    ModelListScreen(state.value, bottomOverlayPadding = padding, listState = listState,
+                        onModelClick = open, onQueryChange = { state.value = state.value.copy(query = it) })
+                }
+            }
+        }
+        compose.onNodeWithText("筛选 · 1").performClick()
+        compose.onNodeWithTag("filter-weights:CLOSED").performScrollTo().performClick()
+        pressBack()
+        compose.onNodeWithTag("filter-apply").assertDoesNotExist()
+        compose.onNodeWithTag("model-search").assertIsDisplayed()
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(initial, state.value.query) }
+    }
+
     @Test fun removableConditionsAndResetNeverClearSearchOrUnrelatedConditions() {
         val initial = ModelListQuery(
             search = "atlas", labs = setOf("alpha"), weights = WeightFilter.OPEN,
