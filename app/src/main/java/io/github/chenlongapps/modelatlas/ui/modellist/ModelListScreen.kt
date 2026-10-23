@@ -68,6 +68,8 @@ import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
+import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
 import kotlinx.coroutines.delay
 
 @Composable
@@ -115,6 +117,7 @@ internal fun ModelListScreen(
     var expandedPriceModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
     val isVisible = LocalModelListVisible.current
+    val sharedTransition = LocalModelSharedTransition.current
     val focusManager = LocalFocusManager.current
     LaunchedEffect(isVisible) {
         if (!isVisible) {
@@ -277,7 +280,12 @@ internal fun ModelListScreen(
                 items(items = uiState.visibleModels, key = { "model:${it.id}" }) { model ->
                     ModelCard(
                         model = model,
-                        onOpenDetail = { onModelClick(model.id) },
+                        onOpenDetail = {
+                            sharedTransition?.captureIdentity(ModelIdentitySnapshot(
+                                model.id, model.name, model.lab, model.openWeights, model.license,
+                            ))
+                            onModelClick(model.id)
+                        },
                         priceDetailsExpanded = expandedPriceModelId == model.id,
                         onTogglePriceDetails = {
                             expandedPriceModelId =

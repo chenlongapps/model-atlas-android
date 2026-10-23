@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -78,7 +79,7 @@ internal fun LabLogo(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size / 4))
+            .clip(RoundedCornerShape(25))
             .background(LabLogoBackground),
         contentAlignment = Alignment.Center,
     ) {
@@ -86,7 +87,7 @@ internal fun LabLogo(
             painter = painterResource(labLogoRes(lab)),
             contentDescription = null,
             modifier = Modifier
-                .size(size * (44f / 56f))
+                .fillMaxSize(44f / 56f)
                 .testTag(if (hasLabLogo) LabLogoTag else LabLogoFallbackTag),
         )
     }

@@ -45,6 +45,7 @@ import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.model.ModelCoreMetrics
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentity
 import io.github.chenlongapps.modelatlas.ui.model.ModelModalities
+import io.github.chenlongapps.modelatlas.ui.model.modelCardContainerModifier
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -61,7 +62,7 @@ internal fun ModelCard(
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
-        modifier = modifier.fillMaxWidth().testTag("model:${model.id}").then(
+        modifier = modifier.fillMaxWidth().then(modelCardContainerModifier(model.id)).testTag("model:${model.id}").then(
             if (onOpenDetail != null) Modifier.clickable(
                 interactionSource = null,
                 indication = null,
@@ -75,7 +76,7 @@ internal fun ModelCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ModelIdentity(model.name, model.lab, model.openWeights, model.license)
+            ModelIdentity(model.name, model.lab, model.openWeights, model.license, modelId = model.id)
             ModelCoreMetrics(model.releaseDate, model.contextLimitTokens, model.outputLimitTokens)
             ModelModalities(model.inputModalities, model.outputModalities)
             HorizontalDivider(

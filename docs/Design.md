@@ -117,7 +117,7 @@
 
 实现：[`ModelCard.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelCard.kt)。
 
-列表与详情的共用展示组件位于 [`ModelPresentation.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/model/ModelPresentation.kt)：`ModelIdentity`、`ModelWeightsBadge`、`ModelInfoBadge`、`ModelModalities` 和 `ModelCoreMetrics`。身份支持横排／居中纵排，参数支持紧凑行／独立参数卡布局；身份元素分别保留 `Modifier` 接口。详情页头组装位于 [`ModelDetailHeader.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modeldetail/ModelDetailHeader.kt)。尚未接入共享元素动画，未来匹配需使用“规范模型稳定 ID + 元素角色”，不能只使用 LAB。页面承载与动画宿主的调整仍属后续工作。
+列表与详情的共用展示组件位于 [`ModelPresentation.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/model/ModelPresentation.kt)：`ModelIdentity`、`ModelWeightsBadge`、`ModelInfoBadge`、`ModelModalities` 和 `ModelCoreMetrics`。身份支持横排／居中纵排，参数支持紧凑行／独立参数卡布局；身份元素分别保留 `Modifier` 接口。详情页头组装位于 [`ModelDetailHeader.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/modeldetail/ModelDetailHeader.kt)。[`ModelSharedTransition.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/model/ModelSharedTransition.kt) 与页面外壳同时协调整卡容器及内部身份共享过渡：容器按规范模型 ID 匹配，身份按规范模型 ID + 元素角色匹配，两类键互不混用，不使用 LAB 作为动画键。
 
 卡片自上而下分为五组：
 
@@ -231,6 +231,10 @@
 - 骨架共享 `1.2s` 扫光周期；页面隐藏或应用不在前台时暂停。系统关闭动画时显示静态骨架，不阻碍加载完成。
 - 搜索与筛选骨架复用真实控件测量，只替换绘制，不额外展开高度；加载完成后原位恢复控件，避免首张卡片因查询区和排序说明突然插入而下移。占位期间禁用输入、清空、筛选和条件移除，不打开键盘或筛选面板，也不暴露对应读屏操作。
 - 档位箭头旋转与内容高度平滑过渡；导航选中态和列表回顶保留连续动画，遵循系统动画时长设置。
+- 列表与详情以约 `450ms` 的整卡容器变换衔接，类似从桌面打开应用：点击的卡片从原位置扩展为全屏详情，先快后慢、不弹跳；圆角由 `24dp` 连续收敛至 `0dp`，不透明底色由卡片 `surface` 过渡到页面 `surfaceContainerLowest`。背景目录及悬浮导航保持原样，由展开的容器逐步覆盖，不再整页淡出；列表条目保持原占位，不推移其他卡片。
+- 整卡展开同时保留身份共享动画：Logo 从列表位置移动并由 `56dp` 等比放大至 `88dp`，模型名称、研发机构、权重标签各自移动边界并交叉淡化衔接字号、换行与对齐。身份与容器使用相同的 `450ms` 时长与缓动，在两端容器之上单独绘制，继承动态容器轮廓裁剪，不叠加父级缩放或局部内容淡化，也不重复显示身份。其余内容在最终约束下测量、按宽度等比缩放，以约 `120ms` 的局部淡化交接；不把文字或价格非等比拉伸。详情内部滚动标题、标签横滑及价格展开行为不变。
+- 进入详情即用点击时的临时身份快照展示加载头部，本地查询完成后原位替换为真实详情，不重启动画；加载期间不补造描述、参数或价格。快照不持久化，错误或模型移除时不继续展示；恢复详情时只按已保存 ID 读取数据，不重播进入动画。返回时容器与身份一起反向过渡；详情已滚动时停用身份共享匹配，但仍将整个页面缩回原卡片，不自动滚回头部或移动目录；来源卡片消失或缺少容器匹配时才退化为 `180ms` 淡出。尚未接入随返回手势进度变化的预测性动画。
+- 退出页面在动画结束前保留布局，但立即屏蔽其触摸和读屏操作；主分页器持续组合，查询、列表位置、报价展开及提醒计时不因动画重置。系统关闭动画时直接收敛至最终布局并清理详情。
 
 ### 布局与安全区
 

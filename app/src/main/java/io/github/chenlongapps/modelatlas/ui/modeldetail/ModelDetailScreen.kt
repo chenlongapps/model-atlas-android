@@ -53,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -80,6 +81,8 @@ import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
+import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -107,9 +110,10 @@ internal fun ModelDetailScreen(
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
     windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
+    initialIdentity: ModelIdentitySnapshot? = LocalModelSharedTransition.current?.initialIdentity,
 ) {
     key(uiState.modelId) {
-        ModelDetailBody(uiState, onBack, modifier, onRetry, windowInsets)
+        ModelDetailBody(uiState, onBack, modifier, onRetry, windowInsets, initialIdentity?.takeIf { it.id == uiState.modelId })
     }
 }
 
@@ -126,11 +130,16 @@ private fun ModelDetailBody(
     modifier: Modifier,
     onRetry: () -> Unit,
     windowInsets: WindowInsets,
+    initialIdentity: ModelIdentitySnapshot?,
 ) {
     val pagerState = rememberPagerState(pageCount = { DetailTab.entries.size })
     val scope = rememberCoroutineScope()
     val activeTab = DetailTab.entries[pagerState.currentPage]
     val sharedListState = rememberLazyListState()
+    // 只在公共头部未滚动时匹配身份；已滚动返回仍收缩外层容器，不强行恢复头部。
+    val sharedElementsVisible by remember {
+        derivedStateOf { sharedListState.firstVisibleItemIndex == 0 && sharedListState.firstVisibleItemScrollOffset == 0 }
+    }
     // 列表状态留在标签内容外，避免切换／恢复时惰性布局的首次测量重置锚点。
     val overviewListState = rememberLazyListState()
     val providersListState = rememberLazyListState()
@@ -147,6 +156,7 @@ private fun ModelDetailBody(
     val stateHolder = rememberSaveableStateHolder()
     val layoutDirection = LocalLayoutDirection.current
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
+    val containerColor = if (LocalModelSharedTransition.current != null) Color.Transparent else background
     val hasContent = uiState.status == ModelDetailStatus.CONTENT
     val model = uiState.detail.takeIf { hasContent }
     var nameBounds by remember { mutableStateOf<Rect?>(null) }
@@ -163,7 +173,8 @@ private fun ModelDetailBody(
     }
     Scaffold(
         modifier = modifier.testTag("model-detail-screen"),
-        containerColor = background,
+        containerColor = containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         contentWindowInsets = windowInsets,
     ) { padding ->
         Column(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
@@ -183,7 +194,8 @@ private fun ModelDetailBody(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         item(key = "header") {
-                            ModelDetailHeader(model, { collapseProgress }, onNameBoundsChanged = { nameBounds = it })
+                            ModelDetailHeader(model, { collapseProgress }, onNameBoundsChanged = { nameBounds = it },
+                                sharedElementsEnabled = sharedElementsVisible)
                         }
                         item(key = "tabs") {
                             DetailTabs(activeTab, onSelect = { selected ->
@@ -229,11 +241,16 @@ private fun ModelDetailBody(
                         contentPadding = PaddingValues(
                             start = padding.calculateStartPadding(layoutDirection),
                             end = padding.calculateEndPadding(layoutDirection),
-                            top = 16.dp,
+                            top = if (uiState.status == ModelDetailStatus.LOADING && initialIdentity != null) 0.dp else 16.dp,
                             bottom = padding.calculateBottomPadding() + 24.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
+                        if (uiState.status == ModelDetailStatus.LOADING && initialIdentity != null) {
+                            item(key = "header") {
+                                ModelDetailHeader(null, { 0f }, onNameBoundsChanged = {}, initialIdentity = initialIdentity)
+                            }
+                        }
                         when (uiState.status) {
                             ModelDetailStatus.LOADING -> item(key = "loading") {
                                 DetailSection(stringResource(R.string.detail_loading)) { CircularProgressIndicator() }

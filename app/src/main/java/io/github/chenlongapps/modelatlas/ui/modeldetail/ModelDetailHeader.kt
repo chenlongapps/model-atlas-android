@@ -45,15 +45,20 @@ import io.github.chenlongapps.modelatlas.ui.model.ModelCoreMetrics
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentity
 import io.github.chenlongapps.modelatlas.ui.model.ModelInfoBadge
 import io.github.chenlongapps.modelatlas.ui.model.ModelModalities
+import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 /** 居中身份区直接沿用页面背景，下面保留独立参数卡。 */
 @Composable
 internal fun ModelDetailHeader(
-    model: ModelDetail,
+    model: ModelDetail?,
     collapseProgress: () -> Float,
     onNameBoundsChanged: (Rect) -> Unit,
+    initialIdentity: ModelIdentitySnapshot? = null,
+    sharedElementsEnabled: Boolean = true,
 ) {
+    val identity = model?.let { ModelIdentitySnapshot(it.id, it.name, it.lab, it.metadata.openWeights, it.license) }
+        ?: initialIdentity ?: return
     var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().testTag("model-detail-summary").onPlaced { headerCoordinates = it }) {
@@ -63,8 +68,9 @@ internal fun ModelDetailHeader(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ModelIdentity(
-                model.name, model.lab, model.metadata.openWeights, model.license,
+                identity.name, identity.lab, identity.openWeights, identity.license,
                 modifier = Modifier.fillMaxWidth(), nameStyle = MaterialTheme.typography.headlineMedium, centered = true,
+                modelId = identity.id, sharedElementsEnabled = sharedElementsEnabled,
                 nameModifier = Modifier.onGloballyPositioned { coordinates ->
                     headerCoordinates?.takeIf { it.isAttached }?.let { header ->
                         // 只回报标题在首条内的相对位置，滚动不改变测量值；长名称／字号变化会重新测量。
@@ -74,36 +80,40 @@ internal fun ModelDetailHeader(
                     if (collapseProgress() >= 0.5f) hideFromAccessibility()
                 },
             )
-            Text(
-                model.metadata.description?.takeIf(String::isNotBlank) ?: stringResource(R.string.detail_description_missing),
-                Modifier.fillMaxWidth().testTag("model-description"),
-                style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
-            )
-            ModelModalities(model.metadata.inputModalities, model.metadata.outputModalities,
-                Modifier.fillMaxWidth(), showText = true, centered = true)
-            val capabilities = listOf(
-                R.string.detail_reasoning to model.metadata.reasoning,
-                R.string.detail_tool_call to model.metadata.toolCall,
-                R.string.detail_structured_output to model.metadata.structuredOutput,
-                R.string.detail_attachment to model.metadata.attachment,
-                R.string.detail_temperature to model.metadata.temperature,
-            ).filter { it.second == true }
-            if (capabilities.isNotEmpty()) {
-                FlowRow(
-                    Modifier.fillMaxWidth().testTag("model-detail-capability-badges"),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    capabilities.forEach { (label, _) -> ModelInfoBadge(stringResource(label)) }
+            if (model != null) {
+                Text(
+                    model.metadata.description?.takeIf(String::isNotBlank) ?: stringResource(R.string.detail_description_missing),
+                    Modifier.fillMaxWidth().testTag("model-description"),
+                    style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
+                )
+                ModelModalities(model.metadata.inputModalities, model.metadata.outputModalities,
+                    Modifier.fillMaxWidth(), showText = true, centered = true)
+                val capabilities = listOf(
+                    R.string.detail_reasoning to model.metadata.reasoning,
+                    R.string.detail_tool_call to model.metadata.toolCall,
+                    R.string.detail_structured_output to model.metadata.structuredOutput,
+                    R.string.detail_attachment to model.metadata.attachment,
+                    R.string.detail_temperature to model.metadata.temperature,
+                ).filter { it.second == true }
+                if (capabilities.isNotEmpty()) {
+                    FlowRow(
+                        Modifier.fillMaxWidth().testTag("model-detail-capability-badges"),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        capabilities.forEach { (label, _) -> ModelInfoBadge(stringResource(label)) }
+                    }
                 }
             }
         }
-        Surface(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("model-detail-metrics"),
-            shape = MaterialTheme.shapes.large, color = colors.surface,
-        ) {
-            ModelCoreMetrics(model.metadata.releaseDate, model.metadata.contextLimitTokens, model.metadata.outputLimitTokens,
-                Modifier.padding(16.dp), prominent = true)
+        if (model != null) {
+            Surface(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("model-detail-metrics"),
+                shape = MaterialTheme.shapes.large, color = colors.surface,
+            ) {
+                ModelCoreMetrics(model.metadata.releaseDate, model.metadata.contextLimitTokens, model.metadata.outputLimitTokens,
+                    Modifier.padding(16.dp), prominent = true)
+            }
         }
     }
 }

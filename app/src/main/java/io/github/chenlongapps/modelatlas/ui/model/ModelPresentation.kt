@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,7 +44,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
 import io.github.chenlongapps.modelatlas.ui.modellist.shortLicenseLabel
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
-/** 列表与详情共用身份结构；元素各自接收 Modifier，便于以后在页面宿主接入共享元素。 */
+/** 列表与详情共用身份结构；身份共享过渡与外层整卡展开同时进行。 */
 @Composable
 internal fun ModelIdentity(
     name: String,
@@ -57,21 +58,28 @@ internal fun ModelIdentity(
     labModifier: Modifier = Modifier,
     weightsModifier: Modifier = Modifier,
     centered: Boolean = false,
+    modelId: String? = null,
+    sharedElementsEnabled: Boolean = true,
 ) {
+    val logo = logoModifier.then(modelSharedModifier(modelId, ModelIdentityRole.LOGO, sharedElementsEnabled))
+    val nameElement = modelSharedModifier(modelId, ModelIdentityRole.NAME, sharedElementsEnabled)
+    val labElement = labModifier.then(modelSharedModifier(modelId, ModelIdentityRole.LAB, sharedElementsEnabled))
+    val weights = weightsModifier.then(modelSharedModifier(modelId, ModelIdentityRole.WEIGHTS, sharedElementsEnabled))
     if (centered) {
         Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            LabLogo(lab, logoModifier, size = 88.dp)
-            Text(name, nameModifier.fillMaxWidth().testTag("model-name").semantics { heading() },
+            LabLogo(lab, logo, size = 88.dp)
+            Text(name, Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)
+                .then(nameModifier).then(nameElement).testTag("model-name").semantics { heading() },
                 style = nameStyle, textAlign = TextAlign.Center)
-            ModelLabAndWeights(lab, openWeights, license, labModifier = labModifier, weightsModifier = weightsModifier, centered = true)
+            ModelLabAndWeights(lab, openWeights, license, labModifier = labElement, weightsModifier = weights, centered = true)
         }
         return
     }
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-        LabLogo(lab, logoModifier)
+        LabLogo(lab, logo)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(name, nameModifier.testTag("model-name").semantics { heading() }, style = nameStyle)
-            ModelLabAndWeights(lab, openWeights, license, labModifier = labModifier, weightsModifier = weightsModifier)
+            Text(name, nameModifier.then(nameElement).testTag("model-name").semantics { heading() }, style = nameStyle)
+            ModelLabAndWeights(lab, openWeights, license, labModifier = labElement, weightsModifier = weights)
         }
     }
 }
