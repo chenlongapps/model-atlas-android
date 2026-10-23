@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.ui.modeldetail
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
@@ -33,11 +34,13 @@ import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentityRole
+import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListMessage
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -138,6 +141,54 @@ class ModelSharedTransitionTest {
 
     @Test fun hostedLightDetailKeepsThemeForegroundWithATransparentScaffold() = assertDetailForeground(dark = false)
 
+    @Test fun lightReturnDoesNotFlashOutsideTheContractingCard() = assertReturnFrameContinuity(dark = false)
+
+    @Test fun darkReturnDoesNotFlashOutsideTheContractingCard() = assertReturnFrameContinuity(dark = true)
+
+    @Test fun scrolledSystemReturnDoesNotFlashOutsideTheContractingCard() =
+        assertReturnFrameContinuity(dark = true, scrolled = true)
+
+    /** 不只检查中间帧和最终状态：覆盖共享层恢复匹配、退出与详情清理的逐帧交接。 */
+    private fun assertReturnFrameContinuity(dark: Boolean, scrolled: Boolean = false) {
+        show(dark = dark)
+        val source = compose.onNodeWithTag("model:openai/one").fetchSemanticsNode().boundsInRoot
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val catalogPixels = compose.onRoot().captureToImage().toPixelMap()
+        compose.onNodeWithTag("model:openai/one").performClick()
+        compose.onNodeWithTag("model-detail-screen").assertIsDisplayed()
+        if (scrolled) compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(2)
+        compose.mainClock.autoAdvance = false
+        if (scrolled) pressBack() else compose.onNodeWithContentDescription("返回").performClick()
+        val startedAt = compose.mainClock.currentTime
+        val frames = mutableListOf<Pair<Long, Rect?>>()
+        repeat(36) {
+            compose.mainClock.advanceTimeByFrame()
+            frames += (compose.mainClock.currentTime - startedAt) to changedBoundsOrNull(
+                catalogPixels, compose.onRoot().captureToImage().toPixelMap(), channelTolerance = 4,
+            )
+        }
+        compose.mainClock.autoAdvance = true
+        val sequence = frames.joinToString("\n") { (time, bounds) -> "${time}ms=$bounds" }
+        frames.forEach { (time, changed) ->
+            // 为匹配恢复、测量及动画起钟留 64ms 余量；只容忍向卡片收缩，不能重新铺满页面。
+            // 背景与详情底色可能相同，不能用变化像素外框严格推断初始容器大小。
+            val progress = FastOutSlowInEasing.transform(
+                ((time - 64).coerceAtLeast(0).toFloat() / ModelTransitionDurationMillis).coerceIn(0f, 1f),
+            )
+            val allowed = lerp(root, source, progress).inflate(3f)
+            if (changed != null) assertTrue("收缩及退出交接不能在容器外闪出详情：\n$sequence",
+                changed.left >= allowed.left && changed.top >= allowed.top &&
+                    changed.right <= allowed.right && changed.bottom <= allowed.bottom)
+        }
+        assertEquals("交接结束后应恢复原列表像素：\n$sequence", null, frames.last().second)
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(1, detailsDisposed)
+            assertEquals(1, listCompositions)
+            assertEquals(0, listDisposals)
+        }
+    }
+
     private fun assertDetailForeground(dark: Boolean) {
         show(dark = dark)
         compose.onNodeWithTag("model:openai/one").performClick()
@@ -164,6 +215,26 @@ class ModelSharedTransitionTest {
         compose.onNodeWithTag("model:openai/one").assertIsDisplayed()
         compose.onNodeWithTag("model:openai/one").performClick()
         compose.onNodeWithTag("model-detail-hero").assertIsDisplayed()
+    }
+
+    @Test fun reversingEntryKeepsDrawingTheContainerUntilItsExitCompletes() {
+        show(dark = true)
+        val source = compose.onNodeWithTag("model:openai/one").fetchSemanticsNode().boundsInRoot
+        val catalog = compose.onRoot().captureToImage().toPixelMap()
+        // 原卡片正上方的留白：入场容器已经覆盖这里，但底层目录没有内容。
+        val x = source.center.x.toInt()
+        val y = source.top.toInt() - 8
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("model:openai/one").performClick()
+        compose.mainClock.advanceTimeBy(160)
+        assertNotEquals(catalog[x, y].toArgb(), compose.onRoot().captureToImage().toPixelMap()[x, y].toArgb())
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        assertNotEquals("反向动画尚在运行，不能因起止状态同为 PostExit 而提前隐藏容器",
+            catalog[x, y].toArgb(), compose.onRoot().captureToImage().toPixelMap()[x, y].toArgb())
+        compose.mainClock.advanceTimeBy(900)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
     }
 
     @Test fun localDetailArrivingDuringEntryDoesNotRestartTheContainerExpansion() {
@@ -283,19 +354,28 @@ class ModelSharedTransitionTest {
 
     /** 容器绘制在根覆盖层，语义坐标只是全屏占位；按实际变化像素验证展开边界。 */
     private fun changedBounds(before: PixelMap, after: PixelMap): Rect {
+        return checkNotNull(changedBoundsOrNull(before, after)) { "动画应实际改变画面" }
+    }
+
+    private fun changedBoundsOrNull(before: PixelMap, after: PixelMap, channelTolerance: Int = 0): Rect? {
         var left = before.width
         var right = 0
         var top = before.height
         var bottom = 0
         for (y in 0 until before.height) for (x in 0 until before.width) {
-            if (before[x, y].toArgb() != after[x, y].toArgb()) {
+            val oldColor = before[x, y].toArgb()
+            val newColor = after[x, y].toArgb()
+            // 共享层切换时文字抗锯齿会有少量舍入差异，不把它当作整页回闪。
+            if (oldColor != newColor && (channelTolerance == 0 || (0..24 step 8).any { shift ->
+                    kotlin.math.abs(((oldColor ushr shift) and 255) - ((newColor ushr shift) and 255)) > channelTolerance
+                })) {
                 left = minOf(left, x)
                 right = maxOf(right, x + 1)
                 top = minOf(top, y)
                 bottom = maxOf(bottom, y + 1)
             }
         }
-        assertTrue("动画应实际改变画面", right > left && bottom > top)
+        if (right <= left || bottom <= top) return null
         return Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
     }
 
