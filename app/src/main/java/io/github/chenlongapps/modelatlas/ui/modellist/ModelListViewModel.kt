@@ -93,6 +93,25 @@ class ModelListViewModel @Inject constructor(
         _uiState.update { it.copy(message = null, refreshError = null) }
     }
 
+    /** 其他页面已通过同一仓库完成刷新；只同步本地状态，不再次联网。 */
+    fun onCatalogRefreshedExternally() {
+        viewModelScope.launch {
+            // 等待本页原有检查结束，避免其迟到结果恢复已经失效的待更新提示。
+            loadJob?.join()
+            try {
+                val models = modelRepository.observeModels().first()
+                _uiState.update {
+                    it.copy(models = models, isLoading = false, error = null, updateAvailable = false, message = null, refreshError = null)
+                }
+                if (observationJob?.isActive != true) observeCatalog()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = ModelListError.STORAGE) }
+            }
+        }
+    }
+
     private fun load(initial: Boolean = false, applyPending: Boolean = false) {
         if (loadJob?.isActive == true) return
         _uiState.update {

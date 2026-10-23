@@ -2,7 +2,6 @@ package io.github.chenlongapps.modelatlas.ui
 
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
@@ -70,9 +69,7 @@ class ModelAtlasAppTest {
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         assertIndicatorMatches("nav-models")
-        compose.onNodeWithTag("glass-navigation").performTouchInput {
-            swipe(Offset(width * 0.2f, centerY), Offset(width * 0.8f, centerY), 500)
-        }
+        dragNavigationToSettings(duration = 500)
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         assertIndicatorMatches("nav-settings")
     }
@@ -225,9 +222,7 @@ class ModelAtlasAppTest {
         show()
         compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
-        compose.onNodeWithTag("glass-navigation").performTouchInput {
-            swipe(Offset(width * 0.2f, centerY), Offset(width * 0.8f, centerY), 100)
-        }
+        dragNavigationToSettings(duration = 100)
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         compose.onNodeWithTag("nav-models").performTouchInput { click() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
@@ -442,11 +437,19 @@ class ModelAtlasAppTest {
         compose.onNodeWithText("数据来源与许可").assertIsDisplayed()
     }
 
+    private fun dragNavigationToSettings(duration: Long) {
+        val bar = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
+        val start = compose.onNodeWithTag("nav-models").fetchSemanticsNode().boundsInRoot.center - bar.topLeft
+        val target = compose.onNodeWithTag("nav-settings").fetchSemanticsNode().boundsInRoot.center - bar.topLeft
+        compose.onNodeWithTag("glass-navigation").performTouchInput { swipe(start, target, duration) }
+    }
+
     private fun assertIndicatorMatches(tabTag: String) {
         val indicator = compose.onNodeWithTag("nav-indicator").fetchSemanticsNode().boundsInRoot
         val tab = compose.onNodeWithTag(tabTag).fetchSemanticsNode().boundsInRoot
         assertEquals(tab.center.x, indicator.center.x, 1f)
-        assertEquals(tab.width, indicator.width, 1f)
+        // 三栏 weight 分配整像素时可相差 1px，另留极小浮点变换误差。
+        assertEquals(tab.width, indicator.width, 1.01f)
     }
 
     private fun show(

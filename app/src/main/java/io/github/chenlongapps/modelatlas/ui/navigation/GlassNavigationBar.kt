@@ -62,14 +62,16 @@ import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import io.github.chenlongapps.modelatlas.R
 
-private enum class Destination(
+internal data class GlassNavigationItem(
     @param:StringRes val label: Int,
     @param:DrawableRes val icon: Int,
     @param:DrawableRes val selectedIcon: Int,
     val tag: String,
 ) {
-    Models(R.string.nav_models, R.drawable.ic_nav_models_outline, R.drawable.ic_nav_models, "nav-models"),
-    Settings(R.string.nav_settings, R.drawable.ic_settings, R.drawable.ic_settings_filled, "nav-settings"),
+    companion object {
+        val Models = GlassNavigationItem(R.string.nav_models, R.drawable.ic_nav_models_outline, R.drawable.ic_nav_models, "nav-models")
+        val Settings = GlassNavigationItem(R.string.nav_settings, R.drawable.ic_settings, R.drawable.ic_settings_filled, "nav-settings")
+    }
 }
 
 /** 自绘悬浮胶囊；只读取分页状态，通过回调发出切换请求，不持有业务状态。 */
@@ -79,9 +81,9 @@ internal fun GlassNavigationBar(
     backdrop: Backdrop,
     onNavigate: (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
+    items: List<GlassNavigationItem>,
     modifier: Modifier = Modifier,
 ) {
-    val items = Destination.entries
     val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
     val colors = MaterialTheme.colorScheme
     val surface = colors.surface
@@ -157,8 +159,8 @@ internal fun GlassNavigationBar(
             }
             Row(
                 modifier = Modifier.selectableGroup()
-                    .pointerInput(layoutDirection) {
-                        detectModelsDoubleClicks(isRtl, spacing = 4.dp.toPx()) { modelsDoubleClick() }
+                    .pointerInput(layoutDirection, items.size) {
+                        detectModelsDoubleClicks(isRtl, itemCount = items.size, spacing = 4.dp.toPx()) { modelsDoubleClick() }
                     }
                     .pointerInput(pagerState, layoutDirection) {
                         var lastTarget = pagerState.currentPage
@@ -193,7 +195,7 @@ internal fun GlassNavigationBar(
                             .clip(CircleShape)
                             .testTag(item.tag)
                             .semantics {
-                                if (item == Destination.Models) {
+                                if (item == GlassNavigationItem.Models) {
                                     customActions = listOf(CustomAccessibilityAction(scrollToTopLabel) {
                                         onModelsDoubleClick()
                                         true
@@ -240,19 +242,18 @@ internal fun GlassNavigationBar(
 /** 只观察触摸，不消费事件或等待双击后才执行单击，保留 selectable 与父级拖动的响应。 */
 private suspend fun PointerInputScope.detectModelsDoubleClicks(
     isRtl: Boolean,
+    itemCount: Int,
     spacing: Float,
     onDoubleClick: () -> Unit,
 ) {
     var previousUpTime: Long? = null
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val itemWidth = (size.width - spacing) / 2f
-        val modelStart = if (isRtl) size.width - itemWidth else 0f
-        val modelEnd = if (isRtl) size.width.toFloat() else itemWidth
+        val modelRange = modelsTabRange(size.width.toFloat(), spacing, itemCount, isRtl)
         val interval = previousUpTime?.let { down.uptimeMillis - it }
         val isDoubleClick = interval != null &&
             interval in viewConfiguration.doubleTapMinTimeMillis..viewConfiguration.doubleTapTimeoutMillis
-        var validTap = down.position.x in modelStart..modelEnd
+        var validTap = down.position.x in modelRange
         var upTime = down.uptimeMillis
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -263,7 +264,7 @@ private suspend fun PointerInputScope.detectModelsDoubleClicks(
             }
             if (event.changes.size != 1 ||
                 (change.position - down.position).getDistance() > viewConfiguration.touchSlop ||
-                change.position.x !in modelStart..modelEnd ||
+                change.position.x !in modelRange ||
                 change.position.y !in 0f..size.height.toFloat()
             ) {
                 validTap = false

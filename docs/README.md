@@ -17,6 +17,7 @@
 | [架构说明](architecture.md) | 代码入口、分层职责、状态流转与现有测试 | 修改界面、ViewModel、仓库或应用结构前 |
 | [数据源说明](data-source.md) | Models.dev 端点、请求与解析、LLM 收录与聚合、计价及许可约定 | 修改 API、映射字段、展示价格或设计缓存前 |
 | [本地目录数据](local-data.md) | Room3 实体、主键与关联、本地 JSON、快照事务与目录查询 | 修改实体、DTO 映射、数据库或缓存前 |
+| [Debug / Release 双版本共存](debug-release-coexistence.md) | 构建类型后缀、应用名称覆盖、Debug 专属顶层调试页、签名与数据隔离边界、分级验收 | 构建、安装或验证 Debug 与 Release 共存、调试入口隔离时 |
 
 ## 维护原则
 

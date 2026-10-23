@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的真实 LLM 列表、本地搜索与筛选、模型详情、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及模型／设置双标签与悬浮玻璃导航。设置页提供“数据来源与许可”独立页面入口；详情提供全部显式关联服务和记录级来源时效。对比、收藏和目录页统一更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
+本文描述当前已实现的真实 LLM 列表、本地搜索与筛选、模型详情、网络请求、独立映射、Room3 目录存储、本地优先刷新策略，以及顶层分页与悬浮玻璃导航。Release 为“模型／设置”两栏，Debug 追加同级的“调试”第三栏；设置页只提供“数据来源与许可”独立页面入口。详情提供全部显式关联服务和记录级来源时效。对比、收藏和目录页统一更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
 
 ## 代码入口与职责
 
@@ -10,9 +10,9 @@
 | --- | --- |
 | [`ModelAtlasApplication.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ModelAtlasApplication.kt) | 通过 `@HiltAndroidApp` 初始化 Hilt |
 | [`MainActivity.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/MainActivity.kt) | 应用入口，启用边到边显示，承载 `ModelAtlasTheme` 与 `ModelAtlasApp`，关闭系统导航栏对比度遮罩 |
-| [`ui/ModelAtlasApp.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/ModelAtlasApp.kt) | 两个标签页的外壳，通过 `HorizontalPager` 切换模型与设置，记录页面背景供玻璃导航采样，并向页面传递悬浮栏避让高度 |
+| [`ui/ModelAtlasApp.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/ModelAtlasApp.kt) | 顶层分页外壳，Release 为模型／设置，Debug 追加调试页；共享导航条目驱动分页与底栏，记录页面背景供玻璃采样，并传递悬浮栏避让高度 |
 | [`ui/navigation/GlassNavigationBar.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/navigation/GlassNavigationBar.kt) | Backdrop 悬浮玻璃胶囊、连续跟随分页偏移的选中块、点击和拖动切换、选中图标和颜色过渡及震动反馈 |
-| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面，提供“数据来源与许可”入口 |
+| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面，仅提供“数据来源与许可”入口，不再承载调试入口 |
 | [`ui/settings/DataSourceScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/DataSourceScreen.kt) | 独立说明页，集中展示数据来源、第三方身份、价格适用条件和随包 MIT 许可全文，提供返回按钮 |
 | [`data/model/ModelSummary.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelSummary.kt) | 独立列表摘要模型，包含稳定 ID、名称、发布时间、token 限制、输入／输出模态、开放权重与许可；LAB 从稳定 ID 前缀派生，不引用 DTO 或 Entity |
 | [`data/model/ModelPrice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelPrice.kt) | `ModelPriceSummary` 与 `ModelPriceTierSummary`，单条展示报价与条件档位，口径为 USD / 百万 tokens |
@@ -90,12 +90,15 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - LAB 筛选选项及已应用 LAB 标签采用 `LabFilterOrder.kt` 的混合排序：前八位固定为 `openai → anthropic → google → deepseek → alibaba → meta → xai → moonshotai`，其余 LAB（包括新出现的 LAB）按完整 LLM 目录的模型数量从多到少排列，同数量按原始 ID 字母序稳定兜底。仅展示目录或已选条件中实际存在的值，刷新后消失但仍选中的 LAB 按零个模型处理；计数使用 `uiState.models`，不随当前搜索或筛选结果缩小。不新增热度请求，也不代表模型能力排名或改变列表发布时间排序；面板收起时仍优先保留所有已选项，已选和未选组内分别沿用该顺序。
 - 条件数将 LAB 多选计作一组、每个必需模态计作一个条件，其他字段各计一个。可选 LAB／模态从完整目录生成，不因当前结果缩小而消失，刷新后已选但消失的值仍可取消。活动查询下页头显示匹配数／总数；原目录为空仍显示空目录，原目录非空且无匹配才显示无结果，不能误触发首次加载骨架。
 - `SavedStateHandle` 仅保存查询条件的 JSON 字符串，不保存目录或结果；默认／损坏的保存值回退到无条件。刷新、确认更新、失败及切换标签均保留条件，目录 Flow 变化重新匹配，不额外发起请求。列表位置和面板显示仍是 UI 可保存状态；离开模型页关闭面板并清除输入焦点。Activity 声明 `adjustResize`，模型页通过 Scaffold 外层单次 `imePadding()` 缩小键盘打开时的实际列表视口，已消费的 IME 安全区不再由 Scaffold 重复计算；其余系统栏／刘海安全区仍传给列表 `contentPadding`，搜索键收起键盘。
-- `ModelAtlasApp` 承载两个标签：模型列表与设置。外壳通过内容插槽保持可独立预览和测试，真实模型页继续使用 `ModelListRoute`，不新增业务数据源。`rememberPagerState` 保存当前页面，两个页面都保留在分页器中，切换时不重建列表或主动清除已有状态提醒；成功结果的自动清除计时继续进行。列表位置和报价展开状态继续使用各自可保存状态。
+- `ModelAtlasApp` 的 Release 承载“模型／设置”，Debug 按相同顺序追加同级的“调试”标签。`GlassNavigationItem` 列表同时决定分页数量、稳定 key 与底栏，不在主源码引用调试资源。外壳通过模型／调试内容插槽保持可独立预览和测试，真实 Route 仅在 `ModelAtlasApp` 绑定，不新增业务数据源。`rememberPagerState` 保存当前页面，所有顶层页均保留组合；切换不重建列表、不清除提醒或滚动／展开状态，成功提醒计时继续进行。导航选中块、拖动与 `NavigationGeometry.modelsTabRange()` 双击命中范围按实际条目数和间距计算，支持两栏／三栏及 RTL，不让中间“设置”标签误触发模型回顶。
 - 双击悬浮导航的“模型”标签通过 `animateScrollToItem(0, 0)` 平滑滚回目录最顶部（首项、偏移均为 0），替代瞬间跳转；长列表沿用 Compose 的远距离滚动处理，不自行逐条执行动画。从设置页双击时，切页动画与列表回顶同时进行。`ModelAtlasScaffold` 通过 `rememberLazyListState` 保存列表滚动状态并沿内容插槽、Route 传给 Screen，置顶仅操作 UI 状态，不经过 ViewModel、不刷新数据，也不清除报价展开或状态提醒。单击和普通切页仍保留阅读位置。
 - 导航以不消费事件的指针监听按系统双击时间阈值识别模型标签双击；单击继续由 `selectable` 立即处理，不等待双击超时。拖动、多指、长按、越界或点击设置会中断连续模型点击，保留 Tab 单选语义与既有横向拖动切页；设置标签不提供双击操作。模型标签另提供“回到模型列表顶部”自定义无障碍操作，避免要求读屏用户执行触摸双击手势。
 - 设置入口打开全屏 `DataSourceScreen`，替代原来源许可弹窗并集中展示原列表底部的价格说明，不依赖目录是否已加载。外壳以 `rememberSaveable` 保存子页面显示状态；打开时主分页器和玻璃导航保持组合但不放置，避免绘制、触摸与读屏穿透，同时保留列表位置、报价展开和提醒计时。页面提供固定在系统安全区内的返回按钮，系统返回由 `NavigationBackHandler` 处理，两种方式都回到设置页。说明正文使用 `LazyColumn`，支持滚动位置恢复、深浅主题、大字体与 RTL；不引入通用导航栈或新数据源。
+- Debug 专属调试功能按 source set 隔离：`src/debug/java/.../ui/debug/DebugFeature.kt` 提供 `navigationItem` 与 Route，`DebugScreen.kt` 为无注入页面，`DebugViewModel.kt` 管理只读统计与手动刷新；`src/release/java/.../ui/debug/DebugFeature.kt` 提供同签名空内容及 `navigationItem = null`。主源码不引用 Debug 专用资源或 ViewModel，不使用 `BuildConfig.DEBUG` 分支。调试文案与图标仅在 `src/debug/res/`。调试属于主分页器，不隐藏底栏、没有返回设置按钮，不拦截顶层系统返回；设置不再提供调试入口。标题作为列表首项随内容滚动，正文接收实测悬浮栏避让高度；切页、配置恢复保留统计状态与滚动位置，不增加 Activity 或导航框架。
+- 调试页展示版本名称／版本号、实际 Application ID／可调试标志、构建类型、厂商／型号、Android 版本／API 级别。复制诊断信息仅包含这些字段、已读三表数量及统计说明，不读取设备唯一标识或原始请求配置。统计仅在调试页成为 `settledPage` 且未打开子页面、手动重读或刷新结束时通过 `CatalogStore.readCatalog()` 单事务读取；离屏预组合不读库，也不自动联网。在 IO dispatcher 仅提取数量、不长期保存完整快照，不过滤非 LLM 或未关联服务，不轮询。读取失败保留旧数并明确说明，未知统计不显示为零。
+- 调试手动刷新调用同一个单例 `ModelRepository.refresh()`，沿用串行请求协调、完整快照事务与限流，不直接写数据库或绕过冷却；不提供清空／删除／任意端点工具。页面忙碌时禁用重复操作，显示更新／无变化／分类错误，取消不显示失败；刷新结果与统计读取错误独立。成功后调用同一列表 ViewModel 的 `onCatalogRefreshedExternally()`，等原有加载／检查结束后只重读本地并按需恢复观察，清除已失效的待更新提示及首次失败，不再联网、不清除查询和列表位置。退出调试页不会主动取消已经发起的 ViewModel 刷新；完成后仍同步列表，ViewModel 清除时取消。
 - 悬浮栏参考 RvSystem Monitor 的玻璃样式，使用 `io.github.kyant0:backdrop:2.0.0`：分页内容通过 `layerBackdrop` 记录，导航外壳和选中块分别采样，组合增艳、4dp 模糊、镜片折射与色散，覆盖主题半透明底色。Android 12/12L 支持模糊，Android 13 及以上再叠加运行时着色器折射；Android 10/11 与设计预览使用实色胶囊兜底。没有新增外观开关，配色沿用动态主题。
-- 胶囊底部居中，距系统导航安全区 16dp，水平至少留白 16dp、最大宽度 400dp；底部与两侧避让导航栏及显示缺口。页面仍自行处理系统安全区，外壳只额外传递实测导航高度加 32dp 外边距，列表使用底部 `contentPadding`，因此滚动内容可经过玻璃后方，而列表末尾及内联提醒的操作仍可滚动到导航上方。标签提供 Tab 单选语义及至少 56dp 的布局高度，字号放大时导航自动增高；位置与拖动映射支持 RTL。
+- 胶囊底部居中，距系统导航安全区 16dp，水平至少留白 16dp、最大宽度 400dp；底部与两侧避让导航栏及显示缺口。页面仍自行处理系统安全区，外壳只额外传递实测导航高度加 32dp 外边距，列表使用底部 `contentPadding`，因此滚动内容可经过玻璃后方，而列表末尾及内联提醒的操作仍可滚动到导航上方。实测高度以 dp 数值通过 `rememberSaveable` 保存，恢复首帧沿用已有高度，避免临时默认留白将接近列表末尾的保存位置夹回。标签提供 Tab 单选语义及至少 56dp 的布局高度，字号放大时导航自动增高；位置与拖动映射支持 RTL。
 - 模型标签使用三柱圆角图标：参考所提供 SVG 的 473∶223 比例、柱宽、高度与圆角，等比居中于 24dp 图标槽；中心柱更高更宽，两侧以 alpha 保留层次。未选中使用 `ic_nav_models_outline.xml` 中空描边版，选中使用 `ic_nav_models.xml` 实心版；描边约 1.3dp，中心线向内收缩，保证两版外轮廓一致，内部真正透明而非背景色填充。图标通过既有 Crossfade 过渡，颜色沿用导航主题，不固定 SVG 的灰黑色；列表状态卡片的 `ic_catalog` 保持不变。
 - 页面不使用 `TopAppBar`、Scaffold 的 `topBar` 插槽或应用栏专用滚动行为。模型列表的标题与目录数量放在 Scaffold 内容区内，作为 `LazyColumn` 的首项 `CatalogHeader`，与模型卡片同速滚动，回到列表顶部时才再次显示，不固定、不吸顶，也不在下滑时单独弹出。Scaffold 最后叠加随主题变化的半透明状态栏渐变保护层，不占布局空间、不拦截触摸。来源许可入口已移至设置页，模型列表不再显示价格说明卡片。
 - 列表使用 `models.json` 字典键作为稳定 `id` 和条目 key；每个规范模型一行。同名模型不合并，缺少服务商关联的规范模型仍展示；查询仍保留显式 `canonical_model_id` 左连接，摘要映射按规范模型 ID 去重，不再向界面传递服务商和描述。报价来自独立的 `observeOfferingPriceRows()` 投影，两条 Flow 在仓库层用 `combine` 合并后一起映射，因此规范模型元数据与报价不会互相污染。
@@ -118,7 +121,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 已实现本地优先与离线浏览：每个新的列表 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。仅比较完整规范模型的稳定 ID 集合来决定是否提示增删（同数量替换也提示），不受 LLM 收录结果、搜索或筛选影响。ID 集合不变时，参数、名称、类型、报价以及服务商／模型服务的增删改均静默以完整快照事务同步，列表随 Flow 更新，查询条件保留并重新匹配；不会把内容变化误当成模型增删。不将本地抓取时间或字典顺序变化当作内容更新，内容一致不重复写库。模型增删的待应用完整快照仅暂存在仓库内存中，进程重启后重新检查。目录页尚未展示统一更新时间，也未引入 TTL 策略；详情只观察本地，不额外检查网络。
 - 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
-- 当前有模型与设置两个顶层标签、模型详情与来源许可说明子页面；没有收藏、对比或基于路由的通用导航栈，不因导航入口存在就假定对应业务能力已实现。
+- 当前有模型与设置两个常规顶层标签，Debug 另有同级的调试标签；模型详情与来源许可仍为子页面。没有收藏、对比或基于路由的通用导航栈，不因导航入口存在就假定对应业务能力已实现。
 - Models.dev 的收录、计价、能力与许可约定见[数据源说明](data-source.md)。
 
 ## 模型详情的数据与导航
@@ -138,6 +141,8 @@ DefaultModelRepository.checkForUpdates() / refresh()
 ## 现有单元测试
 
 测试源码位于 [`app/src/test/java/io/github/chenlongapps/modelatlas/`](../app/src/test/java/io/github/chenlongapps/modelatlas/)。
+
+Debug 专用单元测试位于 [`app/src/testDebug/java/.../ui/debug/DebugViewModelTest.kt`](../app/src/testDebug/java/io/github/chenlongapps/modelatlas/ui/debug/DebugViewModelTest.kt)，覆盖全量／空目录统计、防重入、刷新后重读、无变化、分类错误、旧数保留、统计失败不覆盖刷新结果及取消。通用 `ModelListViewModelTest` 另覆盖外部刷新后的待更新提示清理、查询保留、首次失败恢复、本地观察恢复和迟到检查协调；`NavigationGeometryTest` 覆盖两栏／三栏与 RTL 的模型双击区域。Debug UI 测试位于 [`app/src/androidTestDebug/java/.../ui/debug/DebugFeatureTest.kt`](../app/src/androidTestDebug/java/io/github/chenlongapps/modelatlas/ui/debug/DebugFeatureTest.kt)，覆盖三标签点击／滑动／拖动、首末页边界、非模型双击不回顶、离屏不触发统计入口、滚动与导航恢复、末尾避让底栏、操作禁用、统计错误、复制诊断信息及窄屏深色／双倍字号／RTL；设备执行结果以实际验证记录为准。
 
 | 测试 | 已覆盖内容 |
 | --- | --- |

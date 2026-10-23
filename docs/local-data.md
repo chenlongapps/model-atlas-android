@@ -11,6 +11,7 @@
 - 报价投影 `observeOfferingPriceRows()` 只取显式关联到规范模型且 `pricing` 非空的服务，按 `(canonicalModelId, providerId, id)` 排序；规范模型元数据仍由 `observeModelRows()` 单独提供，两条 Flow 在仓库层合并，互不覆盖。
 - 详情使用 `observeModelDetail(id)`：按稳定 ID 查询规范模型，通过 Room3 `@Relation(parentColumns / entityColumns)` 读取所有显式关联的服务和服务商，整个嵌套读取在 `@Transaction` 内完成，避免目录替换时混入不同快照。无报价服务不排除，无关联模型返回空服务列表，不存在模型返回 null；只新增查询与投影，不修改 Schema v1。
 - 测试目录中的 `CatalogSchemaTestDatabase` 仅用于 Room KSP 编译校验，不创建运行时数据库。
+- Debug 顶层调试页通过既有 `CatalogStore.readCatalog()` 在 IO dispatcher 读取一致的完整快照，仅保留三张表的数量；切入且分页停稳、手动重读及刷新结束后读取，离屏预组合不读库，不做 LLM 筛选或持续观察。手动刷新仍走正式仓库的原子提交，不新增调试写库、Schema 或 DAO 接口。页面明确标注统计口径、读取失败与旧值。
 
 ## 三张表的职责
 

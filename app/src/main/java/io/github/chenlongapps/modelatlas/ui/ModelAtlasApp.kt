@@ -57,6 +57,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelListRoute
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationBar
+import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
 import io.github.chenlongapps.modelatlas.ui.settings.SettingsScreen
 import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailRoute
@@ -67,11 +68,15 @@ import io.github.chenlongapps.modelatlas.ui.model.ModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
 import io.github.chenlongapps.modelatlas.ui.model.rememberRetainedModelVisibility
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
 import kotlinx.coroutines.launch
 
 @Composable
 fun ModelAtlasApp(modifier: Modifier = Modifier) {
-    ModelAtlasScaffold(modifier = modifier) { bottomOverlayPadding, listState, onModelClick ->
+    ModelAtlasScaffold(
+        modifier = modifier,
+        debugContent = { bottomPadding, isVisible -> DebugFeature.Content(bottomPadding, isVisible) },
+    ) { bottomOverlayPadding, listState, onModelClick ->
         ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
     }
 }
@@ -81,9 +86,13 @@ fun ModelAtlasApp(modifier: Modifier = Modifier) {
 internal fun ModelAtlasScaffold(
     modifier: Modifier = Modifier,
     detailContent: @Composable (modelId: String, onBack: () -> Unit) -> Unit = { id, onBack -> ModelDetailRoute(id, onBack) },
+    debugContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { _, _ -> },
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val navigationItems = remember {
+        listOf(GlassNavigationItem.Models, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
+    }
+    val pagerState = rememberPagerState(pageCount = { navigationItems.size })
     val modelListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -92,8 +101,9 @@ internal fun ModelAtlasScaffold(
         drawContent()
     }
     val density = LocalDensity.current
-    var navigationHeight by remember { mutableStateOf(64.dp) }
-    val bottomOverlayPadding = navigationHeight + 32.dp
+    // 恢复首帧沿用已测得的高度，避免默认底部留白把接近列表末尾的保存位置夹回。
+    var navigationHeight by rememberSaveable { mutableStateOf(64f) }
+    val bottomOverlayPadding = navigationHeight.dp + 32.dp
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
     // ID 是可保存的导航状态；身份快照仅在当前进程的页面交接期间使用。
@@ -139,9 +149,9 @@ internal fun ModelAtlasScaffold(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize().testTag("main-pager").layerBackdrop(backdrop),
-                    // 两个页面都保留，切换时不重建列表，也不重启刷新提示的协程。
-                    beyondViewportPageCount = 1,
-                    key = { it },
+                    // 保留全部顶层页，切换时不重建列表或重启刷新提示的协程。
+                    beyondViewportPageCount = navigationItems.size - 1,
+                    key = { navigationItems[it].tag },
                 ) { page ->
                     when (page) {
                         0 -> CompositionLocalProvider(
@@ -157,6 +167,7 @@ internal fun ModelAtlasScaffold(
                             bottomOverlayPadding = bottomOverlayPadding,
                             onShowDataSource = { showDataSource = true },
                         )
+                        2 -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
                     }
                 }
                 Box(
@@ -172,6 +183,7 @@ internal fun ModelAtlasScaffold(
                 ) {
                     GlassNavigationBar(
                         pagerState = pagerState,
+                        items = navigationItems,
                         backdrop = backdrop,
                         onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
                         onModelsDoubleClick = {
@@ -182,7 +194,7 @@ internal fun ModelAtlasScaffold(
                             }
                         },
                         modifier = Modifier.fillMaxWidth().onSizeChanged {
-                            navigationHeight = with(density) { it.height.toDp() }
+                            navigationHeight = with(density) { it.height.toDp().value }
                         },
                     )
                 }

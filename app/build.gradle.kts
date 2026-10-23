@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.hilt.android)
 }
 
+val releaseStoreFile = providers.gradleProperty("modelAtlas.release.storeFile").orNull
+
 android {
     namespace = "io.github.chenlongapps.modelatlas"
     compileSdk {
@@ -22,8 +24,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("modelAtlas.release.storePassword").get()
+                keyAlias = providers.gradleProperty("modelAtlas.release.keyAlias").get()
+                keyPassword = providers.gradleProperty("modelAtlas.release.keyPassword").get()
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
+
         release {
+            signingConfig = signingConfigs.findByName("release")
+
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")

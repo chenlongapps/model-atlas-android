@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Model Atlas Debug</string>
+    <string name="debug_title">调试工具</string>
+    <string name="debug_nav_label">调试</string>
+    <string name="debug_app_info">应用信息</string>
+    <string name="debug_device_info">设备信息</string>
+    <string name="debug_version_name">版本名称</string>
+    <string name="debug_version_code">版本号</string>
+    <string name="debug_build_type">构建类型</string>
+    <string name="debug_debuggable">可调试</string>
+    <string name="debug_yes">是</string>
+    <string name="debug_no">否</string>
+    <string name="debug_manufacturer">厂商</string>
+    <string name="debug_model">设备型号</string>
+    <string name="debug_android_version">Android 版本</string>
+    <string name="debug_api_level">API 级别</string>
+    <string name="debug_catalog">本地目录</string>
+    <string name="debug_statistics_notice">统计为本地数据库全量记录，不等同于列表收录的 LLM 数量；仅切入调试页、重读统计或手动刷新后读取，不实时更新。</string>
+    <string name="debug_model_count">规范模型数</string>
+    <string name="debug_provider_count">服务商数</string>
+    <string name="debug_offering_count">模型服务数</string>
+    <string name="debug_read_statistics">重读统计</string>
+    <string name="debug_statistics_reading">正在读取本地目录…</string>
+    <string name="debug_statistics_not_read">尚未读取统计</string>
+    <string name="debug_statistics_failed">本地统计读取失败；如有数值，为上次成功读取的结果。可点击“重读统计”重试。</string>
+    <string name="debug_data_tools">数据操作</string>
+    <string name="debug_refresh_notice">获取并提交最新完整目录，仅影响 Debug 应用。失败保留原有数据，遵循服务器限流；不会清空目录。</string>
+    <string name="debug_refresh">手动刷新目录</string>
+    <string name="debug_refreshing">正在刷新目录…</string>
+    <string name="debug_updated">模型目录已更新</string>
+    <string name="debug_unchanged">已是最新数据</string>
+    <string name="debug_network_error">网络连接失败，已保留本地目录，可再次刷新重试。</string>
+    <string name="debug_server_error">服务器请求失败，已保留本地目录，可稍后刷新重试。</string>
+    <string name="debug_invalid_data">目录数据无法解析，已保留本地目录。</string>
+    <string name="debug_rate_limited">请求受限，请稍后重试；刷新不会绕过服务器冷却时间。</string>
+    <string name="debug_storage_error">目录读取或保存失败，未提交不完整目录，可再次刷新重试。</string>
+    <string name="debug_copy_notice">复制应用、设备及已读取的目录统计，不包含设备唯一标识、密钥或原始请求信息。</string>
+    <string name="debug_copy">复制诊断信息</string>
+    <string name="debug_copied">诊断信息已复制</string>
+</resources>

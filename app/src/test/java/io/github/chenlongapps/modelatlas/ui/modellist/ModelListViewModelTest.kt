@@ -483,6 +483,71 @@ class ModelListViewModelTest {
         assertEquals(viewModel.uiState.value.models, viewModel.uiState.value.visibleModels)
     }
 
+    @Test fun externalRefreshClearsStalePendingNoticeWithoutAnotherRequestAndPreservesQuery() = runTest {
+        val repository = cachedRepository().apply { remoteModels = listOf(ModelSummary("lab/new", "New")) }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.updateAvailable)
+        val query = ModelListQuery(search = "New")
+        viewModel.setQuery(query)
+        repository.refresh() // 其他页面已经成功提交。
+        viewModel.onCatalogRefreshedExternally()
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertEquals(query, viewModel.uiState.value.query)
+        assertEquals(repository.remoteModels, viewModel.uiState.value.visibleModels)
+        assertEquals(1, repository.refreshes)
+        assertEquals(1, repository.checks)
+        assertEquals(null, viewModel.uiState.value.message)
+    }
+
+    @Test fun externalRefreshRecoversFirstLoadFailureAndResumesLocalObservation() = runTest {
+        val repository = FakeRepository().apply { failure = IOException("offline") }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.error)
+        repository.failure = null
+        repository.refresh()
+        viewModel.onCatalogRefreshedExternally()
+        advanceUntilIdle()
+        assertEquals(ModelListUiState(repository.remoteModels, isLoading = false), viewModel.uiState.value)
+        repository.models.value = listOf(ModelSummary("lab/later", "Later"))
+        advanceUntilIdle()
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertEquals(2, repository.refreshes)
+    }
+
+    @Test fun externalSynchronizationWaitsForActiveCheckAndClearsItsLateNotice() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            remoteModels = listOf(ModelSummary("lab/new", "New"))
+        }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.onCatalogRefreshedExternally()
+        advanceUntilIdle()
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.updateAvailable)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+    }
+
+    @Test fun externalSynchronizationReadFailureKeepsModelsAndQuery() = runTest {
+        val repository = cachedRepository()
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        val query = ModelListQuery(search = "Remote")
+        viewModel.setQuery(query)
+        repository.observationFailure = IllegalStateException("read")
+        viewModel.onCatalogRefreshedExternally()
+        advanceUntilIdle()
+        assertEquals(ModelListError.STORAGE, viewModel.uiState.value.error)
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertEquals(query, viewModel.uiState.value.query)
+        assertEquals(0, repository.refreshes)
+    }
+
     private fun cachedRepository() = FakeRepository().apply {
         local = true
         models.value = remoteModels

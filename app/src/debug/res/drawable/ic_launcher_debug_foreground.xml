@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <!-- Shift the logo down without changing its size, relative to the icon bounds. -->
+        <inset
+            android:drawable="@drawable/ic_launcher_foreground"
+            android:insetTop="6.4814815%"
+            android:insetBottom="-6.4814815%" />
+    </item>
+    <item android:drawable="@drawable/ic_launcher_debug_badge" />
+</layer-list>
