@@ -73,6 +73,9 @@ import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
 import io.github.chenlongapps.modelatlas.ui.model.rememberRetainedModelVisibility
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
+import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareRoute
+import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareScreen
+import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareUiState
 import kotlinx.coroutines.launch
 
 @Composable
@@ -80,6 +83,7 @@ fun ModelAtlasApp(modifier: Modifier = Modifier) {
     ModelAtlasScaffold(
         modifier = modifier,
         debugContent = { bottomPadding, isVisible -> DebugFeature.Content(bottomPadding, isVisible) },
+        compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
     ) { bottomOverlayPadding, listState, onModelClick ->
         ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
     }
@@ -91,10 +95,13 @@ internal fun ModelAtlasScaffold(
     modifier: Modifier = Modifier,
     detailContent: @Composable (modelId: String, onBack: () -> Unit) -> Unit = { id, onBack -> ModelDetailRoute(id, onBack) },
     debugContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { _, _ -> },
+    compareContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { padding, visible ->
+        ModelCompareScreen(ModelCompareUiState(), bottomOverlayPadding = padding, isVisible = visible)
+    },
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
-        listOf(GlassNavigationItem.Models, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
+        listOf(GlassNavigationItem.Models, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
     }
     val pagerState = rememberPagerState(pageCount = { navigationItems.size })
     val modelListState = rememberLazyListState()
@@ -170,8 +177,8 @@ internal fun ModelAtlasScaffold(
                     beyondViewportPageCount = navigationItems.size - 1,
                     key = { navigationItems[it].tag },
                 ) { page ->
-                    when (page) {
-                        0 -> CompositionLocalProvider(
+                    when (navigationItems[page]) {
+                        GlassNavigationItem.Models -> CompositionLocalProvider(
                             LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == 0),
                         ) {
                             modelContent(bottomOverlayPadding, modelListState) {
@@ -183,11 +190,12 @@ internal fun ModelAtlasScaffold(
                                 }
                             }
                         }
-                        1 -> SettingsScreen(
+                        GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
+                        GlassNavigationItem.Settings -> SettingsScreen(
                             bottomOverlayPadding = bottomOverlayPadding,
                             onShowDataSource = { showDataSource = true },
                         )
-                        2 -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
+                        else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
                     }
                 }
                 Box(

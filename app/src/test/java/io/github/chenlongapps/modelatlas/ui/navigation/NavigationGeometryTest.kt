@@ -27,6 +27,15 @@ class NavigationGeometryTest {
         assertEquals(0f..300f, modelsTabRange(300f, 4f, 1, isRtl = true))
     }
 
+    @Test fun fourTabsKeepCompareOutsideModelsHitRegionInBothDirections() {
+        val ltr = modelsTabRange(320f, 4f, 4, isRtl = false)
+        assertEquals(0f..77f, ltr)
+        assertFalse(90f in ltr)
+        val rtl = modelsTabRange(320f, 4f, 4, isRtl = true)
+        assertEquals(243f..320f, rtl)
+        assertFalse(230f in rtl)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun emptyNavigationIsRejected() { modelsTabRange(300f, 4f, 0, isRtl = false) }
 }

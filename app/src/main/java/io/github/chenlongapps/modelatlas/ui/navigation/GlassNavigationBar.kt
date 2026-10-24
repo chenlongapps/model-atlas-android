@@ -70,6 +70,7 @@ internal data class GlassNavigationItem(
 ) {
     companion object {
         val Models = GlassNavigationItem(R.string.nav_models, R.drawable.ic_nav_models_outline, R.drawable.ic_nav_models, "nav-models")
+        val Compare = GlassNavigationItem(R.string.nav_compare, R.drawable.ic_compare, R.drawable.ic_compare_filled, "nav-compare")
         val Settings = GlassNavigationItem(R.string.nav_settings, R.drawable.ic_settings, R.drawable.ic_settings_filled, "nav-settings")
     }
 }
@@ -215,7 +216,7 @@ internal fun GlassNavigationBar(
                                 },
                             )
                             .heightIn(min = 56.dp)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = if (items.size >= 4) 8.dp else 12.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
                     ) {

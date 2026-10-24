@@ -49,6 +49,7 @@ class ModelPriceMapperTest {
         ).selectPriceFor("moonshotai/kimi-x").let { requireNotNull(it) }
         assertEquals(0.95, price.input!!, 0.0)
         assertEquals(4.0, price.output!!, 0.0)
+        assertEquals("kimi-x", price.offeringId)
     }
 
     @Test fun breaksTiesWithinSameProviderByStableOfferingId() {
@@ -56,9 +57,10 @@ class ModelPriceMapperTest {
             priceRow("lab/m", "p", "P", "b", pricing(input = 1.0, output = 1.0)),
             priceRow("lab/m", "p", "P", "a", pricing(input = 1.0, output = 1.0)),
         )
-        // 两条报价在摘要层等价，因此展示结果稳定且可复现。
+        // 金额相同仍保留被选中的服务稳定 ID，方便对比页标注来源。
         val price = rows.selectPriceFor("lab/m").let { requireNotNull(it) }
         assertEquals("p", price.providerId)
+        assertEquals("a", price.offeringId)
         assertEquals(1.0, price.input!!, 0.0)
     }
 
@@ -153,6 +155,27 @@ class ModelPriceMapperTest {
             priceRow("openai/gpt-x", "openrouter", "OpenRouter", "gpt-x", pricing(input = 0.5, output = 1.5)),
         ).selectPriceFor("openai/gpt-x").let { requireNotNull(it) }
         assertFalse(price.isOfficial)
+    }
+
+    @Test fun selectedPriceKeepsAllTierCategoriesAndExactUnknownConditions() {
+        val price = listOf(priceRow("lab/m", "p", "Provider", "service", OfferingPricingLocal(
+            input = 0.0,
+            tiers = listOf(OfferingPriceTierLocal(
+                condition = PriceTierConditionLocal("future-condition", 272_001),
+                input = 0.003, output = 2.0, cacheRead = 0.0, cacheWrite = 0.0001,
+                reasoning = 1.5, inputAudio = 0.7, outputAudio = 0.9,
+            )),
+        ))).selectPriceFor("lab/m")!!
+        assertEquals("service", price.offeringId)
+        val tier = price.tiers.single()
+        assertEquals("future-condition", tier.conditionType)
+        assertEquals(272_001L, tier.conditionSizeTokens)
+        assertEquals(0.003, tier.input!!, 0.0)
+        assertEquals(0.0, tier.cacheRead!!, 0.0)
+        assertEquals(0.0001, tier.cacheWrite!!, 0.0)
+        assertEquals(1.5, tier.reasoning!!, 0.0)
+        assertEquals(0.7, tier.inputAudio!!, 0.0)
+        assertEquals(0.9, tier.outputAudio!!, 0.0)
     }
 
     private fun pricing(input: Double?, output: Double?) = OfferingPricingLocal(input = input, output = output)

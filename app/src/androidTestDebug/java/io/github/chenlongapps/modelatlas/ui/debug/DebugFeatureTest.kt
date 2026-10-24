@@ -103,7 +103,7 @@ class DebugFeatureTest {
         compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
     }
 
-    @Test fun threeTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
+    @Test fun fourTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 ModelAtlasScaffold(debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) }) { _, _, _ -> }
@@ -117,6 +117,8 @@ class DebugFeatureTest {
         compose.onNodeWithTag("nav-debug").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("nav-compare").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
@@ -170,6 +172,10 @@ class DebugFeatureTest {
         compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         // 测试中间标签靠近模型的一侧：旧的二等分命中范围会把这里误识别为模型。
+        compose.onNodeWithTag("nav-compare").performTouchInput {
+            doubleClick(Offset(width * if (direction == LayoutDirection.Ltr) 0.15f else 0.85f, centerY))
+        }
+        compose.onNodeWithTag("nav-compare").assertIsSelected()
         compose.onNodeWithTag("nav-settings").performTouchInput {
             doubleClick(Offset(width * if (direction == LayoutDirection.Ltr) 0.15f else 0.85f, centerY))
         }

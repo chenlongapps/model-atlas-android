@@ -91,6 +91,7 @@ private fun PriceOffer.toSummary(lab: String?) = ModelPriceSummary(
     providerId = providerId,
     providerName = providerName,
     isOfficial = PriceProviderPolicy.officialProviderId(lab) == providerId,
+    offeringId = offeringId,
     input = pricing.input,
     output = pricing.output,
     cacheRead = pricing.cacheRead,
@@ -106,6 +107,9 @@ private fun PriceOffer.toSummary(lab: String?) = ModelPriceSummary(
             output = tier.output,
             cacheRead = tier.cacheRead,
             cacheWrite = tier.cacheWrite,
+            reasoning = tier.reasoning,
+            inputAudio = tier.inputAudio,
+            outputAudio = tier.outputAudio,
         )
     },
 )

@@ -25,8 +25,8 @@ Debug 配置为 `applicationIdSuffix = ".debug"`、`versionNameSuffix = "-debug"
 - 不同 Application ID 由 Android 分配独立应用数据空间，Room3 数据库无需改名，也无需修改 Schema、DAO 或 Hilt 配置。
 - Release 安装身份和升级路径保持不变；此前使用原 Application ID 安装的旧 Debug 不会自动迁移到新的 Debug 身份，其数据仍属于原应用。不要为了安装新 Debug 而卸载原应用或清除其数据。
 - 原有备份策略保持不变（`allowBackup="true"`）。备份身份分离不代表已验证云备份和设备迁移行为。
-- Debug 使用专用图标，底部导航为“模型｜设置｜调试”；调试页与另外两页同级，不再位于设置中，不显示返回按钮，始终保留底栏。页面提供应用／设备信息、三表全量数量、复制诊断信息与手动刷新。统计只读、非实时，仅切入停稳或手动操作后读取；刷新复用现有仓库与服务器限流，成功后同步列表状态，不提供清空目录或应用数据操作。
-- `main` 只调用 `ui.debug.DebugFeature` 的统一接口；`debug` 提供导航条目、完整页面及 ViewModel，`release` 的导航条目为 null、内容为空，保持“模型｜设置”两栏。调试资源仅置于 `src/debug/res/`，Release 不编译真实调试页面、ViewModel 或调试专用资源，不依赖运行时 `BuildConfig.DEBUG` 判断。
+- Debug 使用专用图标，底部导航为“模型｜对比｜设置｜调试”；调试页与另外三页同级，不再位于设置中，不显示返回按钮，始终保留底栏。页面提供应用／设备信息、三表全量数量、复制诊断信息与手动刷新。统计只读、非实时，仅切入停稳或手动操作后读取；刷新复用现有仓库与服务器限流，成功后同步列表状态，不提供清空目录或应用数据操作。
+- `main` 只调用 `ui.debug.DebugFeature` 的统一接口；`debug` 提供导航条目、完整页面及 ViewModel，`release` 的导航条目为 null、内容为空，保持“模型｜对比｜设置”三栏。调试资源仅置于 `src/debug/res/`，Release 不编译真实调试页面、ViewModel 或调试专用资源，不依赖运行时 `BuildConfig.DEBUG` 判断。
 - 主 Manifest 没有自定义 ContentProvider。以后添加 FileProvider 时，authorities 应使用 `${applicationId}.fileprovider`，不要写死 Release 包名；依赖合并的 Provider 也应确认不会发生冲突。
 
 ## 构建与安装
@@ -78,9 +78,9 @@ package:io.github.chenlongapps.modelatlas.debug
 
 ## 分级验收
 
-顶层调试页构建隔离已单独验证：Debug／Release 均能组装，207 项 Debug 单元测试和 Debug lint 通过；APK 检查确认 Debug 包含第三栏导航文案、真实调试页面及专用资源，Release 只有空 `DebugFeature`，没有 `DebugScreenKt`、`DebugViewModel`、调试状态模型、`debug_*` 文案或 `ic_debug` 图标。此结果不替代下述双版本共存与签名设备验收。
+引入对比页之前，顶层调试页构建隔离已单独验证：Debug／Release 均能组装，207 项 Debug 单元测试和 Debug lint 通过；APK 检查确认 Debug 包含当时的第三栏导航文案、真实调试页面及专用资源，Release 只有空 `DebugFeature`，没有 `DebugScreenKt`、`DebugViewModel`、调试状态模型、`debug_*` 文案或 `ic_debug` 图标。此结果不替代下述双版本共存与签名设备验收。
 
-顶层调试页已在 Android 17／API 37 模拟器分别通过 `DebugFeatureTest` 11 项及 `ModelAtlasAppTest` 24 项，覆盖三栏导航、恢复、模型双击边界与原有主界面回归；恢复首帧保存实测底栏高度，避免列表末尾位置偏移。真实应用启动后另通过 UI 树确认同级“调试”选中态、保留底栏、无返回按钮及实际信息／统计读取。真机无线 ADB 曾在执行中断开，仍需稳定连接后补验；模拟器结果不等于双版本共存与签名设备验收完成。
+引入对比页之前，顶层调试页已在 Android 17／API 37 模拟器分别通过 `DebugFeatureTest` 11 项及 `ModelAtlasAppTest` 24 项，覆盖当时的三栏导航、恢复、模型双击边界与原有主界面回归；恢复首帧保存实测底栏高度，避免列表末尾位置偏移。真实应用启动后另通过 UI 树确认同级“调试”选中态、保留底栏、无返回按钮及实际信息／统计读取。真机无线 ADB 曾在执行中断开，仍需稳定连接后补验；模拟器结果不等于双版本共存与签名设备验收完成。当前三栏／四栏导航的对比页回归范围见 [TODO.md](../TODO.md)。
 
 1. 构建 Debug，核对 APK 中的 Application ID、版本名称、应用名称和可调试标志；核对 Release 合并产物仍使用原安装身份与名称。
    同时检查 Debug 普通／圆形图标均带有右上角绿色斜向绶带，Release 图标不变；设备上验证圆形／圆角遮罩下 `DEBUG` 文字无裁切，以及启用主题图标后字样仍可见。

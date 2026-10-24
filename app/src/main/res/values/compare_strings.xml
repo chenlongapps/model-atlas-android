@@ -1,0 +1,36 @@
+<resources>
+    <string name="nav_compare">对比</string>
+    <string name="compare_title">模型对比</string>
+    <string name="compare_subtitle">逐项了解两个模型的参数、能力与报价</string>
+    <string name="compare_vs" translatable="false">VS</string>
+    <string name="compare_select">选择模型 %1$d</string>
+    <string name="compare_replace">替换模型：%1$s</string>
+    <string name="compare_change">更换模型</string>
+    <string name="compare_remove">移除对比模型：%1$s</string>
+    <string name="compare_picker_title">选择对比模型</string>
+    <string name="compare_selected">已在另一侧选择</string>
+    <string name="compare_empty">选择两个模型，开始逐项对比</string>
+    <string name="compare_one_selected">再选择一个不同的模型，即可开始对比</string>
+    <string name="compare_catalog_empty">本地暂无可选模型，请先到“模型”页加载目录。</string>
+    <string name="compare_catalog_error">无法读取本地可选模型与默认报价，请重试。</string>
+    <string name="compare_loading">正在读取本地模型数据…</string>
+    <string name="compare_missing">此模型已被移除或不再收录，请替换或移除。</string>
+    <string name="compare_basic">基本信息</string>
+    <string name="compare_io">输入输出</string>
+    <string name="compare_capabilities">能力特性</string>
+    <string name="compare_model_name">模型名称</string>
+    <string name="compare_full_license">完整许可</string>
+    <string name="compare_expand_detail">查看%1$s</string>
+    <string name="compare_collapse_detail">收起%1$s</string>
+    <string name="compare_detail_expanded">已展开</string>
+    <string name="compare_detail_collapsed">已收起</string>
+    <string name="compare_weight_status">权重状态</string>
+    <string name="compare_price_provider">报价服务商</string>
+    <string name="compare_price_service">报价服务 ID</string>
+    <string name="compare_price_notice">沿用列表默认报价，不代表最低价或推荐。USD / 百万 tokens；不同服务商、缓存与档位条件不可直接比较，同一任务的 token 数也可能不同。仅展示基础模式，不合计费用，推理价不默认与输出价相加。档位等号归属与适用条件以服务商说明为准。</string>
+    <string name="compare_tiers">上下文及其他条件档位</string>
+    <string name="compare_no_tiers">此报价未提供精确档位。</string>
+    <string name="compare_context_tier">上下文档位门槛：%1$s tokens</string>
+    <string name="compare_other_tier">%1$s 档位门槛：%2$s（来源原值）</string>
+    <string name="compare_capability_notice">能力来自规范模型记录，不代表每个 API 服务均支持，也不代表模型质量排名。</string>
+</resources>
