@@ -8,6 +8,7 @@ import androidx.room3.Upsert
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
+import io.github.chenlongapps.modelatlas.data.model.LlmInclusionPolicy
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -91,6 +92,12 @@ abstract class CatalogDao {
     @Query("DELETE FROM providers WHERE id = :id")
     protected abstract suspend fun deleteProvider(id: String)
 
+    @Query("UPDATE favorites SET name = :name, lab = :lab WHERE modelId = :id")
+    protected abstract suspend fun updateFavoriteIdentity(id: String, name: String, lab: String?)
+
+    @Query("SELECT modelId FROM favorites")
+    protected abstract suspend fun favoriteIds(): List<String>
+
     /** 全量快照事务；先移除旧服务，再写入新服务，不用 REPLACE 意外触发级联。 */
     @Transaction
     open suspend fun replaceCatalog(snapshot: CatalogSnapshot) {
@@ -99,6 +106,13 @@ abstract class CatalogDao {
         upsertProviders(snapshot.providers)
         insertModels(snapshot.models)
         insertOfferings(snapshot.offerings)
+        // 仅同步最后可用身份；不收录、下架、空目录都不覆盖历史身份或收藏时间。
+        val favorites = favoriteIds().toHashSet()
+        snapshot.models.filter { it.id in favorites && LlmInclusionPolicy.includes(it.type, it.inputModalities, it.outputModalities) }
+            .forEach { model ->
+                updateFavoriteIdentity(model.id, model.name.takeIf(String::isNotBlank) ?: model.id,
+                    model.id.substringBefore('/', "").takeIf(String::isNotBlank))
+            }
         val retainedIds = snapshot.providers.mapTo(hashSetOf()) { it.id }
         providerIds().filterNot { it in retainedIds }.forEach { deleteProvider(it) }
     }

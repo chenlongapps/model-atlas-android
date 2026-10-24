@@ -29,6 +29,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -61,8 +63,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.tooling.preview.Preview
@@ -83,6 +88,10 @@ import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteActionState
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteDetailViewModel
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteHistoricalIdentity
+import io.github.chenlongapps.modelatlas.ui.favorites.LocalFavoriteRemovalTransition
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -91,15 +100,32 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun ModelDetailRoute(modelId: String, onBack: () -> Unit, viewModel: ModelDetailViewModel = hiltViewModel()) {
+internal fun ModelDetailRoute(modelId: String, onBack: () -> Unit, viewModel: ModelDetailViewModel = hiltViewModel(),
+    favoriteViewModel: FavoriteDetailViewModel = hiltViewModel()) {
     DisposableEffect(viewModel, modelId) {
         viewModel.open(modelId)
         onDispose { viewModel.close(modelId) }
     }
+    DisposableEffect(favoriteViewModel, modelId) {
+        favoriteViewModel.open(modelId)
+        onDispose { favoriteViewModel.close(modelId) }
+    }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val favoriteState by favoriteViewModel.uiState.collectAsStateWithLifecycle()
+    val favoriteRemoval = LocalFavoriteRemovalTransition.current
     ModelDetailScreen(
         state.takeIf { it.modelId == modelId } ?: ModelDetailUiState(modelId),
         onBack = onBack, onRetry = viewModel::retry,
+        favoriteState = favoriteState.takeIf { it.modelId == modelId } ?: FavoriteActionState(modelId),
+        onToggleFavorite = {
+            favoriteViewModel.toggle(
+                canAdd = state.status == ModelDetailStatus.CONTENT,
+                onRemovalStarted = { favoriteRemoval?.begin(modelId) },
+                onRemovalAborted = { favoriteRemoval?.clear(modelId) },
+                onRemoved = onBack,
+            )
+        },
+        onRetryFavorite = favoriteViewModel::retry,
     )
 }
 
@@ -111,9 +137,13 @@ internal fun ModelDetailScreen(
     onRetry: () -> Unit = {},
     windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     initialIdentity: ModelIdentitySnapshot? = LocalModelSharedTransition.current?.initialIdentity,
+    favoriteState: FavoriteActionState = FavoriteActionState(),
+    onToggleFavorite: () -> Unit = {},
+    onRetryFavorite: () -> Unit = {},
 ) {
     key(uiState.modelId) {
-        ModelDetailBody(uiState, onBack, modifier, onRetry, windowInsets, initialIdentity?.takeIf { it.id == uiState.modelId })
+        ModelDetailBody(uiState, onBack, modifier, onRetry, windowInsets, initialIdentity?.takeIf { it.id == uiState.modelId },
+            favoriteState, onToggleFavorite, onRetryFavorite)
     }
 }
 
@@ -131,6 +161,9 @@ private fun ModelDetailBody(
     onRetry: () -> Unit,
     windowInsets: WindowInsets,
     initialIdentity: ModelIdentitySnapshot?,
+    favoriteState: FavoriteActionState,
+    onToggleFavorite: () -> Unit,
+    onRetryFavorite: () -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { DetailTab.entries.size })
     val scope = rememberCoroutineScope()
@@ -159,6 +192,11 @@ private fun ModelDetailBody(
     val containerColor = if (LocalModelSharedTransition.current != null) Color.Transparent else background
     val hasContent = uiState.status == ModelDetailStatus.CONTENT
     val model = uiState.detail.takeIf { hasContent }
+    val favoriteDescription = stringResource(when {
+        favoriteState.isSaving -> R.string.favorite_saving
+        favoriteState.isFavorite -> R.string.favorite_saved
+        else -> R.string.favorite_not_saved
+    })
     var nameBounds by remember { mutableStateOf<Rect?>(null) }
     val collapseProgress by rememberDetailCollapseProgress(sharedListState, nameBounds)
     val sectionScrollConnection = remember(sharedListState) {
@@ -180,7 +218,26 @@ private fun ModelDetailBody(
         Column(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
             DetailHeaderBar(onBack, padding.calculateTopPadding(), model?.name, { if (hasContent) collapseProgress else 0f },
                 Modifier.padding(start = padding.calculateStartPadding(layoutDirection),
-                    end = padding.calculateEndPadding(layoutDirection)))
+                    end = padding.calculateEndPadding(layoutDirection))) {
+                IconToggleButton(
+                    checked = favoriteState.isFavorite,
+                    onCheckedChange = { onToggleFavorite() },
+                    enabled = favoriteState.isLoaded && !favoriteState.isSaving && (hasContent || favoriteState.isFavorite),
+                    modifier = Modifier.testTag("detail-favorite").semantics {
+                        stateDescription = favoriteDescription
+                    },
+                ) {
+                    Icon(painterResource(if (favoriteState.isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite),
+                        stringResource(if (favoriteState.isFavorite) R.string.favorite_remove else R.string.favorite_add))
+                }
+            }
+            if (favoriteState.hasReadError || favoriteState.hasWriteError) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+                    Text(stringResource(if (favoriteState.hasReadError) R.string.favorite_read_error else R.string.favorite_write_error),
+                        color = MaterialTheme.colorScheme.error)
+                    if (favoriteState.hasReadError) TextButton(onClick = onRetryFavorite) { Text(stringResource(R.string.retry)) }
+                }
+            }
             if (model != null) {
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val viewportHeight = maxHeight
@@ -262,7 +319,8 @@ private fun ModelDetailBody(
                                 }
                             }
                             ModelDetailStatus.NOT_FOUND -> item(key = "missing") {
-                                DetailSection(stringResource(R.string.detail_missing_title)) {
+                                DetailSection(stringResource(if (favoriteState.isFavorite) R.string.favorite_unavailable else R.string.detail_missing_title)) {
+                                    favoriteState.identity?.let { FavoriteHistoricalIdentity(it) }
                                     Text(stringResource(R.string.detail_missing))
                                     Button(onClick = onBack) { Text(stringResource(R.string.navigate_back)) }
                                 }

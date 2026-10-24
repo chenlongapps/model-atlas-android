@@ -16,6 +16,8 @@ import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevJson
 import io.github.chenlongapps.modelatlas.data.repository.DefaultModelRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
+import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
+import io.github.chenlongapps.modelatlas.data.repository.RoomFavoriteRepository
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
@@ -34,6 +36,9 @@ annotation class IoDispatcher
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class DataBindings {
+    @Binds
+    abstract fun favorites(repository: RoomFavoriteRepository): FavoriteRepository
+
     @Binds
     abstract fun repository(repository: DefaultModelRepository): ModelRepository
 
@@ -78,4 +83,7 @@ object DataModule {
 
     @Provides
     fun catalogDao(database: CatalogDatabase) = database.catalogDao()
+
+    @Provides
+    fun favoriteDao(database: CatalogDatabase) = database.favoriteDao()
 }

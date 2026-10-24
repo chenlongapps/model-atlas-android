@@ -125,6 +125,7 @@ internal fun DetailHeaderBar(
     modelName: String?,
     collapseProgress: () -> Float,
     modifier: Modifier = Modifier,
+    action: @Composable () -> Unit = {},
 ) {
     val title = stringResource(R.string.detail_title)
     Row(
@@ -163,6 +164,7 @@ internal fun DetailHeaderBar(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
+        action()
     }
 }
 

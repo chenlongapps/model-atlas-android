@@ -1,6 +1,20 @@
 <resources>
     <string name="app_name">Model Atlas</string>
     <string name="nav_models">模型</string>
+    <string name="nav_favorites">收藏</string>
+    <string name="favorites_order">按收藏时间 · 最新在前</string>
+    <string name="favorites_empty_title">尚无收藏</string>
+    <string name="favorites_empty">在模型详情右上角收藏模型，即可在这里查看。</string>
+    <string name="favorites_read_error">无法读取收藏列表，请重试。</string>
+    <string name="favorite_add">收藏模型</string>
+    <string name="favorite_remove">取消收藏</string>
+    <string name="favorite_saving">正在保存</string>
+    <string name="favorite_saved">已收藏</string>
+    <string name="favorite_not_saved">未收藏</string>
+    <string name="favorite_unavailable">当前目录不可用</string>
+    <string name="favorite_historical_identity">最后一次可用时的身份信息</string>
+    <string name="favorite_read_error">无法读取收藏状态，请重试。</string>
+    <string name="favorite_write_error">收藏操作未能保存，请重试。</string>
     <string name="nav_settings">设置</string>
     <string name="model_list_scroll_to_top">回到模型列表顶部</string>
     <string name="model_list_source_notice">数据来源：Models.dev（https://models.dev/）。本应用为独立第三方，与数据源及模型提供商无官方隶属关系。研发机构根据模型 ID 的前缀标签展示，未经独立核实。“开放权重”指来源报告训练权重可公开获取，不等于开源或允许商用，具体许可以模型 license 字段为准。</string>

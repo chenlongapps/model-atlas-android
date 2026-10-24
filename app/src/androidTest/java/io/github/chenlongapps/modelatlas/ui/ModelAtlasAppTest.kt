@@ -64,6 +64,9 @@ class ModelAtlasAppTest {
     @Test fun pageSwipeAndNavigationDragKeepSelectionAndIndicatorInSync() {
         show()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("nav-favorites").assertIsSelected()
+        assertIndicatorMatches("nav-favorites")
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("nav-compare").assertIsSelected()
         assertIndicatorMatches("nav-compare")
         compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
@@ -71,6 +74,8 @@ class ModelAtlasAppTest {
         assertIndicatorMatches("nav-settings")
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-compare").assertIsSelected()
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("nav-favorites").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         assertIndicatorMatches("nav-models")

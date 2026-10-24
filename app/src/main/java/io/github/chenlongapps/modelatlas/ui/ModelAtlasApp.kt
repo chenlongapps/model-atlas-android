@@ -76,6 +76,11 @@ import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareRoute
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareScreen
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareUiState
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesRoute
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesScreen
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesUiState
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteRemovalTransition
+import io.github.chenlongapps.modelatlas.ui.favorites.LocalFavoriteRemovalTransition
 import kotlinx.coroutines.launch
 
 @Composable
@@ -84,6 +89,7 @@ fun ModelAtlasApp(modifier: Modifier = Modifier) {
         modifier = modifier,
         debugContent = { bottomPadding, isVisible -> DebugFeature.Content(bottomPadding, isVisible) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
+        favoritesContent = { bottomPadding, onModelClick -> FavoritesRoute(bottomPadding, onModelClick) },
     ) { bottomOverlayPadding, listState, onModelClick ->
         ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
     }
@@ -98,10 +104,13 @@ internal fun ModelAtlasScaffold(
     compareContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { padding, visible ->
         ModelCompareScreen(ModelCompareUiState(), bottomOverlayPadding = padding, isVisible = visible)
     },
+    favoritesContent: @Composable (bottomOverlayPadding: Dp, onModelClick: (String) -> Unit) -> Unit = { padding, onClick ->
+        FavoritesScreen(FavoritesUiState(isLoading = false), onClick, bottomOverlayPadding = padding)
+    },
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
-        listOf(GlassNavigationItem.Models, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
+        listOf(GlassNavigationItem.Models, GlassNavigationItem.Favorites, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
     }
     val pagerState = rememberPagerState(pageCount = { navigationItems.size })
     val modelListState = rememberLazyListState()
@@ -117,9 +126,11 @@ internal fun ModelAtlasScaffold(
     val bottomOverlayPadding = navigationHeight.dp + 32.dp
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailSourceTag by rememberSaveable { mutableStateOf(GlassNavigationItem.Models.tag) }
     // ID 是可保存的导航状态；身份快照仅在当前进程的页面交接期间使用。
     var retainedModelId by remember { mutableStateOf(selectedModelId) }
     var initialIdentity by remember { mutableStateOf<ModelIdentitySnapshot?>(null) }
+    val favoriteRemoval = remember { FavoriteRemovalTransition() }
     val detailTransition = remember { ModelDetailTransitionController(selectedModelId != null) }
     val mainVisibility = rememberRetainedModelVisibility(detailTransition.main, detailTransition::onMainTargetComposed)
     val detailVisibility = rememberRetainedModelVisibility(detailTransition.detail, detailTransition::onDetailTargetComposed)
@@ -160,36 +171,46 @@ internal fun ModelAtlasScaffold(
         val placeMain = !showDataSource && (selectedModelId == null || transitioning)
         LaunchedEffect(selectedModelId, transitioning, detailVisibility.transition.currentState) {
             if (selectedModelId == null && !transitioning && detailVisibility.transition.currentState == EnterExitState.PostExit) {
+                // 共享覆盖层也完成交接后，才允许收藏来源卡片开始自己的退出动画。
+                if (detailSourceTag == GlassNavigationItem.Favorites.tag) favoriteRemoval.finishReturn()
                 retainedModelId = null
                 initialIdentity = null
             }
         }
         RetainedModelPage(placeMain, interactive = !subpageVisible) {
-            CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
-                sharedScope, mainVisibility, enabled = placeMain,
-                expansionProgress = expansion,
-                captureIdentity = { if (retainedModelId == null) initialIdentity = it },
-            )) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize().testTag("main-pager").layerBackdrop(backdrop),
-                    // 保留全部顶层页，切换时不重建列表或重启刷新提示的协程。
-                    beyondViewportPageCount = navigationItems.size - 1,
-                    key = { navigationItems[it].tag },
-                ) { page ->
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize().testTag("main-pager").layerBackdrop(backdrop),
+                // 保留全部顶层页，切换时不重建列表或重启刷新提示的协程。
+                beyondViewportPageCount = navigationItems.size - 1,
+                key = { navigationItems[it].tag },
+            ) { page ->
+                val sourceTag = navigationItems[page].tag
+                // 离屏页仍保留组合，但只有真实来源注册共享元素，避免同 ID 的两张卡竞争匹配。
+                CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
+                    sharedScope, mainVisibility,
+                    enabled = placeMain && if (retainedModelId != null) sourceTag == detailSourceTag else page == pagerState.currentPage,
+                    expansionProgress = expansion,
+                    captureIdentity = { if (retainedModelId == null) initialIdentity = it },
+                )) {
+                    val openModel: (String) -> Unit = { id ->
+                        // 同一帧挂载详情目标，源页面一直保留到共享过渡完成。
+                        if (retainedModelId == null) {
+                            detailSourceTag = sourceTag
+                            retainedModelId = id
+                            selectedModelId = id
+                            detailTransition.enter()
+                        }
+                    }
                     when (navigationItems[page]) {
                         GlassNavigationItem.Models -> CompositionLocalProvider(
-                            LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == 0),
+                            LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == page),
                         ) {
-                            modelContent(bottomOverlayPadding, modelListState) {
-                                // 同一帧挂载详情目标，源页面一直保留到共享过渡完成。
-                                if (retainedModelId == null) {
-                                    retainedModelId = it
-                                    selectedModelId = it
-                                    detailTransition.enter()
-                                }
-                            }
+                            modelContent(bottomOverlayPadding, modelListState, openModel)
                         }
+                        GlassNavigationItem.Favorites -> CompositionLocalProvider(
+                            LocalFavoriteRemovalTransition provides favoriteRemoval,
+                        ) { favoritesContent(bottomOverlayPadding, openModel) }
                         GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
                         GlassNavigationItem.Settings -> SettingsScreen(
                             bottomOverlayPadding = bottomOverlayPadding,
@@ -198,34 +219,34 @@ internal fun ModelAtlasScaffold(
                         else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .windowInsetsPadding(
-                            WindowInsets.navigationBars.union(WindowInsets.displayCutout)
-                                .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                        )
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                        .widthIn(max = 400.dp)
-                        .fillMaxWidth(),
-                ) {
-                    GlassNavigationBar(
-                        pagerState = pagerState,
-                        items = navigationItems,
-                        backdrop = backdrop,
-                        onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
-                        onModelsDoubleClick = {
-                            scope.launch {
-                                // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
-                                launch { pagerState.animateScrollToPage(0) }
-                                modelListState.animateScrollToItem(0, 0)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().onSizeChanged {
-                            navigationHeight = with(density) { it.height.toDp().value }
-                        },
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(
+                        WindowInsets.navigationBars.union(WindowInsets.displayCutout)
+                            .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
                     )
-                }
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .widthIn(max = 400.dp)
+                    .fillMaxWidth(),
+            ) {
+                GlassNavigationBar(
+                    pagerState = pagerState,
+                    items = navigationItems,
+                    backdrop = backdrop,
+                    onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+                    onModelsDoubleClick = {
+                        scope.launch {
+                            // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
+                            launch { pagerState.animateScrollToPage(0) }
+                            modelListState.animateScrollToItem(0, 0)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().onSizeChanged {
+                        navigationHeight = with(density) { it.height.toDp().value }
+                    },
+                )
             }
         }
         if (showDataSource) {
@@ -237,7 +258,9 @@ internal fun ModelAtlasScaffold(
                     sharedScope, detailVisibility, enabled = true,
                     expansionProgress = expansion,
                     initialIdentity = initialIdentity?.takeIf { it.id == id },
-                )) {
+                ), LocalFavoriteRemovalTransition provides favoriteRemoval.takeIf {
+                    detailSourceTag == GlassNavigationItem.Favorites.tag
+                }) {
                     key(id) {
                         ModelDetailContainer(id) { detailContent(id, detailTransition::exit) }
                     }

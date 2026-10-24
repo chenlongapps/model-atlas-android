@@ -42,6 +42,17 @@ signing.properties
 # Project-local temporary files
 /tmp/
 
+# AI coding agent local state
+/.claude/
+/.codex/
+/.cursor/
+/.gemini/
+/.opencode/
+/.windsurf/
+/.continue/
+/.aider/
+/.zcode/
+
 # Operating system files
 .DS_Store
 ._*

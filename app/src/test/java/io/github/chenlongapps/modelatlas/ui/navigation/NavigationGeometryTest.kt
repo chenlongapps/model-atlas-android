@@ -36,6 +36,15 @@ class NavigationGeometryTest {
         assertFalse(230f in rtl)
     }
 
+    @Test fun fiveTabsSeparateFavoritesFromModelsInBothDirections() {
+        val ltr = modelsTabRange(300f, 4f, 5, isRtl = false)
+        assertEquals(0f..56.8f, ltr)
+        assertFalse(65f in ltr)
+        val rtl = modelsTabRange(300f, 4f, 5, isRtl = true)
+        assertEquals(243.2f..300f, rtl)
+        assertFalse(235f in rtl)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun emptyNavigationIsRejected() { modelsTabRange(300f, 4f, 0, isRtl = false) }
 }

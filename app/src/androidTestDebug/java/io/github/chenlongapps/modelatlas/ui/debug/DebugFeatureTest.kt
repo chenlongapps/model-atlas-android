@@ -103,7 +103,7 @@ class DebugFeatureTest {
         compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
     }
 
-    @Test fun fourTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
+    @Test fun fiveTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 ModelAtlasScaffold(debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) }) { _, _, _ -> }
@@ -119,6 +119,8 @@ class DebugFeatureTest {
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-compare").assertIsSelected()
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("nav-favorites").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }

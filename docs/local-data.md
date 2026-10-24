@@ -2,7 +2,7 @@
 
 ## 当前实现与边界
 
-已定义并接通三张 Room3 实体、独立本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成目录存储，支持本地优先读取、后台检查与主动更新。
+已定义并接通三张 Room3 目录实体、独立收藏表、本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成目录存储，支持本地优先读取、后台检查与主动更新。收藏由 `FavoriteDao` 与 `RoomFavoriteRepository` 独立管理，不进入远端快照。
 
 - `CatalogMapper` 实现 DTO → Entity，保留整个目录与完整复杂字段；数据库名为 `catalog.db`，由 Hilt 配置 `AndroidSQLiteDriver`。
 - Repository 并行请求两个端点，均成功后形成完整快照；后台检查发现规范模型 ID 增删时暂存完整快照，待用户确认；ID 集合不变、仅内容变化时静默以全量快照事务更新三表，不显示更新提醒。主动下拉刷新直接同步完整变化。规范模型与服务商左连接 Flow 驱动真实 LLM 列表。
@@ -14,6 +14,8 @@
 - Debug 顶层调试页通过既有 `CatalogStore.readCatalog()` 在 IO dispatcher 读取一致的完整快照，仅保留三张表的数量；切入且分页停稳、手动重读及刷新结束后读取，离屏预组合不读库，不做 LLM 筛选或持续观察。手动刷新仍走正式仓库的原子提交，不新增调试写库、Schema 或 DAO 接口。页面明确标注统计口径、读取失败与旧值。
 
 ## 三张表的职责
+
+下表仅列出远端目录；用户收藏是第四张独立表，见下文。
 
 源码路径相对于 [`data/local/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/)。
 
@@ -42,6 +44,16 @@
 服务自身的字段使用其 DTO 的信息，不用规范模型覆盖缺失的服务能力或限制。`replaceCatalog()` 在同一事务中删除旧服务与模型、upsert 服务商、插入新模型与服务，再删除本次快照不存在的服务商。不使用服务商 `REPLACE`，避免意外级联；任一步失败时三表一起回滚。有效空快照会清空目录。
 
 `observeModelRows()` 通过 `canonicalModelId` 左连接，按规范模型名称与 ID、服务商名称与 ID 排序并去重；没有关联的模型保留空服务商，未匹配的服务仍保存在表中但不生成伪规范模型。投影包含规范模型的发布时间、上下文／输出 token 限制、输入／输出模态、开放权重与许可，不取服务覆盖值。`observeOfferingPriceRows()` 是另一条投影，只返回 `canonicalModelId`、服务商 ID 与名称、服务内键和 `pricing`，不重复规范模型字段，也不在 SQL 内选择档位或报价。列表映射层按规范模型 ID 去重、执行 LLM 收录规则并按报价投影分组挑选展示报价，不再将服务商与描述传递给列表界面；最终列表顺序由映射层按发布时间倒序决定（最新在前，缺失或空白发布时间排在最后，相同时间按名称和稳定 ID 稳定排序），DAO 的名称排序仅作为去重前的稳定输入；来源规则见[数据源说明](data-source.md)。
+
+## 本地收藏
+
+- `favorites` 以规范模型 ID（`modelId`）为主键，保存 `favoritedAtEpochMillis`、最后可用的 `name` 和 `lab`。不保存历史参数、报价、完整详情或服务商选择，不按同名迁移 ID。
+- 不设指向 `models` 的外键：目录全量替换、下架或空快照都不删除收藏。目录比较、`hasCatalog()` 和调试统计仍只计算三张目录表。
+- `FavoriteDao.add()` 在事务内读取并校验当前模型及 LLM 收录规则，再以 IGNORE 插入；重复添加不改变时间。删除幂等；重新收藏使用新的时间。列表按收藏时间倒序，同时间按规范 ID 稳定排序。
+- `CatalogDao.replaceCatalog()` 在原有事务内，仅为本次仍可用的已收藏模型更新名称与 LAB；不改变收藏时间，不可用时保留最后身份，失败时与目录一起回滚。
+- `observeFavorites()` 通过嵌套 Relation 在单个事务内读取收藏、可选规范模型及关联服务／服务商；仓库复用 LLM 收录和默认报价映射，避免独立 Flow 在刷新时短暂拼接出失效模型或旧价格。不存在或不再收录时只返回收藏身份，同 ID 恢复后重新显示当前卡片。
+- 项目尚未发布，按本次约定继续使用 Schema **v1**，直接更新导出的 `1.json`，不提供旧开发 Schema 的迁移，也不启用破坏性重建兜底。已有旧 Schema 的开发安装需要自行清除数据或重装；正式发布后再从此基线维护升级迁移。本地持久化不承诺卸载重装或跨设备恢复。
+- `FavoriteDatabaseTest` 覆盖排序／重复／重新收藏、最后可用身份、下架与重新出现、零价与报价消失、失败回滚、刷新并发、不可用收藏文件重开。ViewModel 与界面另覆盖本地重试、保存失败不返回、防重复提交及来源返回。
 
 ## 列与本地 JSON
 
@@ -78,6 +90,6 @@ JSON 字段目前不承担复杂 SQL 筛选或排序。未来明确需要按单�
 
 - `CatalogTypeConvertersTest` 覆盖全部转换器的空值和往返转换、空集合 / 对象、零价、精确档位与旧字段、可空推理选项、交错推理变体、动态模式、自由 JSON、未知字段和非法数据。
 - `CatalogEntitiesTest` 覆盖可选字段默认未知、独立标识、显式获取时间、服务自身的能力 / 限制，以及超出 Int 的 token 数和不完整日期。
-- `CatalogSchemaTestDatabase` 通过 `app/build.gradle.kts` 中的 `kspTest` 显式启用 Room 处理器，让测试编译阶段校验三实体的字段类型、复合主键、外键、索引和转换器声明；这不等同于数据库读写或级联删除测试。
+- `CatalogSchemaTestDatabase` 通过 `app/build.gradle.kts` 中的 `kspTest` 显式启用 Room 处理器，让测试编译阶段校验四实体的字段类型、复合主键、外键、索引和转换器声明；这不等同于数据库读写或级联删除测试。
 
 `androidTest` 的 `CatalogDatabaseTest` 验证实际 SQLite 读写、跨服务商重复服务 ID、显式与缺失关联、快照替换、外键失败时整笔回滚和文件数据库重开，并验证完整快照读取、目录存在性查询、报价投影只取显式关联且有报价的服务、未匹配报价行不会变成模型、无报价时不生成报价行；详情查询另覆盖所有显式关联服务（含无报价）、服务商嵌套读取、无关联模型和模型移除。生产 Schema v1 导出到 `app/schemas/`，本次无需升级。目录比较、模型增删待确认且不写库、内容静默同步、应用快照、离线展示和刷新失败保留数据由仓库／ViewModel 单元测试覆盖。详情已展示记录级时间，目录页统一更新时间仍未实现。任务进度只在 [TODO.md](../TODO.md) 维护。
