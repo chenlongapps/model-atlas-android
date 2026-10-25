@@ -181,11 +181,13 @@ internal fun ModelDetailContainer(modelId: String, content: @Composable BoxScope
                     clipInOverlayDuringTransition = OverlayClip(shape),
                 )
                 .graphicsLayer {
-                    // sharedBounds 的 None 退出不会隐藏保留中的布局；共享层结束到外壳清理之间
-                    // 仍可能有一帧普通绘制，不能让已退出的全屏表面重新盖住目录。
+                    // sharedBounds 的 None 退出不会隐藏保留中的布局。入场倒放的端点交接中，
+                    // 起止状态已为 PostExit、实际扩展也已归零，但子动画仍可能短暂 isRunning；
+                    // 不能等待该标志归零才隐藏，否则共享层撤下后会闪回普通全屏绘制。
+                    // 同时检查实际扩展进度，避免反向动画尚未收完时提前隐藏容器。
                     val exited = visibility.transition.currentState == EnterExitState.PostExit &&
                         visibility.transition.targetState == EnterExitState.PostExit &&
-                        !visibility.transition.isRunning
+                        context.expansionProgress() <= 0f
                     alpha = if (exited) 0f else if (state.isMatchFound) 1f else fallbackOpacity
                 }
                 .drawBehind { drawRect(lerp(cardColor, pageColor, context.expansionProgress())) },

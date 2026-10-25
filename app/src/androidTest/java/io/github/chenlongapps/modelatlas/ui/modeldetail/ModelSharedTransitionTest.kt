@@ -506,6 +506,54 @@ class ModelSharedTransitionTest {
         assertPixelMapsNear(catalog, compose.onRoot().captureToImage().toPixelMap())
     }
 
+    @Test fun lightPredictiveReturnDuringEntryDoesNotFlashAtTheRewoundEndpoint() =
+        assertPredictiveEntryReturnFrames(dark = false)
+
+    @Test fun darkPredictiveReturnDuringEntryDoesNotFlashAtTheRewoundEndpoint() =
+        assertPredictiveEntryReturnFrames(dark = true)
+
+    /** 手势开始、进度、确认及端点交接均逐帧采样，不能用一次 advanceTimeBy 掩盖中途闪屏。 */
+    private fun assertPredictiveEntryReturnFrames(dark: Boolean) {
+        show(dark = dark)
+        val source = compose.onNodeWithTag("model:openai/one").fetchSemanticsNode().boundsInRoot
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val catalogPixels = compose.onRoot().captureToImage().toPixelMap()
+        compose.mainClock.autoAdvance = false
+        for ((index, entryMillis) in listOf(48L, 96L, 240L).withIndex()) {
+            compose.onNodeWithTag("model:openai/one").performClick()
+            compose.mainClock.advanceTimeBy(entryMillis)
+            var previous = detailTransition.expansionProgress()
+            assertTrue("测试必须在入场尚未完成时返回：$entryMillis $previous", previous > 0f && previous < 1f)
+            backInput.edge = if (index % 2 == 0) NavigationEvent.EDGE_LEFT else NavigationEvent.EDGE_RIGHT
+            compose.runOnIdle { backInput.start() }
+            repeat(40) { frame ->
+                if (frame == 2) compose.runOnIdle { backInput.progress(.75f) }
+                if (frame == 4) compose.runOnIdle { backInput.complete() }
+                compose.mainClock.advanceTimeByFrame()
+                val pixels = compose.onRoot().captureToImage().toPixelMap()
+                val expansion = detailTransition.expansionProgress()
+                val visibility = detailTransition.visibilityScope.transition
+                val context = "entry=${entryMillis}ms frame=$frame expansion=$expansion " +
+                    "state=${visibility.currentState}->${visibility.targetState} running=${visibility.isRunning}"
+                assertTrue("返回不能突然重新展开：$context", expansion <= previous + .001f)
+                previous = expansion
+                val allowed = lerp(source, root, expansion).inflate(3f)
+                val changed = changedBoundsOrNull(catalogPixels, pixels, channelTolerance = 4)
+                assertTrue("入场反向返回及端点交接不能在容器外闪出全屏详情：$context changed=$changed allowed=$allowed",
+                    changed == null || (changed.left >= allowed.left && changed.top >= allowed.top &&
+                        changed.right <= allowed.right && changed.bottom <= allowed.bottom))
+            }
+            compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
+            assertPixelMapsNear(catalogPixels, compose.onRoot().captureToImage().toPixelMap())
+            compose.runOnIdle {
+                assertEquals(index + 1, detailsDisposed)
+                assertEquals(1, listCompositions)
+                assertEquals(0, listDisposals)
+            }
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
     @Test fun predictiveCancelPreservesScrolledTabAndLoadingHandoffAndMissingSourceCanStillExit() {
         status.value = ModelDetailStatus.LOADING
         show(dark = true, fontScale = 2f, rtl = true)
