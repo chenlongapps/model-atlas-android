@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.material.kolor)
     implementation(libs.backdrop)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -99,6 +100,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     // Local persistence
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.room3.runtime)
     implementation(libs.androidx.sqlite.framework)
     ksp(libs.androidx.room3.compiler)

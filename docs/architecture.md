@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的真实 LLM 列表、本地搜索与筛选、模型详情、收藏、双模型对比、网络请求、独立映射、Room3 存储、本地优先刷新策略，以及顶层分页与悬浮玻璃导航。Release 为“模型／收藏／对比／设置”四栏，Debug 末尾追加同级“调试”；设置页只提供“数据来源与许可”独立页面入口。详情提供全部显式关联服务和记录级来源时效。目录页统一更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
+本文描述当前已实现的真实 LLM 列表、本地搜索与筛选、模型详情、收藏、双模型对比、网络请求、独立映射、Room3 存储、本地优先刷新策略，以及顶层分页与悬浮玻璃导航。Release 为“模型／收藏／对比／设置”四栏，Debug 末尾追加同级“调试”；设置提供“外观”及“数据来源与许可”独立子页。详情提供全部显式关联服务和记录级来源时效。目录页统一更新时间展示仍属于规划，任务状态见 [TODO.md](../TODO.md)。
 
 ## 代码入口与职责
 
@@ -9,10 +9,12 @@
 | 路径 | 当前职责 |
 | --- | --- |
 | [`ModelAtlasApplication.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ModelAtlasApplication.kt) | 通过 `@HiltAndroidApp` 初始化 Hilt |
-| [`MainActivity.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/MainActivity.kt) | 应用入口，启用边到边显示，承载 `ModelAtlasTheme` 与 `ModelAtlasApp`，关闭系统导航栏对比度遮罩 |
+| [`MainActivity.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/MainActivity.kt) | 应用入口，边到边显示、外观偏好首读等待及全局主题收集，同步系统栏图标和窗口底色，承载 `ModelAtlasTheme` 与 `ModelAtlasApp` |
 | [`ui/ModelAtlasApp.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/ModelAtlasApp.kt) | 顶层分页外壳，Release 为模型／收藏／对比／设置，Debug 追加调试页；共享导航条目驱动分页与底栏，保存详情来源以隔离共享动画，记录页面背景供玻璃采样，并传递悬浮栏避让高度 |
 | [`ui/navigation/GlassNavigationBar.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/navigation/GlassNavigationBar.kt) | Backdrop 悬浮玻璃胶囊、连续跟随分页偏移的选中块、点击和拖动切换、选中图标和颜色过渡及震动反馈 |
-| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面，仅提供“数据来源与许可”入口，不再承载调试入口 |
+| [`ui/settings/SettingsScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/SettingsScreen.kt) | 设置页面，提供外观及数据来源与许可入口，不承载调试入口 |
+| [`ui/settings/AppearanceViewModel.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/AppearanceViewModel.kt)、[`AppearanceScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/AppearanceScreen.kt) | Activity 级主题状态与无注入外观页，实时滑块预览／防抖提交、首读与保存失败处理，详见[外观设置](appearance-settings.md) |
+| [`data/repository/SettingsRepository.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/SettingsRepository.kt) | Preferences DataStore 持久化状态与原子修改接口，无 Compose 依赖，预留后续工具复用但不接入 AI |
 | [`ui/settings/DataSourceScreen.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/ui/settings/DataSourceScreen.kt) | 独立说明页，集中展示数据来源、第三方身份、价格适用条件和随包 MIT 许可全文，提供返回按钮 |
 | [`data/model/ModelSummary.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelSummary.kt) | 独立列表摘要模型，包含稳定 ID、名称、发布时间、token 限制、输入／输出模态、开放权重与许可；LAB 从稳定 ID 前缀派生，不引用 DTO 或 Entity |
 | [`data/model/ModelPrice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelPrice.kt) | `ModelPriceSummary` 与 `ModelPriceTierSummary`，单条展示报价与条件档位，口径为 USD / 百万 tokens |
@@ -99,7 +101,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - Debug 专属调试功能按 source set 隔离：`src/debug/java/.../ui/debug/DebugFeature.kt` 提供 `navigationItem` 与 Route，`DebugScreen.kt` 为无注入页面，`DebugViewModel.kt` 管理只读统计与手动刷新；`src/release/java/.../ui/debug/DebugFeature.kt` 提供同签名空内容及 `navigationItem = null`。主源码不引用 Debug 专用资源或 ViewModel，不使用 `BuildConfig.DEBUG` 分支。调试文案与图标仅在 `src/debug/res/`。调试属于主分页器，不隐藏底栏、没有返回设置按钮，不拦截顶层系统返回；设置不再提供调试入口。标题作为列表首项随内容滚动，正文接收实测悬浮栏避让高度；切页、配置恢复保留统计状态与滚动位置，不增加 Activity 或导航框架。
 - 调试页展示版本名称／版本号、实际 Application ID／可调试标志、构建类型、厂商／型号、Android 版本／API 级别。复制诊断信息仅包含这些字段、已读三表数量及统计说明，不读取设备唯一标识或原始请求配置。统计仅在调试页成为 `settledPage` 且未打开子页面、手动重读或刷新结束时通过 `CatalogStore.readCatalog()` 单事务读取；离屏预组合不读库，也不自动联网。在 IO dispatcher 仅提取数量、不长期保存完整快照，不过滤非 LLM 或未关联服务，不轮询。读取失败保留旧数并明确说明，未知统计不显示为零。
 - 调试手动刷新调用同一个单例 `ModelRepository.refresh()`，沿用串行请求协调、完整快照事务与限流，不直接写数据库或绕过冷却；不提供清空／删除／任意端点工具。页面忙碌时禁用重复操作，显示更新／无变化／分类错误，取消不显示失败；刷新结果与统计读取错误独立。成功后调用同一列表 ViewModel 的 `onCatalogRefreshedExternally()`，等原有加载／检查结束后只重读本地并按需恢复观察，清除已失效的待更新提示及首次失败，不再联网、不清除查询和列表位置。退出调试页不会主动取消已经发起的 ViewModel 刷新；完成后仍同步列表，ViewModel 清除时取消。
-- 悬浮栏参考 RvSystem Monitor 的玻璃样式，使用 `io.github.kyant0:backdrop:2.0.0`：分页内容通过 `layerBackdrop` 记录，导航外壳和选中块分别采样，组合增艳、4dp 模糊、镜片折射与色散，覆盖主题半透明底色。Android 12/12L 支持模糊，Android 13 及以上再叠加运行时着色器折射；Android 10/11 与设计预览使用实色胶囊兜底。没有新增外观开关，配色沿用动态主题。
+- 悬浮栏参考 RvSystem Monitor 的玻璃样式，使用 `io.github.kyant0:backdrop:2.0.0`：分页内容通过 `layerBackdrop` 记录，导航外壳和选中块分别采样，组合增艳、4dp 模糊、镜片折射与色散，覆盖主题半透明底色。Android 12/12L 支持模糊，Android 13 及以上再叠加运行时着色器折射；Android 10/11 与设计预览使用实色胶囊兜底。玻璃效果没有单独开关，底色跟随当前应用主题。
 - 胶囊底部居中，距系统导航安全区 16dp，水平至少留白 16dp、最大宽度 400dp；底部与两侧避让导航栏及显示缺口。页面仍自行处理系统安全区，外壳只额外传递实测导航高度加 32dp 外边距，列表使用底部 `contentPadding`，因此滚动内容可经过玻璃后方，而列表末尾及内联提醒的操作仍可滚动到导航上方。实测高度以 dp 数值通过 `rememberSaveable` 保存，恢复首帧沿用已有高度，避免临时默认留白将接近列表末尾的保存位置夹回。标签提供 Tab 单选语义及至少 56dp 的布局高度，字号放大时导航自动增高；位置与拖动映射支持 RTL。
 - 模型标签使用三柱圆角图标：参考所提供 SVG 的 473∶223 比例、柱宽、高度与圆角，等比居中于 24dp 图标槽；中心柱更高更宽，两侧以 alpha 保留层次。未选中使用 `ic_nav_models_outline.xml` 中空描边版，选中使用 `ic_nav_models.xml` 实心版；描边约 1.3dp，中心线向内收缩，保证两版外轮廓一致，内部真正透明而非背景色填充。图标通过既有 Crossfade 过渡，颜色沿用导航主题，不固定 SVG 的灰黑色；列表状态卡片的 `ic_catalog` 保持不变。
 - 页面不使用 `TopAppBar`、Scaffold 的 `topBar` 插槽或应用栏专用滚动行为。模型列表的标题与目录数量放在 Scaffold 内容区内，作为 `LazyColumn` 的首项 `CatalogHeader`，与模型卡片同速滚动，回到列表顶部时才再次显示，不固定、不吸顶，也不在下滑时单独弹出。Scaffold 最后叠加随主题变化的半透明状态栏渐变保护层，不占布局空间、不拦截触摸。来源许可入口已移至设置页，模型列表不再显示价格说明卡片。
@@ -110,7 +112,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 
 - 列表展示模型名、LAB 文字与 logo、发布时间、上下文长度、最大输出、多模态能力和开放权重。LAB 取稳定 ID 第一个 `/` 前的非空白部分，没有分隔符或有效前缀时显示“暂无数据”，不视为独立核实的开发商。日期保留来源精度，限制在数据层保留完整 `Long`，列表视觉使用十进制 K／M 缩写、最多一位小数并去除末尾零（`1,000,000 → 1M`、`384,000 → 384K`、`131,072 → 131.1K`）；读屏仍提供字段名、带千位分隔的精确值和 tokens 单位。上下文长度使用横向扩展图标（`ic_context_window`），最大输出使用文字输出箭头图标（`ic_output_limit`），均为随主题着色的 16dp 描边图标，视觉上不重复单位。
 - 列表保留参考 RvSystem Monitor 的圆角结构，模型卡片仅按新的参考图调整紧凑布局、不复制配色：24dp 圆角、16dp 内边距与 16dp 列表间距；56dp logo 右侧显示模型名、LAB、合并的权重许可标签，下面是可换行的图标参数行；输入与输出模态标签横排，中间以指向输出的箭头区分，不显示“输出：”前缀，读屏保留输入／输出说明，窄屏可换行。模型能力与价格之间仅用一条细分隔线分区，价格不再嵌套独立背景或圆角卡片；输入／输出及存在时的缓存命中输入仍以主题色突出、列间显示细分隔线，按价格区可用宽度和字号调整为 1–3 列，窄屏时不额外缩小字体、截断单价或将价格改为近似值。保留顶部目录数量与既有发布时间倒序；点击卡片打开详情，价格档位标题独立处理展开，不触发页面跳转。
-- 主题仍使用现有 Material 3 依赖；Android 12 及以上使用系统动态浅色／深色调色板，低版本使用固定备用色。预览关闭动态取色，保持可复现；测试可通过 `ModelAtlasTheme(dynamicColor = false)` 固定配色。加载、空目录、分类错误和来源说明区块统一采用圆角与色调分层。Activity 的 `enableEdgeToEdge()` 继续管理系统栏图标颜色，保留时间、电量等系统信息。模型列表合并系统栏与显示缺口 insets，Scaffold 将安全区传给列表的 `contentPadding`，不在列表或其父容器添加系统栏 padding，因此初始标题和首条内容避开系统图标，滚动内容仍可延伸到状态栏下方；底部安全区不变。来源说明子页面则整体避让安全区，确保固定返回按钮和滚动正文不被系统栏覆盖。
+- 明暗模式与颜色来源独立：默认跟随系统明暗和动态色，也可强制浅深、选择预设或用单色相滑块自定义；DataStore 持久化与异常策略见[外观设置](appearance-settings.md)。预览关闭系统动态取色，保持可复现；测试可通过 `ModelAtlasTheme(dynamicColor = false)` 固定备用配色。Activity 启用边到边显示，并按应用实际明暗显式同步系统栏图标，保留时间、电量等系统信息。模型列表合并系统栏与显示缺口 insets，Scaffold 将安全区传给列表的 `contentPadding`，不在列表或其父容器添加系统栏 padding，因此初始标题和首条内容避开系统图标，滚动内容仍可延伸到状态栏下方；底部安全区不变。外观与来源子页面整体避让安全区。
 - 开放权重按 `open_weights` 三态展示：“开放权重”“权重未公开”“开放权重：暂无数据”；仅在权重公开且 `license` 去除首尾空白后为 1–16 个字符时，以中点附带原始许可短名，如“开放权重 · MIT”“开放权重 · Apache-2.0”。长名称不截断、不猜测简称，列表仅显示“开放权重”，详情单独展示完整许可原文。该字段是来源报告的权重可获取状态，不等于开源、允许任意用途或允许商用，界面来源说明已注明这一点。
 - 列表在模型名左侧显示 LAB 彩色 logo：素材来自 Models.dev 的 Logos 服务，随包覆盖 23 个实验室，按稳定 ID 第一个 `/` 前的前缀精确匹配；没有素材（含 LAB 缺失）时显示兜底星光图，不借用其他实验室的素材，也不从服务商 ID 或名称反推对应关系。素材保留品牌原色、不随主题变色，因此使用固定白色圆角底，保证深色图案在深色卡片上同样可读；logo 只是视觉标识，「LAB 为 ID 前缀标签、未经独立核实」的说明保留。
 - LAB 在界面文案中统一称为“研发机构”，包括搜索提示、筛选分组、已选标签、读屏与来源说明；仍保留按模型 ID 前缀展示、未经独立核实的说明。机构名称通过 `LabDisplayName.kt` 将已收录的 23 个前缀映射为品牌惯用写法（如 `openai → OpenAI`、`deepseek → DeepSeek`、`xai → xAI`），模型卡片、筛选选项、已选标签及其读屏使用同一名称；未知 LAB 保留原文，缺失值仍显示“暂无数据”。只调整展示，`ModelSummary.lab`、查询条件、搜索匹配、LAB 排序和 logo 匹配仍使用原始 ID，不改数据库或服务商认定。
@@ -123,7 +125,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 已实现本地优先与离线浏览：每个新的列表 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。仅比较完整规范模型的稳定 ID 集合来决定是否提示增删（同数量替换也提示），不受 LLM 收录结果、搜索或筛选影响。ID 集合不变时，参数、名称、类型、报价以及服务商／模型服务的增删改均静默以完整快照事务同步，列表随 Flow 更新，查询条件保留并重新匹配；不会把内容变化误当成模型增删。不将本地抓取时间或字典顺序变化当作内容更新，内容一致不重复写库。模型增删的待应用完整快照仅暂存在仓库内存中，进程重启后重新检查。目录页尚未展示统一更新时间，也未引入 TTL 策略；详情只观察本地，不额外检查网络。
 - 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
-- 当前有模型、收藏、对比与设置四个常规顶层标签，Debug 另有同级的调试标签；模型详情与来源许可仍为子页面，没有基于路由的通用导航栈。
+- 当前有模型、收藏、对比与设置四个常规顶层标签，Debug 另有同级的调试标签；模型详情、外观与来源许可为子页面，没有基于路由的通用导航栈。
 - Models.dev 的收录、计价、能力与许可约定见[数据源说明](data-source.md)。
 
 ## 收藏的数据与状态

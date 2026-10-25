@@ -63,6 +63,8 @@ import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationBar
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
 import io.github.chenlongapps.modelatlas.ui.settings.SettingsScreen
+import io.github.chenlongapps.modelatlas.ui.settings.AppearanceScreen
+import io.github.chenlongapps.modelatlas.ui.settings.AppearanceUiState
 import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailRoute
 import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
@@ -84,9 +86,15 @@ import io.github.chenlongapps.modelatlas.ui.favorites.LocalFavoriteRemovalTransi
 import kotlinx.coroutines.launch
 
 @Composable
-fun ModelAtlasApp(modifier: Modifier = Modifier) {
+fun ModelAtlasApp(
+    modifier: Modifier = Modifier,
+    appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
+        AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
+    },
+) {
     ModelAtlasScaffold(
         modifier = modifier,
+        appearanceContent = appearanceContent,
         debugContent = { bottomPadding, isVisible -> DebugFeature.Content(bottomPadding, isVisible) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
         favoritesContent = { bottomPadding, onModelClick -> FavoritesRoute(bottomPadding, onModelClick) },
@@ -107,6 +115,9 @@ internal fun ModelAtlasScaffold(
     favoritesContent: @Composable (bottomOverlayPadding: Dp, onModelClick: (String) -> Unit) -> Unit = { padding, onClick ->
         FavoritesScreen(FavoritesUiState(isLoading = false), onClick, bottomOverlayPadding = padding)
     },
+    appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
+        AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
+    },
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
@@ -125,6 +136,7 @@ internal fun ModelAtlasScaffold(
     var navigationHeight by rememberSaveable { mutableStateOf(64f) }
     val bottomOverlayPadding = navigationHeight.dp + 32.dp
     var showDataSource by rememberSaveable { mutableStateOf(false) }
+    var showAppearance by rememberSaveable { mutableStateOf(false) }
     var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailSourceTag by rememberSaveable { mutableStateOf(GlassNavigationItem.Models.tag) }
     // ID 是可保存的导航状态；身份快照仅在当前进程的页面交接期间使用。
@@ -141,7 +153,7 @@ internal fun ModelAtlasScaffold(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || retainedModelId != null
+    val subpageVisible = showDataSource || showAppearance || retainedModelId != null
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition) {
         snapshotFlow { backState.transitionState }.collect { state ->
@@ -158,7 +170,9 @@ internal fun ModelAtlasScaffold(
             isBackEnabled = subpageVisible,
             onBackCancelled = { detailTransition.cancelBack() },
             onBackCompleted = {
-                if (retainedModelId != null) detailTransition.exit() else showDataSource = false
+                if (retainedModelId != null) detailTransition.exit()
+                else if (showAppearance) showAppearance = false
+                else showDataSource = false
             },
         )
     }
@@ -168,7 +182,7 @@ internal fun ModelAtlasScaffold(
         val transitioning = detailTransition.active || mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
             detailVisibility.transition.currentState != detailVisibility.transition.targetState ||
             mainVisibility.transition.isRunning || detailVisibility.transition.isRunning || isTransitionActive
-        val placeMain = !showDataSource && (selectedModelId == null || transitioning)
+        val placeMain = !showDataSource && !showAppearance && (selectedModelId == null || transitioning)
         LaunchedEffect(selectedModelId, transitioning, detailVisibility.transition.currentState) {
             if (selectedModelId == null && !transitioning && detailVisibility.transition.currentState == EnterExitState.PostExit) {
                 // 共享覆盖层也完成交接后，才允许收藏来源卡片开始自己的退出动画。
@@ -215,6 +229,7 @@ internal fun ModelAtlasScaffold(
                         GlassNavigationItem.Settings -> SettingsScreen(
                             bottomOverlayPadding = bottomOverlayPadding,
                             onShowDataSource = { showDataSource = true },
+                            onShowAppearance = { showAppearance = true },
                         )
                         else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
                     }
@@ -251,6 +266,9 @@ internal fun ModelAtlasScaffold(
         }
         if (showDataSource) {
             DataSourceScreen(onBack = { showDataSource = false })
+        }
+        if (showAppearance) {
+            appearanceContent { showAppearance = false }
         }
         retainedModelId?.let { id ->
             RetainedModelPage(placed = true, interactive = selectedModelId != null && detailTransition.interactive) {

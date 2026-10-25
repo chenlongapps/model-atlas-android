@@ -39,6 +39,7 @@ internal fun SettingsScreen(
     bottomOverlayPadding: Dp,
     onShowDataSource: () -> Unit,
     modifier: Modifier = Modifier,
+    onShowAppearance: () -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     Scaffold(
@@ -62,6 +63,24 @@ internal fun SettingsScreen(
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() },
                 )
+            }
+            item {
+                Surface(
+                    onClick = onShowAppearance,
+                    modifier = Modifier.fillMaxWidth().testTag("settings-appearance"),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(painterResource(R.drawable.ic_palette), contentDescription = null)
+                        Text(stringResource(R.string.appearance_title), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null)
+                    }
+                }
             }
             item {
                 Surface(

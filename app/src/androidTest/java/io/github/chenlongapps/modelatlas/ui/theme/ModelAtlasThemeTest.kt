@@ -10,6 +10,11 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.graphics.Color
+import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
+import io.github.chenlongapps.modelatlas.data.model.ThemeColorSource
+import io.github.chenlongapps.modelatlas.data.model.ThemeMode
+import io.github.chenlongapps.modelatlas.data.model.ThemePreset
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -40,10 +45,30 @@ class ModelAtlasThemeTest {
         assertPalette(dark = false, dynamic = true, expected = lightColorScheme())
     }
 
-    private fun assertPalette(dark: Boolean, dynamic: Boolean, expected: ColorScheme) {
+    @Test fun forcedLightStillUsesSystemDynamicColors() {
+        assertPalette(true, true, dynamicLightColorScheme(InstrumentationRegistry.getInstrumentation().targetContext),
+            AppearanceSettings(mode = ThemeMode.Light))
+    }
+
+    @Test fun forcedDarkStillUsesSystemDynamicColors() {
+        assertPalette(false, true, dynamicDarkColorScheme(InstrumentationRegistry.getInstrumentation().targetContext),
+            AppearanceSettings(mode = ThemeMode.Dark))
+    }
+
+    @Test fun presetHasPriorityOverDynamicColorAndFollowsSelectedMode() {
+        assertPalette(false, true, generatedColorScheme(Color(ThemePreset.Teal.argb), true),
+            AppearanceSettings(mode = ThemeMode.Dark, colorSource = ThemeColorSource.Preset, preset = ThemePreset.Teal))
+    }
+
+    @Test fun customHueHasPriorityOverDynamicColorAndInactivePreset() {
+        assertPalette(true, true, generatedColorScheme(hueColor(135f), false),
+            AppearanceSettings(mode = ThemeMode.Light, colorSource = ThemeColorSource.Custom, preset = ThemePreset.Rose, customHue = 135f))
+    }
+
+    private fun assertPalette(dark: Boolean, dynamic: Boolean, expected: ColorScheme, appearance: AppearanceSettings? = null) {
         lateinit var actual: ColorScheme
         compose.setContent {
-            ModelAtlasTheme(darkTheme = dark, dynamicColor = dynamic) {
+            ModelAtlasTheme(darkTheme = dark, dynamicColor = dynamic, appearance = appearance) {
                 val colors = MaterialTheme.colorScheme
                 SideEffect { actual = colors }
             }

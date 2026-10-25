@@ -1,6 +1,10 @@
 package io.github.chenlongapps.modelatlas.di
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room3.Room
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import dagger.Binds
@@ -18,6 +22,9 @@ import io.github.chenlongapps.modelatlas.data.repository.DefaultModelRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.RoomFavoriteRepository
+import io.github.chenlongapps.modelatlas.data.repository.SettingsRepository
+import io.github.chenlongapps.modelatlas.data.repository.DataStoreSettingsRepository
+import io.github.chenlongapps.modelatlas.data.repository.SettingsFileName
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
@@ -37,6 +44,9 @@ annotation class IoDispatcher
 @InstallIn(SingletonComponent::class)
 abstract class DataBindings {
     @Binds
+    abstract fun settings(repository: DataStoreSettingsRepository): SettingsRepository
+
+    @Binds
     abstract fun favorites(repository: RoomFavoriteRepository): FavoriteRepository
 
     @Binds
@@ -49,6 +59,14 @@ abstract class DataBindings {
 @Module
 @InstallIn(SingletonComponent::class)
 object DataModule {
+    @Provides
+    @Singleton
+    fun settingsDataStore(@ApplicationContext context: Context): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create(produceFile = {
+            // preferencesDataStoreFile 自动添加扩展名。
+            context.preferencesDataStoreFile(SettingsFileName.removeSuffix(".preferences_pb"))
+        })
+
     @Provides
     @IoDispatcher
     fun ioDispatcher(): CoroutineDispatcher = Dispatchers.IO
