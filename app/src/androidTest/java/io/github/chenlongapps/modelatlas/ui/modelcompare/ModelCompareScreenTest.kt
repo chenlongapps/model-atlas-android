@@ -109,6 +109,35 @@ class ModelCompareScreenTest {
         compose.runOnIdle { assertEquals(0, selects) }
     }
 
+    @Test fun pickerPrioritizesFavoritesDuringSearchAndUpdatesWithoutEnablingDuplicateSelection() {
+        var selects = 0
+        val state = mutableStateOf(ModelCompareUiState(models = summaries, catalogStatus = CompareReadStatus.CONTENT,
+            second = ready.second, favoriteIds = setOf("openai/b", "removed/model")))
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            ModelCompareScreen(state.value, onSelect = { _, _ -> selects++ })
+        } }
+        compose.onNodeWithTag("compare-slot-0").performClick()
+        fun assertBefore(first: String, second: String) {
+            val firstBounds = compose.onNodeWithTag("compare-option:$first").fetchSemanticsNode().boundsInRoot
+            val secondBounds = compose.onNodeWithTag("compare-option:$second").fetchSemanticsNode().boundsInRoot
+            assertTrue(firstBounds.bottom <= secondBounds.top)
+        }
+        assertBefore("openai/b", "deepseek/a")
+        compose.onNodeWithTag("compare-option:openai/b").assertIsNotEnabled().performClick()
+        compose.onNodeWithTag("compare-option:removed/model").assertDoesNotExist()
+        compose.onNodeWithTag("compare-search").performTextInput("Model")
+        assertBefore("openai/b", "deepseek/a")
+        compose.onNodeWithContentDescription("清空搜索").performClick()
+        compose.onNodeWithTag("compare-search").performTextInput("deepseek")
+        compose.onNodeWithTag("compare-option:deepseek/a").assertIsDisplayed()
+        compose.onNodeWithTag("compare-option:openai/b").assertDoesNotExist()
+        compose.onNodeWithContentDescription("清空搜索").performClick()
+        compose.runOnIdle { state.value = state.value.copy(favoriteIds = setOf("deepseek/a")) }
+        assertBefore("deepseek/a", "openai/b")
+        compose.onNodeWithTag("compare-option:openai/b").assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(0, selects) }
+    }
+
     @Test fun showsExactParameterSemanticsUnknownCollectionsAndDefaultQuoteOnly() {
         show()
         scrollToDescription("Model A，上下文长度：131,072 tokens")

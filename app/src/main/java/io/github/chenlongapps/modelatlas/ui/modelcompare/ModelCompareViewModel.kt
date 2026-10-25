@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -28,6 +29,7 @@ data class ModelCompareUiState(
     val catalogStatus: CompareReadStatus = CompareReadStatus.LOADING,
     val first: CompareModelState = CompareModelState(),
     val second: CompareModelState = CompareModelState(),
+    val favoriteIds: Set<String> = emptySet(),
 ) {
     fun slot(index: Int): CompareModelState = if (index == 0) first else second
     // 目录默认报价也必须就绪；否则详情先到时，短的无档位表格会夹回恢复的滚动位置。
@@ -39,6 +41,7 @@ data class ModelCompareUiState(
 class ModelCompareViewModel @Inject constructor(
     private val repository: ModelRepository,
     private val savedStateHandle: SavedStateHandle,
+    private val favoriteRepository: FavoriteRepository,
 ) : ViewModel() {
     private val firstId = savedStateHandle.get<String>(FIRST_KEY)?.takeIf(String::isNotBlank)
     private val secondId = savedStateHandle.get<String>(SECOND_KEY)?.takeIf { it.isNotBlank() && it != firstId }
@@ -48,6 +51,7 @@ class ModelCompareViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
     private var active = false
     private var catalogJob: Job? = null
+    private var favoritesJob: Job? = null
     private val detailJobs = arrayOfNulls<Job>(2)
 
     init {
@@ -60,9 +64,11 @@ class ModelCompareViewModel @Inject constructor(
         active = value
         if (value) {
             observeCatalog()
+            observeFavorites()
             repeat(2) { index -> _uiState.value.slot(index).modelId?.let { observeDetail(index, it) } }
         } else {
             catalogJob?.cancel()
+            favoritesJob?.cancel()
             detailJobs.forEach { it?.cancel() }
         }
     }
@@ -125,6 +131,21 @@ class ModelCompareViewModel @Inject constructor(
                 throw cancelled
             } catch (_: Exception) {
                 if (_uiState.value.slot(index).modelId == id) updateSlot(index, CompareModelState(id, CompareReadStatus.ERROR))
+            }
+        }
+    }
+
+    private fun observeFavorites() {
+        favoritesJob = viewModelScope.launch {
+            try {
+                favoriteRepository.observeFavorites().collect { favorites ->
+                    _uiState.update { it.copy(favoriteIds = favorites.map { favorite -> favorite.identity.id }.toSet()) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // 收藏只影响候选顺序，读取失败时恢复目录顺序，不阻断选择或对比。
+                _uiState.update { it.copy(favoriteIds = emptySet()) }
             }
         }
     }

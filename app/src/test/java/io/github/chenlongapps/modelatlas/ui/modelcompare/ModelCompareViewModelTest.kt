@@ -2,14 +2,18 @@ package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import io.github.chenlongapps.modelatlas.data.model.FavoriteIdentity
+import io.github.chenlongapps.modelatlas.data.model.FavoriteModel
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
+import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.testing.MainDispatcherRule
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -23,17 +27,20 @@ import org.junit.Test
 class ModelCompareViewModelTest {
     @get:Rule val dispatcher = MainDispatcherRule()
     private val repository = FakeRepository()
+    private val favorites = FakeFavorites()
     private val store = ViewModelStore()
-    private fun create(handle: SavedStateHandle = SavedStateHandle()) = ModelCompareViewModel(repository, handle).also { store.put("compare", it) }
+    private fun create(handle: SavedStateHandle = SavedStateHandle()) = ModelCompareViewModel(repository, handle, favorites).also { store.put("compare", it) }
     @After fun close() = store.clear()
 
     @Test fun offscreenDoesNotReadCatalogOrNetworkAndOnlySelectedModelsAreObserved() = runTest {
         val vm = create()
         advanceUntilIdle()
         assertEquals(0, repository.catalogReads)
+        assertEquals(0, favorites.reads)
         vm.setActive(true)
         advanceUntilIdle()
         assertEquals(1, repository.catalogReads)
+        assertEquals(1, favorites.active)
         assertEquals(0, repository.activeDetails)
         vm.select(0, "lab/a")
         vm.select(1, "lab/b")
@@ -100,12 +107,14 @@ class ModelCompareViewModelTest {
         vm.setActive(false)
         advanceUntilIdle()
         assertEquals(0, repository.activeCatalogs)
+        assertEquals(0, favorites.active)
         assertEquals(0, repository.activeDetails)
         repository.details.getValue("lab/a").value = detail("lab/a").copy(name = "Updated offline")
         vm.setActive(true)
         vm.setActive(true)
         advanceUntilIdle()
         assertEquals(1, repository.activeCatalogs)
+        assertEquals(1, favorites.active)
         assertEquals(1, repository.activeDetails)
         assertEquals("Updated offline", vm.uiState.value.first.detail!!.name)
         assertEquals(0, repository.networkCalls)
@@ -167,6 +176,108 @@ class ModelCompareViewModelTest {
         advanceUntilIdle()
         assertNotEquals(CompareReadStatus.ERROR, vm.uiState.value.catalogStatus)
         assertNotEquals(CompareReadStatus.ERROR, vm.uiState.value.first.status)
+    }
+
+    @Test fun favoriteChangesUpdateOnlyPickerOrderAndDoNotChangeCatalogOrSelection() = runTest {
+        favorites.items.value = listOf(favorite("lab/b"), favorite("lab/missing"))
+        val vm = create()
+        vm.setActive(true)
+        advanceUntilIdle()
+        vm.select(0, "lab/a")
+        advanceUntilIdle()
+        assertEquals(setOf("lab/b", "lab/missing"), vm.uiState.value.favoriteIds)
+        assertEquals(listOf("lab/b", "lab/a"), pickerIds(vm))
+        assertEquals(repository.models.value, vm.uiState.value.models)
+        vm.select(1, "lab/missing")
+        assertNull(vm.uiState.value.second.modelId)
+        favorites.items.value = listOf(favorite("lab/a"))
+        advanceUntilIdle()
+        assertEquals(listOf("lab/a", "lab/b"), pickerIds(vm))
+        assertEquals("lab/a", vm.uiState.value.first.modelId)
+        assertEquals(1, repository.activeDetails)
+        assertEquals(0, repository.networkCalls)
+    }
+
+    @Test fun favoriteObservationStopsOffscreenAndReentersWithLatestFavorites() = runTest {
+        val vm = create()
+        vm.setActive(true)
+        advanceUntilIdle()
+        vm.setActive(false)
+        advanceUntilIdle()
+        assertEquals(0, favorites.active)
+        favorites.items.value = listOf(favorite("lab/b"))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.favoriteIds.isEmpty())
+        vm.setActive(true)
+        vm.setActive(true)
+        advanceUntilIdle()
+        assertEquals(2, favorites.reads)
+        assertEquals(1, favorites.active)
+        assertEquals(listOf("lab/b", "lab/a"), pickerIds(vm))
+        store.clear()
+        advanceUntilIdle()
+        assertEquals(0, favorites.active)
+    }
+
+    @Test fun favoriteReadFailureFallsBackWithoutBlockingComparisonAndRecoversOnReentry() = runTest {
+        favorites.items.value = listOf(favorite("lab/b"))
+        val vm = create()
+        vm.setActive(true)
+        advanceUntilIdle()
+        vm.setActive(false)
+        advanceUntilIdle()
+        favorites.failure = IllegalStateException("favorites")
+        vm.setActive(true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.favoriteIds.isEmpty())
+        assertEquals(listOf("lab/a", "lab/b"), pickerIds(vm))
+        vm.select(0, "lab/a")
+        vm.select(1, "lab/b")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.isReady)
+        vm.setActive(false)
+        advanceUntilIdle()
+        favorites.failure = null
+        vm.setActive(true)
+        advanceUntilIdle()
+        assertEquals(listOf("lab/b", "lab/a"), pickerIds(vm))
+        assertEquals(0, repository.networkCalls)
+    }
+
+    @Test fun favoriteCancellationDoesNotApplyFailureFallback() = runTest {
+        favorites.items.value = listOf(favorite("lab/b"))
+        val vm = create()
+        vm.setActive(true)
+        advanceUntilIdle()
+        vm.setActive(false)
+        advanceUntilIdle()
+        favorites.failure = CancellationException()
+        vm.setActive(true)
+        advanceUntilIdle()
+        assertEquals(setOf("lab/b"), vm.uiState.value.favoriteIds)
+        assertEquals(CompareReadStatus.CONTENT, vm.uiState.value.catalogStatus)
+    }
+
+    private fun pickerIds(vm: ModelCompareViewModel) = vm.uiState.value.let {
+        filterCompareModels(it.models, it.favoriteIds, "").map(ModelSummary::id)
+    }
+
+    private fun favorite(id: String) = FavoriteModel(FavoriteIdentity(id, id, "lab"), 10, null)
+
+    private class FakeFavorites : FavoriteRepository {
+        val items = MutableStateFlow<List<FavoriteModel>>(emptyList())
+        var failure: Exception? = null
+        var reads = 0
+        var active = 0
+        override fun observeFavorites() = flow {
+            reads++
+            failure?.let { throw it }
+            active++
+            try { items.collect { emit(it) } } finally { active-- }
+        }
+        override fun observeFavorite(id: String): Flow<FavoriteIdentity?> = error("Not used")
+        override suspend fun add(id: String): Unit = error("Not used")
+        override suspend fun remove(id: String): Unit = error("Not used")
     }
 
     private class FakeRepository : ModelRepository {

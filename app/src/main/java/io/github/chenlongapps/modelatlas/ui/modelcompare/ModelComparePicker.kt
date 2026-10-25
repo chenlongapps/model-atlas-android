@@ -40,8 +40,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.modellist.LabLogo
-import io.github.chenlongapps.modelatlas.ui.modellist.ModelListQuery
-import io.github.chenlongapps.modelatlas.ui.modellist.filterModels
 import io.github.chenlongapps.modelatlas.ui.modellist.labDisplayName
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,7 +48,7 @@ internal fun ModelComparePicker(
     state: ModelCompareUiState, excludedId: String?, onSelect: (String) -> Unit, onDismiss: () -> Unit, onRetry: () -> Unit,
 ) {
     var search by rememberSaveable { mutableStateOf("") }
-    val results = remember(state.models, search) { filterModels(state.models, ModelListQuery(search = search)) }
+    val results = remember(state.models, state.favoriteIds, search) { filterCompareModels(state.models, state.favoriteIds, search) }
     val focus = LocalFocusManager.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
