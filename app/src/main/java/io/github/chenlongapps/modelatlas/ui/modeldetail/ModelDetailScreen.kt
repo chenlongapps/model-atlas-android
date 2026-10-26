@@ -28,7 +28,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
@@ -48,9 +47,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -81,8 +78,6 @@ import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailOffering
-import io.github.chenlongapps.modelatlas.data.model.ModelDetailPrice
-import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
@@ -92,11 +87,6 @@ import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteActionState
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteDetailViewModel
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteHistoricalIdentity
 import io.github.chenlongapps.modelatlas.ui.favorites.LocalFavoriteRemovalTransition
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -179,13 +169,6 @@ private fun ModelDetailBody(
     val benchmarksListState = rememberLazyListState()
     val listStates = listOf(overviewListState, providersListState, benchmarksListState)
     val statusListState = rememberLazyListState()
-    // 展开状态放在惰性条目外；即使条目离屏、切换标签或恢复时尚未测量，也不会丢失。
-    var expandedSections by rememberSaveable(stateSaver = Saver<Set<String>, ArrayList<String>>(
-        save = { ArrayList(it) }, restore = { it.toSet() },
-    )) { mutableStateOf(emptySet()) }
-    val onToggleSection: (String) -> Unit = { section ->
-        expandedSections = if (section in expandedSections) expandedSections - section else expandedSections + section
-    }
     val stateHolder = rememberSaveableStateHolder()
     val layoutDirection = LocalLayoutDirection.current
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -280,7 +263,7 @@ private fun ModelDetailBody(
                                     ) {
                                         when (tab) {
                                             DetailTab.OVERVIEW -> overviewItems(model)
-                                            DetailTab.PROVIDERS -> providerItems(model, expandedSections, onToggleSection)
+                                            DetailTab.PROVIDERS -> providerItems(model)
                                             DetailTab.BENCHMARKS -> benchmarkItems(model)
                                         }
                                     }
@@ -383,45 +366,26 @@ private fun DetailTabs(selected: DetailTab, onSelect: (DetailTab) -> Unit) {
 }
 
 private fun LazyListScope.overviewItems(model: ModelDetail) {
-    item(key = "capabilities") {
-        DetailSection(stringResource(R.string.detail_capabilities)) { MetadataCapabilities(model.metadata) }
-    }
     item(key = "parameters") {
         DetailSection(stringResource(R.string.detail_parameters)) {
             DetailField(stringResource(R.string.detail_model_id), model.id)
-            DetailField(stringResource(R.string.detail_family), model.metadata.family)
             MetadataParameters(model.metadata)
         }
     }
     item(key = "weights") { WeightsSection(model) }
-    item(key = "links") { LinksSection(model) }
-    item(key = "source") {
-        DetailSection(stringResource(R.string.detail_source)) {
-            DetailField(stringResource(R.string.detail_source_name), model.source)
-            DetailField(stringResource(R.string.detail_source_updated), model.metadata.sourceLastUpdated)
-            DetailField(stringResource(R.string.detail_fetched), formatFetchedTime(model.fetchedAtEpochMillis))
-            Text(stringResource(R.string.detail_source_notice), style = MaterialTheme.typography.bodySmall)
-        }
-    }
 }
 
-private fun LazyListScope.providerItems(model: ModelDetail, expandedSections: Set<String>, onToggleSection: (String) -> Unit) {
-    item(key = "providers") {
+private fun LazyListScope.providerItems(model: ModelDetail) {
+    if (model.providers.all { it.offerings.isEmpty() }) item(key = "providers") {
         DetailSection(stringResource(R.string.detail_providers)) {
-            Text(stringResource(R.string.detail_price_notice), style = MaterialTheme.typography.bodySmall)
-            if (model.providers.isEmpty()) Text(stringResource(R.string.detail_no_providers))
+            Text(stringResource(R.string.detail_no_providers))
         }
     }
     model.providers.forEach { provider ->
-        item(key = "provider:${provider.id}") {
-            DetailSection(provider.name) {
-                DetailField(stringResource(R.string.detail_provider_id), provider.id)
-                provider.documentationUrl?.let { DetailLink(stringResource(R.string.detail_documentation), it) }
-            }
-        }
         provider.offerings.forEach { offering ->
             item(key = "offering:${provider.id.length}:${provider.id}${offering.id}") {
-                OfferingSection(offering, provider.id, expandedSections, onToggleSection)
+                OfferingSection(offering, provider.name,
+                    Modifier.testTag("model-service:${provider.id.length}:${provider.id}${offering.id}"))
             }
         }
     }
@@ -466,28 +430,14 @@ private fun WeightsSection(model: ModelDetail) {
     DetailSection(stringResource(R.string.detail_weights)) {
         DetailField(stringResource(R.string.model_filter_weights), weightStatus(model.metadata.openWeights))
         DetailField(stringResource(R.string.detail_license), model.license)
+        // 当前 Models.dev 未提供参数量，不从名称或描述猜测，也不换算为虚构精确值。
+        DetailField(stringResource(R.string.detail_parameter_count), null)
         Text(stringResource(R.string.detail_weights_notice), style = MaterialTheme.typography.bodySmall)
         when {
             model.weights == null -> Text(stringResource(R.string.no_data))
             model.weights.isEmpty() -> Text(stringResource(R.string.model_list_no_modalities))
             else -> model.weights.forEach { weight ->
                 DetailLink(weight.label?.takeIf(String::isNotBlank) ?: stringResource(R.string.detail_weight_link), weight.url)
-                DetailField(stringResource(R.string.detail_format), weight.format)
-                DetailField(stringResource(R.string.detail_quantization), weight.quantization)
-            }
-        }
-    }
-}
-
-@Composable
-private fun LinksSection(model: ModelDetail) {
-    DetailSection(stringResource(R.string.detail_links)) {
-        when {
-            model.links == null -> Text(stringResource(R.string.no_data))
-            model.links.isEmpty() -> Text(stringResource(R.string.model_list_no_modalities))
-            else -> model.links.forEach { link ->
-                DetailLink(link.label?.takeIf(String::isNotBlank) ?: link.type?.takeIf(String::isNotBlank)
-                    ?: stringResource(R.string.detail_reference_link), link.url)
             }
         }
     }
@@ -496,110 +446,39 @@ private fun LinksSection(model: ModelDetail) {
 @Composable
 private fun OfferingSection(
     offering: ModelDetailOffering,
-    providerId: String,
-    expandedSections: Set<String>,
-    onToggleSection: (String) -> Unit,
+    providerName: String,
+    modifier: Modifier = Modifier,
 ) {
-    val sectionKey = "offering:${providerId.length}:$providerId${offering.id.length}:${offering.id}"
-    val expanded = "$sectionKey:parameters" in expandedSections
-    DetailSection(offering.name) {
-        DetailField(stringResource(R.string.detail_service_id), offering.id)
-        DetailField(stringResource(R.string.detail_service_status), offering.status)
-        Text(stringResource(R.string.detail_base_price), style = MaterialTheme.typography.titleSmall)
-        DetailPrice(offering.price, expanded = "$sectionKey:base" in expandedSections,
-            onToggle = { onToggleSection("$sectionKey:base") })
-        offering.modes?.toSortedMap()?.forEach { (mode, price) ->
-            key(mode) {
-                HorizontalDivider()
-                Text(stringResource(R.string.detail_mode, mode), style = MaterialTheme.typography.titleSmall)
-                DetailPrice(price, expanded = "$sectionKey:mode:$mode" in expandedSections,
-                    onToggle = { onToggleSection("$sectionKey:mode:$mode") })
-            }
-        }
-        val state = stringResource(if (expanded) R.string.model_list_price_details_expanded else R.string.model_list_price_details_collapsed)
-        TextButton(
-            onClick = { onToggleSection("$sectionKey:parameters") },
-            modifier = Modifier.testTag("service-details:$providerId:${offering.id}").semantics { stateDescription = state },
-        ) { Text(stringResource(if (expanded) R.string.detail_service_collapse else R.string.detail_service_expand)) }
-        if (expanded) {
-            Text(stringResource(R.string.detail_service_notice), style = MaterialTheme.typography.bodySmall)
-            DetailField(stringResource(R.string.detail_description), offering.metadata.description)
-            DetailField(stringResource(R.string.detail_family), offering.metadata.family)
-            MetadataParameters(offering.metadata)
-            MetadataCapabilities(offering.metadata)
-            DetailField(stringResource(R.string.model_filter_weights), weightStatus(offering.metadata.openWeights))
-            DetailField(stringResource(R.string.detail_interleaved), when (offering.interleaved?.supported) {
-                true -> stringResource(R.string.detail_supported)
-                false -> stringResource(R.string.detail_unsupported)
-                null -> offering.interleaved?.field
-            })
-            Text(stringResource(R.string.detail_reasoning_options), style = MaterialTheme.typography.titleSmall)
-            when {
-                offering.reasoningOptions == null -> Text(stringResource(R.string.no_data))
-                offering.reasoningOptions.isEmpty() -> Text(stringResource(R.string.detail_no_reasoning_control))
-                else -> offering.reasoningOptions.forEach { option ->
-                    DetailField(stringResource(R.string.detail_option_type), option.type)
-                    DetailField(stringResource(R.string.detail_option_min), option.min?.let(::formatTokenCount))
-                    DetailField(stringResource(R.string.detail_option_max), option.max?.let(::formatTokenCount))
-                    DetailField(stringResource(R.string.detail_option_values), option.values?.let {
-                        if (it.isEmpty()) stringResource(R.string.model_list_no_modalities)
-                        else it.joinToString(" · ") { value -> value ?: "null" }
-                    })
+    Surface(modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DetailField(stringResource(R.string.detail_offering_provider), providerName)
+            DetailField(stringResource(R.string.detail_offering_id), offering.id)
+            DetailField(stringResource(R.string.detail_offering_context), tokens(offering.metadata.contextLimitTokens))
+            DetailField(stringResource(R.string.detail_offering_output), tokens(offering.metadata.outputLimitTokens))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.detail_offering_price), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall)
+                val metrics = listOf(R.string.model_list_input_label to offering.price?.input,
+                    R.string.model_list_output_label to offering.price?.output)
+                BoxWithConstraints {
+                    val columns = (maxWidth / (112.dp * LocalDensity.current.fontScale)).toInt().coerceIn(1, 2)
+                    FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = columns,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        metrics.forEach { (label, value) ->
+                            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {},
+                                verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(stringResource(label), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(value?.let(::formatUsdPerMillionTokens) ?: stringResource(R.string.no_data),
+                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
                 }
             }
-            DetailField(stringResource(R.string.detail_source_name), offering.source)
-            DetailField(stringResource(R.string.detail_source_updated), offering.metadata.sourceLastUpdated)
-            DetailField(stringResource(R.string.detail_fetched), formatFetchedTime(offering.fetchedAtEpochMillis))
-        }
-    }
-}
-
-@Composable
-private fun DetailPrice(price: ModelDetailPrice?, showTiers: Boolean = true, expanded: Boolean = false, onToggle: () -> Unit = {}) {
-    Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall)
-    if (price == null) {
-        Text(stringResource(R.string.model_list_price_missing))
-        return
-    }
-    val metrics = listOf(
-        R.string.model_list_input_label to price.input,
-        R.string.model_list_output_label to price.output,
-        R.string.model_list_price_cache_read_label to price.cacheRead,
-        R.string.detail_cache_write to price.cacheWrite,
-        R.string.detail_reasoning to price.reasoning,
-        R.string.detail_input_audio to price.inputAudio,
-        R.string.detail_output_audio to price.outputAudio,
-    ).filterIndexed { index, (_, value) -> index < 2 || value != null }
-    val minimumWidth = 112.dp * LocalDensity.current.fontScale
-    BoxWithConstraints {
-        val columns = (maxWidth / minimumWidth).toInt().coerceIn(1, 3)
-        FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = columns,
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            metrics.forEach { (label, value) ->
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(stringResource(label), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(value?.let(::formatUsdPerMillionTokens) ?: stringResource(R.string.no_data),
-                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-    }
-    if (showTiers && !price.tiers.isNullOrEmpty()) {
-        val state = stringResource(if (expanded) R.string.model_list_price_details_expanded else R.string.model_list_price_details_collapsed)
-        TextButton(onClick = onToggle, modifier = Modifier.semantics { stateDescription = state }) {
-            Text(stringResource(if (expanded) R.string.model_list_price_details_collapse else R.string.model_list_price_details_expand))
-        }
-        if (expanded) price.tiers.forEach { tier ->
-            HorizontalDivider()
-            Text(
-                stringResource(if (tier.type == "context") R.string.detail_tier else R.string.detail_unknown_tier,
-                    if (tier.type == "context") stringResource(R.string.model_list_context_label) else tier.type,
-                    formatTokenCount(tier.size)),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            DetailPrice(tier.price, showTiers = false)
         }
     }
 }
@@ -613,28 +492,6 @@ private fun MetadataParameters(metadata: ModelDetailMetadata) {
     DetailField(stringResource(R.string.model_list_output_limit_label), tokens(metadata.outputLimitTokens))
 }
 
-@Composable
-private fun MetadataCapabilities(metadata: ModelDetailMetadata) {
-    DetailField(stringResource(R.string.model_filter_input), modalities(metadata.inputModalities))
-    DetailField(stringResource(R.string.model_filter_output), modalities(metadata.outputModalities))
-    listOf(
-        R.string.detail_attachment to metadata.attachment,
-        R.string.detail_reasoning to metadata.reasoning,
-        R.string.detail_tool_call to metadata.toolCall,
-        R.string.detail_structured_output to metadata.structuredOutput,
-        R.string.detail_temperature to metadata.temperature,
-    ).forEach { (label, value) -> DetailField(stringResource(label), when (value) {
-        true -> stringResource(R.string.detail_supported)
-        false -> stringResource(R.string.detail_unsupported)
-        null -> null
-    }) }
-}
-
-@Composable
-private fun modalities(values: List<String>?): String? = values?.let {
-    if (it.isEmpty()) stringResource(R.string.model_list_no_modalities) else it.map { formatModality(it) }.joinToString(" · ")
-}
-
 private fun tokens(value: Long?) = value?.let { "${formatTokenCount(it)} tokens" }
 
 @Composable
@@ -643,9 +500,6 @@ private fun weightStatus(value: Boolean?): String? = when (value) {
     false -> stringResource(R.string.model_list_open_weights_no)
     null -> null
 }
-
-internal fun formatFetchedTime(epochMillis: Long): String = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
-    .withLocale(Locale.getDefault()).withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(epochMillis))
 
 @Composable
 private fun DetailField(label: String, value: String?) {

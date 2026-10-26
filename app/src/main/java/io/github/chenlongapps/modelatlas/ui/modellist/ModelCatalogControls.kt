@@ -64,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
-import kotlinx.serialization.json.Json
 
 @Composable
 internal fun ModelCatalogControls(
@@ -177,8 +176,8 @@ private data class ActiveFilter(
 @Composable
 private fun activeFilters(query: ModelListQuery, labModelCounts: Map<String, Int>): List<ActiveFilter> {
     val result = mutableListOf<ActiveFilter>()
-    @Composable fun add(key: String, label: String, withoutFilter: ModelListQuery, readableLabel: String = label) {
-        result += ActiveFilter(key, label, stringResource(R.string.model_filter_remove, readableLabel), withoutFilter)
+    @Composable fun add(key: String, label: String, withoutFilter: ModelListQuery) {
+        result += ActiveFilter(key, label, stringResource(R.string.model_filter_remove, label), withoutFilter)
     }
     sortFilterLabs(query.labs, labModelCounts).forEach { lab ->
         add("lab:$lab", stringResource(R.string.model_filter_active_lab, labDisplayName(lab)), query.copy(labs = query.labs - lab))
@@ -192,29 +191,12 @@ private fun activeFilters(query: ModelListQuery, labModelCounts: Map<String, Int
     query.outputModalities.sorted().forEach { modality ->
         add("output:$modality", stringResource(R.string.model_filter_active_output, formatModality(modality)), query.copy(outputModalities = query.outputModalities - modality))
     }
-    query.minContextTokens?.let { tokens ->
-        add(
-            "context", stringResource(R.string.model_filter_active_context, formatFilterTokenCount(tokens)),
-            query.copy(minContextTokens = null),
-            stringResource(R.string.model_filter_active_context, "${formatTokenCount(tokens)} tokens"),
-        )
-    }
-    query.minOutputTokens?.let { tokens ->
-        add(
-            "output-limit", stringResource(R.string.model_filter_active_output_limit, formatFilterTokenCount(tokens)),
-            query.copy(minOutputTokens = null),
-            stringResource(R.string.model_filter_active_output_limit, "${formatTokenCount(tokens)} tokens"),
-        )
-    }
-    query.hasPrice?.let { hasPrice ->
-        add("price", stringResource(if (hasPrice) R.string.model_filter_price_yes else R.string.model_filter_price_no), query.copy(hasPrice = null))
-    }
     return result
 }
 
 private val FilterDraftSaver = Saver<ModelListQuery, String>(
-    save = { Json.encodeToString(it) },
-    restore = { Json.decodeFromString<ModelListQuery>(it) },
+    save = { ModelListQueryJson.encodeToString(it) },
+    restore = ::restoreModelListQuery,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -328,34 +310,8 @@ private fun ModelFilterSheetContent(
                 options = outputs, selected = draft.outputModalities, tag = "output",
                 onChange = { onDraftChange(draft.copy(outputModalities = it)) },
             )
-            TokenFilters(
-                title = stringResource(R.string.model_filter_context),
-                options = listOf(32_000L, 128_000L, 200_000L, 1_000_000L),
-                selected = draft.minContextTokens, tag = "context",
-                onChange = { onDraftChange(draft.copy(minContextTokens = it)) },
-            )
-            TokenFilters(
-                title = stringResource(R.string.model_filter_output_limit),
-                options = listOf(4_000L, 16_000L, 32_000L, 128_000L),
-                selected = draft.minOutputTokens, tag = "output-limit",
-                onChange = { onDraftChange(draft.copy(minOutputTokens = it)) },
-            )
-            FilterSection(stringResource(R.string.model_filter_price)) {
-                listOf(null, true, false).forEach { hasPrice ->
-                    FilterOption(
-                        selected = draft.hasPrice == hasPrice,
-                        label = stringResource(when (hasPrice) {
-                            null -> R.string.model_filter_all
-                            true -> R.string.model_filter_price_yes
-                            false -> R.string.model_filter_price_no
-                        }),
-                        onClick = { onDraftChange(draft.copy(hasPrice = hasPrice)) },
-                        tag = "filter-price:$hasPrice",
-                    )
-                }
-            }
             Text(
-                stringResource(R.string.model_filter_rules) + "\n" + stringResource(R.string.model_filter_price_notice),
+                stringResource(R.string.model_filter_rules),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp),
@@ -401,7 +357,6 @@ private fun FilterOption(
     onClick: () -> Unit,
     tag: String? = null,
     icon: Int? = null,
-    description: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     FilterChip(
@@ -418,8 +373,7 @@ private fun FilterOption(
             selectedLeadingIconColor = colors.onSecondaryContainer,
         ),
         border = BorderStroke(1.dp, if (selected) colors.primary else Color.Transparent),
-        modifier = (if (tag == null) Modifier else Modifier.testTag(tag))
-            .then(if (description == null) Modifier else Modifier.semantics { contentDescription = description }),
+        modifier = if (tag == null) Modifier else Modifier.testTag(tag),
     )
 }
 
@@ -437,25 +391,6 @@ private fun ModalityFilters(
             FilterOption(
                 modality in selected, formatModality(modality), { onChange(selected.toggle(modality)) },
                 "filter-$tag:$modality", icon = modalityIcon(modality),
-            )
-        }
-    }
-}
-
-@Composable
-private fun TokenFilters(
-    title: String,
-    options: List<Long>,
-    selected: Long?,
-    tag: String,
-    onChange: (Long?) -> Unit,
-) {
-    FilterSection(title) {
-        FilterOption(selected == null, stringResource(R.string.model_filter_all), { onChange(null) })
-        (options + listOfNotNull(selected)).distinct().sorted().forEach { tokens ->
-            FilterOption(
-                selected == tokens, "≥ ${formatFilterTokenCount(tokens)}", { onChange(tokens) }, "filter-$tag:$tokens",
-                description = stringResource(R.string.model_filter_token_minimum, formatTokenCount(tokens)),
             )
         }
     }
@@ -542,5 +477,4 @@ private fun filterPreviewQuery() = ModelListQuery(
     labs = setOf("example"),
     weights = WeightFilter.OPEN,
     inputModalities = setOf("image"),
-    minContextTokens = 128_000,
 )

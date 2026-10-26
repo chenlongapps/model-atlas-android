@@ -459,7 +459,6 @@ class ModelListViewModelTest {
         val query = ModelListQuery(
             search = "模型", labs = setOf("alpha", "beta"), weights = WeightFilter.UNKNOWN,
             inputModalities = setOf("image", "custom"), outputModalities = setOf("text"),
-            minContextTokens = Long.MAX_VALUE, minOutputTokens = 32_000, hasPrice = false,
         )
         val first = ModelListViewModel(cachedRepository(), handle).also { store.put("first", it) }
         first.setQuery(query)
@@ -481,6 +480,15 @@ class ModelListViewModelTest {
         advanceUntilIdle()
         assertEquals(ModelListQuery(), viewModel.uiState.value.query)
         assertEquals(viewModel.uiState.value.models, viewModel.uiState.value.visibleModels)
+    }
+
+    @Test fun restoresLegacyQueryWithoutApplyingRemovedFiltersOrLosingSearch() = runTest {
+        val viewModel = ModelListViewModel(cachedRepository(), SavedStateHandle(mapOf(
+            "model-list-query" to """{"search":"lab","weights":"OPEN","minContextTokens":9223372036854775807,"minOutputTokens":32000,"hasPrice":false}""",
+        ))).also { store.put("legacy", it) }
+        advanceUntilIdle()
+        assertEquals(ModelListQuery(search = "lab", weights = WeightFilter.OPEN), viewModel.uiState.value.query)
+        assertEquals(filterModels(viewModel.uiState.value.models, viewModel.uiState.value.query), viewModel.uiState.value.visibleModels)
     }
 
     @Test fun externalRefreshClearsStalePendingNoticeWithoutAnotherRequestAndPreservesQuery() = runTest {

@@ -41,14 +41,13 @@ import androidx.compose.ui.unit.sp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
-import io.github.chenlongapps.modelatlas.ui.model.ModelCoreMetrics
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentity
 import io.github.chenlongapps.modelatlas.ui.model.ModelInfoBadge
 import io.github.chenlongapps.modelatlas.ui.model.ModelModalities
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
-/** 居中身份区直接沿用页面背景，下面保留独立参数卡。 */
+/** 居中身份、描述、模态与已支持能力；精确参数仅放在概览。 */
 @Composable
 internal fun ModelDetailHeader(
     model: ModelDetail?,
@@ -104,15 +103,6 @@ internal fun ModelDetailHeader(
                         capabilities.forEach { (label, _) -> ModelInfoBadge(stringResource(label)) }
                     }
                 }
-            }
-        }
-        if (model != null) {
-            Surface(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("model-detail-metrics"),
-                shape = MaterialTheme.shapes.large, color = colors.surface,
-            ) {
-                ModelCoreMetrics(model.metadata.releaseDate, model.metadata.contextLimitTokens, model.metadata.outputLimitTokens,
-                    Modifier.padding(16.dp), prominent = true)
             }
         }
     }

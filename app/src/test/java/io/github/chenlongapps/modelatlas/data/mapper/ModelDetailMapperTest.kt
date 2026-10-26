@@ -56,6 +56,17 @@ class ModelDetailMapperTest {
         assertTrue(detail.providers.isEmpty())
     }
 
+    @Test fun blankProviderNameDoesNotFallBackToProviderIdAndServiceUsesItsStableKey() {
+        val service = service("provider-id", "stable-service-key").let {
+            it.copy(provider = it.provider.copy(name = " "))
+        }
+        val provider = ModelDetailRecord(model, listOf(service)).toModelDetail()!!.providers.single()
+        assertTrue(provider.name.isBlank())
+        assertEquals("provider-id", provider.id)
+        assertEquals("stable-service-key", provider.offerings.single().id)
+        assertNotEquals(service.offering.remoteId, provider.offerings.single().id)
+    }
+
     @Test fun preservesZeroHighPrecisionEveryTierCategoryAndIndependentModes() {
         val price = OfferingPricingLocal(input = 0.0, output = 0.003, reasoning = 2.0,
             tiers = listOf(OfferingPriceTierLocal(PriceTierConditionLocal("context", 272_000),

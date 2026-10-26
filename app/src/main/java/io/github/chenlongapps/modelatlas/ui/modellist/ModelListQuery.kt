@@ -2,6 +2,16 @@ package io.github.chenlongapps.modelatlas.ui.modellist
 
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+/** 已移除的旧筛选字段不再生效，但不丢失其余有效查询；查询与面板草稿共用。 */
+internal val ModelListQueryJson = Json { ignoreUnknownKeys = true }
+
+internal fun restoreModelListQuery(value: String): ModelListQuery = try {
+    ModelListQueryJson.decodeFromString<ModelListQuery>(value)
+} catch (_: IllegalArgumentException) {
+    ModelListQuery()
+}
 
 /** 仅针对列表已具备的规范模型字段；不推测缺失能力或合并服务商限制。 */
 @Serializable
@@ -11,18 +21,12 @@ data class ModelListQuery(
     val weights: WeightFilter = WeightFilter.ALL,
     val inputModalities: Set<String> = emptySet(),
     val outputModalities: Set<String> = emptySet(),
-    val minContextTokens: Long? = null,
-    val minOutputTokens: Long? = null,
-    val hasPrice: Boolean? = null,
 ) {
     // LAB 多选是一组 OR 条件；各模态是独立的必需条件。
     val filterCount: Int
         get() = (if (labs.isEmpty()) 0 else 1) +
             (if (weights == WeightFilter.ALL) 0 else 1) +
-            inputModalities.size + outputModalities.size +
-            (if (minContextTokens == null) 0 else 1) +
-            (if (minOutputTokens == null) 0 else 1) +
-            (if (hasPrice == null) 0 else 1)
+            inputModalities.size + outputModalities.size
 
     val isActive: Boolean get() = search.isNotBlank() || filterCount > 0
 
@@ -50,9 +54,6 @@ internal fun filterModels(models: List<ModelSummary>, query: ModelListQuery): Li
                 WeightFilter.UNKNOWN -> model.openWeights == null
             } &&
             query.inputModalities.all { it in model.inputModalities.orEmpty() } &&
-            query.outputModalities.all { it in model.outputModalities.orEmpty() } &&
-            (query.minContextTokens?.let { min -> model.contextLimitTokens?.let { it >= min } ?: false } ?: true) &&
-            (query.minOutputTokens?.let { min -> model.outputLimitTokens?.let { it >= min } ?: false } ?: true) &&
-            (query.hasPrice?.let { (model.price != null) == it } ?: true)
+            query.outputModalities.all { it in model.outputModalities.orEmpty() }
     }
 }

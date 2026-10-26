@@ -137,7 +137,7 @@ class ModelSharedTransitionTest {
         val loadingName = nameBounds()
         compose.runOnIdle { status.value = ModelDetailStatus.CONTENT }
         assertRectEquals(loadingName, nameBounds())
-        compose.onNodeWithTag("model-detail-metrics").assertIsDisplayed()
+        compose.onNodeWithTag("model-description").assertIsDisplayed()
         compose.runOnIdle { status.value = ModelDetailStatus.ERROR }
         compose.onNodeWithTag("model-detail-hero").assertDoesNotExist()
         sharedIdentityNode("model-detail-screen", ModelIdentityRole.LOGO).assertDoesNotExist()
@@ -265,7 +265,7 @@ class ModelSharedTransitionTest {
         assertTrue("真实详情接管时不能重新缩小共享 Logo", contentLogo.width >= loadingLogo.width - 1f)
         compose.mainClock.advanceTimeBy(600)
         compose.mainClock.autoAdvance = true
-        compose.onNodeWithTag("model-detail-metrics").assertIsDisplayed()
+        compose.onNodeWithTag("model-description").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("model:openai/one").assertIsDisplayed()
     }

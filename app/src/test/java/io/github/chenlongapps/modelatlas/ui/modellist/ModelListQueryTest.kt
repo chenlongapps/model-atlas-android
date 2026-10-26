@@ -64,29 +64,37 @@ class ModelListQueryTest {
         assertEquals(data, filterModels(data, ModelListQuery()))
     }
 
-    @Test fun tokenMinimumIsInclusiveAndMissingIsNotZero() {
-        assertEquals(listOf(closed, open), filterModels(models, ModelListQuery(minContextTokens = 128_000)))
-        assertEquals(listOf(closed), filterModels(models, ModelListQuery(minContextTokens = 128_001)))
-        assertEquals(listOf(open), filterModels(models, ModelListQuery(minOutputTokens = 32_000)))
-        assertTrue(filterModels(models, ModelListQuery(minOutputTokens = 32_001)).isEmpty())
-        assertEquals(listOf(closed, open), filterModels(models, ModelListQuery(minContextTokens = 0)))
-        val huge = open.copy(contextLimitTokens = Long.MAX_VALUE)
-        assertEquals(listOf(huge), filterModels(listOf(huge, open), ModelListQuery(minContextTokens = Long.MAX_VALUE)))
+    @Test fun removedSavedFiltersAreIgnoredWithoutDiscardingRemainingConditions() {
+        val query = restoreModelListQuery("""{"search":"atlas","labs":["alpha"],"weights":"OPEN",
+            "inputModalities":["image"],"outputModalities":["text"],
+            "minContextTokens":9223372036854775807,"minOutputTokens":32000,"hasPrice":false}""")
+        assertEquals(ModelListQuery(search = "atlas", labs = setOf("alpha"), weights = WeightFilter.OPEN,
+            inputModalities = setOf("image"), outputModalities = setOf("text")), query)
+        assertEquals(4, query.filterCount)
+        assertEquals(listOf(open), filterModels(models, query))
+        val saved = ModelListQueryJson.encodeToString(query)
+        assertFalse(saved.contains("minContextTokens"))
+        assertFalse(saved.contains("minOutputTokens"))
+        assertFalse(saved.contains("hasPrice"))
     }
 
-    @Test fun zeroQuoteIsAvailableAndMissingQuoteIsNotFree() {
-        assertEquals(listOf(open), filterModels(models, ModelListQuery(hasPrice = true)))
-        assertEquals(listOf(closed, unknown), filterModels(models, ModelListQuery(hasPrice = false)))
+    @Test fun onlyRemovedSavedFiltersRestoreToInactiveQueryAndCorruptionFallsBack() {
+        val query = restoreModelListQuery("""{"minContextTokens":128000,"minOutputTokens":32000,"hasPrice":true}""")
+        assertEquals(ModelListQuery(), query)
+        assertFalse(query.isActive)
+        assertSame(models, filterModels(models, query))
+        listOf("invalid", "[]", """{"weights":"invalid"}""").forEach {
+            assertEquals(ModelListQuery(), restoreModelListQuery(it))
+        }
     }
 
     @Test fun differentFieldsIntersectWithoutReordering() {
         val query = ModelListQuery(
             search = "atlas", labs = setOf("alpha", "beta"), weights = WeightFilter.OPEN,
             inputModalities = setOf("image"), outputModalities = setOf("text"),
-            minContextTokens = 128_000, minOutputTokens = 32_000, hasPrice = true,
         )
         assertEquals(listOf(open), filterModels(models, query))
-        assertTrue(filterModels(models, query.copy(hasPrice = false)).isEmpty())
+        assertTrue(filterModels(models, query.copy(outputModalities = setOf("image"))).isEmpty())
         assertEquals(listOf(closed, open), filterModels(models, ModelListQuery(search = "atlas")))
     }
 
@@ -94,9 +102,8 @@ class ModelListQueryTest {
         val query = ModelListQuery(
             search = "atlas", labs = setOf("alpha", "beta"), weights = WeightFilter.UNKNOWN,
             inputModalities = setOf("text", "image"), outputModalities = setOf("text"),
-            minContextTokens = 1, minOutputTokens = 1, hasPrice = false,
         )
-        assertEquals(8, query.filterCount)
+        assertEquals(5, query.filterCount)
         assertEquals(ModelListQuery(search = "atlas"), query.resetFilters())
         assertEquals(0, query.resetFilters().filterCount)
         assertTrue(query.resetFilters().isActive)

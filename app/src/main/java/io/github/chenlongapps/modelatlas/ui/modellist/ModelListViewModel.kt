@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
 data class ModelListUiState(
@@ -57,16 +56,12 @@ class ModelListViewModel @Inject constructor(
     fun setQuery(query: ModelListQuery) {
         if (_uiState.value.query == query) return
         // 仅保存小型查询条件，不保存目录或派生结果。
-        savedStateHandle[QUERY_KEY] = Json.encodeToString(query)
+        savedStateHandle[QUERY_KEY] = ModelListQueryJson.encodeToString(query)
         _uiState.update { it.copy(query = query) }
     }
 
-    private fun restoreQuery(): ModelListQuery = try {
-        savedStateHandle.get<String>(QUERY_KEY)?.let { Json.decodeFromString<ModelListQuery>(it) }
-            ?: ModelListQuery()
-    } catch (_: IllegalArgumentException) {
-        ModelListQuery()
-    }
+    private fun restoreQuery(): ModelListQuery = savedStateHandle.get<String>(QUERY_KEY)
+        ?.let(::restoreModelListQuery) ?: ModelListQuery()
 
     fun retry() {
         load(initial = _uiState.value.error != null || observationJob?.isActive != true)

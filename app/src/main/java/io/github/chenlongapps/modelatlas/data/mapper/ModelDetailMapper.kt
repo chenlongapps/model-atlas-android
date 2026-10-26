@@ -26,7 +26,8 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
             val provider = records.first().provider
             ModelDetailProvider(
                 id = provider.id,
-                name = provider.name.nonBlank() ?: provider.id,
+                // PROVIDER 展示名称，缺失时由 UI 提示暂无数据，不以服务商 ID 冒充名称。
+                name = provider.name,
                 documentationUrl = provider.documentationUrl.nonBlank(),
                 offerings = records.sortedBy { it.offering.id }.map { record ->
                     val o = record.offering

@@ -124,9 +124,11 @@ class ModelCatalogControlsTest {
         // 目录变化不会自动丢弃正在使用的条件，消失的选项仍可取消。
         compose.runOnIdle { state.value = state.value.copy(models = models.drop(1)) }
         compose.onNodeWithTag("filter-lab:alpha").performScrollTo().assertIsSelected()
-        compose.onNodeWithTag("filter-context:128000").performScrollTo().performClick()
-        compose.onNodeWithTag("filter-output-limit:32000").performScrollTo().performClick()
-        compose.onNodeWithTag("filter-price:false").performScrollTo().performClick()
+        compose.onNodeWithTag("filter-weights:OPEN").performScrollTo().performClick()
+        compose.onNodeWithTag("filter-output:image").performScrollTo().performClick()
+        compose.onNodeWithText("上下文长度至少").assertDoesNotExist()
+        compose.onNodeWithText("最大输出至少").assertDoesNotExist()
+        compose.onNodeWithText("列表报价").assertDoesNotExist()
         compose.onNodeWithTag("filter-reset").assertIsDisplayed().performClick()
         compose.onNodeWithTag("filter-apply").assertIsDisplayed().performClick()
         compose.onNodeWithText("筛选 · 0").assertIsDisplayed()
@@ -208,7 +210,7 @@ class ModelCatalogControlsTest {
     @Test fun removableConditionsAndResetNeverClearSearchOrUnrelatedConditions() {
         val initial = ModelListQuery(
             search = "atlas", labs = setOf("alpha"), weights = WeightFilter.OPEN,
-            inputModalities = setOf("image"), minContextTokens = 128_000, hasPrice = false,
+            inputModalities = setOf("image"),
         )
         val state = mutableStateOf(ModelListUiState(models, isLoading = false, query = initial))
         compose.setContent {
@@ -216,10 +218,10 @@ class ModelCatalogControlsTest {
                 ModelListScreen(state.value, onQueryChange = { state.value = state.value.copy(query = it) })
             }
         }
-        compose.onNodeWithTag("active-filter:context").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(initial.copy(minContextTokens = null), state.value.query) }
+        compose.onNodeWithTag("active-filter:input:image").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(initial.copy(inputModalities = emptySet()), state.value.query) }
         compose.onNodeWithTag("active-filter:lab:alpha").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(initial.copy(minContextTokens = null, labs = emptySet()), state.value.query) }
+        compose.runOnIdle { assertEquals(initial.copy(inputModalities = emptySet(), labs = emptySet()), state.value.query) }
         compose.onNodeWithTag("reset-filters").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(ModelListQuery(search = "atlas"), state.value.query) }
         compose.onNodeWithTag("model-search").assertTextContains("atlas")

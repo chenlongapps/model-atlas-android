@@ -48,12 +48,12 @@ class ModelDetailNavigationTest {
         show(restoration)
         compose.onNodeWithText("Model 0").performClick()
         compose.onNodeWithTag("model-detail-scroll").performScrollToIndex(2)
-        compose.onNodeWithTag("model-detail-content").performScrollToNode(hasText("本地获取时间"))
-        val before = compose.onNodeWithText("本地获取时间").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("model-detail-content").performScrollToNode(hasText("参数量"))
+        val before = compose.onNodeWithText("参数量").fetchSemanticsNode().boundsInRoot.top
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("model-detail-screen").assertIsDisplayed()
         compose.onNodeWithTag("main-pager").assertIsNotDisplayed()
-        assertEquals(before, compose.onNodeWithText("本地获取时间").fetchSemanticsNode().boundsInRoot.top, 1f)
+        assertEquals(before, compose.onNodeWithText("参数量").fetchSemanticsNode().boundsInRoot.top, 1f)
         pressBack()
         compose.onNodeWithText("Model 0").assertIsDisplayed()
     }
