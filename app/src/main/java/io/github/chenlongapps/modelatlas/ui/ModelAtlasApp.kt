@@ -95,7 +95,8 @@ fun ModelAtlasApp(
     ModelAtlasScaffold(
         modifier = modifier,
         appearanceContent = appearanceContent,
-        debugContent = { bottomPadding, isVisible -> DebugFeature.Content(bottomPadding, isVisible) },
+        debugContent = { bottomPadding, isVisible, onOpen -> DebugFeature.Content(bottomPadding, isVisible, onOpen) },
+        databaseContent = { onClose -> DebugFeature.DatabaseContent(onClose) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
         favoritesContent = { bottomPadding, onModelClick -> FavoritesRoute(bottomPadding, onModelClick) },
     ) { bottomOverlayPadding, listState, onModelClick ->
@@ -108,7 +109,8 @@ fun ModelAtlasApp(
 internal fun ModelAtlasScaffold(
     modifier: Modifier = Modifier,
     detailContent: @Composable (modelId: String, onBack: () -> Unit) -> Unit = { id, onBack -> ModelDetailRoute(id, onBack) },
-    debugContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { _, _ -> },
+    debugContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean, onOpenDatabase: () -> Unit) -> Unit = { _, _, _ -> },
+    databaseContent: @Composable (onClose: () -> Unit) -> Unit = {},
     compareContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { padding, visible ->
         ModelCompareScreen(ModelCompareUiState(), bottomOverlayPadding = padding, isVisible = visible)
     },
@@ -137,6 +139,7 @@ internal fun ModelAtlasScaffold(
     val bottomOverlayPadding = navigationHeight.dp + 32.dp
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
+    var showDatabase by rememberSaveable { mutableStateOf(false) }
     var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailSourceTag by rememberSaveable { mutableStateOf(GlassNavigationItem.Models.tag) }
     // ID 是可保存的导航状态；身份快照仅在当前进程的页面交接期间使用。
@@ -153,7 +156,7 @@ internal fun ModelAtlasScaffold(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || showAppearance || retainedModelId != null
+    val subpageVisible = showDataSource || showAppearance || showDatabase || retainedModelId != null
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition) {
         snapshotFlow { backState.transitionState }.collect { state ->
@@ -167,7 +170,7 @@ internal fun ModelAtlasScaffold(
     if (!LocalInspectionMode.current) {
         NavigationBackHandler(
             state = backState,
-            isBackEnabled = subpageVisible,
+            isBackEnabled = subpageVisible && !showDatabase,
             onBackCancelled = { detailTransition.cancelBack() },
             onBackCompleted = {
                 if (retainedModelId != null) detailTransition.exit()
@@ -182,7 +185,7 @@ internal fun ModelAtlasScaffold(
         val transitioning = detailTransition.active || mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
             detailVisibility.transition.currentState != detailVisibility.transition.targetState ||
             mainVisibility.transition.isRunning || detailVisibility.transition.isRunning || isTransitionActive
-        val placeMain = !showDataSource && !showAppearance && (selectedModelId == null || transitioning)
+        val placeMain = !showDataSource && !showAppearance && !showDatabase && (selectedModelId == null || transitioning)
         LaunchedEffect(selectedModelId, transitioning, detailVisibility.transition.currentState) {
             if (selectedModelId == null && !transitioning && detailVisibility.transition.currentState == EnterExitState.PostExit) {
                 // 共享覆盖层也完成交接后，才允许收藏来源卡片开始自己的退出动画。
@@ -231,7 +234,7 @@ internal fun ModelAtlasScaffold(
                             onShowDataSource = { showDataSource = true },
                             onShowAppearance = { showAppearance = true },
                         )
-                        else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
+                        else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
                     }
                 }
             }
@@ -269,6 +272,9 @@ internal fun ModelAtlasScaffold(
         }
         if (showAppearance) {
             appearanceContent { showAppearance = false }
+        }
+        if (showDatabase) {
+            databaseContent { showDatabase = false }
         }
         retainedModelId?.let { id ->
             RetainedModelPage(placed = true, interactive = selectedModelId != null && detailTransition.interactive) {

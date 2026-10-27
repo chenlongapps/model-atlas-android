@@ -23,6 +23,7 @@ import kotlinx.serialization.SerializationException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -507,6 +508,55 @@ class ModelListViewModelTest {
         assertEquals(1, repository.refreshes)
         assertEquals(1, repository.checks)
         assertEquals(null, viewModel.uiState.value.message)
+    }
+
+    @Test fun externalMutationKeepsPendingUpdateAndQueryWithoutAnotherRequest() = runTest {
+        val repository = cachedRepository().apply { remoteModels = listOf(ModelSummary("lab/new", "New")) }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.updateAvailable)
+        val query = ModelListQuery(search = "Edited")
+        viewModel.setQuery(query)
+        repository.models.value = listOf(ModelSummary("lab/edited", "Edited"))
+        viewModel.onCatalogMutatedExternally()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.updateAvailable)
+        assertEquals(query, viewModel.uiState.value.query)
+        assertEquals(repository.models.value, viewModel.uiState.value.visibleModels)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+    }
+
+    @Test fun externalMutationWaitsForActiveCheckAndPreservesItsPendingResult() = runTest {
+        val repository = cachedRepository().apply {
+            gate = CompletableDeferred()
+            remoteModels = listOf(ModelSummary("lab/new", "New"))
+        }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        viewModel.onCatalogMutatedExternally()
+        advanceUntilIdle()
+        repository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.updateAvailable)
+        assertEquals(1, repository.checks)
+        assertEquals(0, repository.refreshes)
+    }
+
+    @Test fun externalMutationRecoversInitialFailureThroughLocalObservationOnly() = runTest {
+        val repository = FakeRepository().apply { failure = IOException("offline") }
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        assertEquals(ModelListError.NETWORK, viewModel.uiState.value.error)
+        repository.models.value = listOf(ModelSummary("lab/local", "Local"))
+        viewModel.onCatalogMutatedExternally()
+        advanceUntilIdle()
+        assertNull(viewModel.uiState.value.error)
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        repository.models.value = listOf(ModelSummary("lab/next", "Next"))
+        advanceUntilIdle()
+        assertEquals(repository.models.value, viewModel.uiState.value.models)
+        assertEquals(1, repository.refreshes)
     }
 
     @Test fun externalRefreshRecoversFirstLoadFailureAndResumesLocalObservation() = runTest {

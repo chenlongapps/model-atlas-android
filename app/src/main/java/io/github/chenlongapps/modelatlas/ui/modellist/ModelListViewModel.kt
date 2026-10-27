@@ -107,6 +107,22 @@ class ModelListViewModel @Inject constructor(
         }
     }
 
+    /** 本地记录被直接修改；恢复本地观察，但不丢弃仍可由用户应用的远端待更新快照。 */
+    fun onCatalogMutatedExternally() {
+        viewModelScope.launch {
+            loadJob?.join()
+            try {
+                val models = modelRepository.observeModels().first()
+                _uiState.update { it.copy(models = models, isLoading = false, error = null) }
+                if (observationJob?.isActive != true) observeCatalog()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = ModelListError.STORAGE) }
+            }
+        }
+    }
+
     private fun load(initial: Boolean = false, applyPending: Boolean = false) {
         if (loadJob?.isActive == true) return
         _uiState.update {

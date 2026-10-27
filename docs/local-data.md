@@ -11,7 +11,16 @@
 - 报价投影 `observeOfferingPriceRows()` 只取显式关联到规范模型且 `pricing` 非空的服务，按 `(canonicalModelId, providerId, id)` 排序；规范模型元数据仍由 `observeModelRows()` 单独提供，两条 Flow 在仓库层合并，互不覆盖。
 - 详情使用 `observeModelDetail(id)`：按稳定 ID 查询规范模型，通过 Room3 `@Relation(parentColumns / entityColumns)` 读取所有显式关联的服务和服务商，整个嵌套读取在 `@Transaction` 内完成，避免目录替换时混入不同快照。无报价服务不排除，无关联模型返回空服务列表，不存在模型返回 null；只新增查询与投影，不修改 Schema v1。
 - 测试目录中的 `CatalogSchemaTestDatabase` 仅用于 Room KSP 编译校验，不创建运行时数据库。
-- Debug 顶层调试页通过既有 `CatalogStore.readCatalog()` 在 IO dispatcher 读取一致的完整快照，仅保留三张表的数量；切入且分页停稳、手动重读及刷新结束后读取，离屏预组合不读库，不做 LLM 筛选或持续观察。手动刷新仍走正式仓库的原子提交，不新增调试写库、Schema 或 DAO 接口。页面明确标注统计口径、读取失败与旧值。
+- Debug 顶层调试页通过既有 `CatalogStore.readCatalog()` 在 IO dispatcher 读取一致的完整快照，仅保留三张表的数量；切入且分页停稳、手动重读及刷新结束后读取，离屏预组合不读库，不做 LLM 筛选或持续观察。手动刷新仍走正式仓库的原子提交。独立数据库管理子页另支持四表逐条编辑，见下文；两处统计口径不同。
+
+## Debug 数据库管理
+
+- 仅 Debug 的调试页提供“数据库管理”独立子页；概览显示 `catalog.db`、Schema 版本、数据库／WAL／SHM 文件读取时的近似大小和四张业务表各自的全量行数，不包含 DataStore 或 Room 内部表。按主键稳定排序，每页 50 条，可按主键或名称查询并手动重读，不轮询或主动联网。
+- 四表均支持逐条新增、查看、编辑、删除；所有列可查看及编辑，新增时填写主键，已有记录的主键不可修改。可空列显式区分 SQL NULL、空字符串及空 JSON 集合；可空布尔值为 NULL／0／1，整数校验 64 位范围。JSON 按 `CatalogTypeConverters` 的本地类型校验，不接受远端 DTO 格式；仅更新更改的列，未改 JSON 保留原始内容及未知字段。已有损坏 JSON 可读取并修复，未改时不强制重写。
+- `DebugDatabaseStore` 只接受四表及列的固定白名单，校验实际表结构与主键后，通过同一 `CatalogDatabase` 的 Room3 读／写连接及事务执行参数化语句；Schema 不一致禁用操作。写入和删除在事务内比对原始整行，避免覆盖已经变化的记录；删除服务商前展示将级联删除的模型服务数量，并在事务中复核。所有删除需确认，收藏删除不可撤销；不提供任意 SQL、批量清空或恢复。
+- 这是数据库行操作，不调用收藏业务的新增校验，也不额外同步收藏身份：可构造不可用收藏。删除规范模型不删除服务或收藏；删除服务商按外键级联服务。目录刷新仍按既有事务更新可用收藏身份，不删除收藏。目录自动检查、待应用更新或手动刷新可在编辑前后覆盖目录手动修改；没有暂停同步，也没有为调试改动新增持久覆盖层。
+- Room 变更通知驱动现有页面；提交后 `onCatalogMutatedExternally()` 只读取本地并按需恢复模型观察，保留待应用更新和查询，不发起联网。管理页可查看／编辑的 `providerOverride` 与 `experimentalModes` 可能含请求 body／headers，默认隐藏、主动展开；不加入复制诊断信息或日志。草稿仅保留在 ViewModel 内存，不写入 SavedState、数据库或剪贴板；进程结束后丢失。
+- `DebugDatabaseSchemaTest`／`DebugDatabaseViewModelTest` 覆盖字段、JSON、冲突反馈、返回及防重复；`DebugDatabaseStoreTest` 在独立测试数据库覆盖 CRUD、分页、SQLite 外键、级联、过期记录冲突、Room Flow、结构不匹配和文件重开；`DebugDatabaseScreenTest` 覆盖操作、恢复、系统返回及敏感字段隐藏。具体执行结果见 [TODO.md](../TODO.md)。
 
 ## 三张表的职责
 
@@ -48,7 +57,7 @@
 ## 本地收藏
 
 - `favorites` 以规范模型 ID（`modelId`）为主键，保存 `favoritedAtEpochMillis`、最后可用的 `name` 和 `lab`。不保存历史参数、报价、完整详情或服务商选择，不按同名迁移 ID。
-- 不设指向 `models` 的外键：目录全量替换、下架或空快照都不删除收藏。目录比较、`hasCatalog()` 和调试统计仍只计算三张目录表。
+- 不设指向 `models` 的外键：目录全量替换、下架或空快照都不删除收藏。目录比较、`hasCatalog()` 和调试顶层的目录统计仍只计算三张目录表；数据库管理概览单独显示收藏表。
 - `FavoriteDao.add()` 在事务内读取并校验当前模型及 LLM 收录规则，再以 IGNORE 插入；重复添加不改变时间。删除幂等；重新收藏使用新的时间。列表按收藏时间倒序，同时间按规范 ID 稳定排序。
 - `CatalogDao.replaceCatalog()` 在原有事务内，仅为本次仍可用的已收藏模型更新名称与 LAB；不改变收藏时间，不可用时保留最后身份，失败时与目录一起回滚。
 - `observeFavorites()` 通过嵌套 Relation 在单个事务内读取收藏、可选规范模型及关联服务／服务商；仓库复用 LLM 收录和默认报价映射，避免独立 Flow 在刷新时短暂拼接出失效模型或旧价格。不存在或不再收录时只返回收藏身份，同 ID 恢复后重新显示当前卡片。

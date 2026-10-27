@@ -64,6 +64,7 @@ internal fun DebugScreen(
     info: DebugDeviceInfo,
     onReadStatistics: () -> Unit,
     onRefresh: () -> Unit,
+    onOpenDatabase: () -> Unit = {},
     modifier: Modifier = Modifier,
     bottomOverlayPadding: Dp = 0.dp,
 ) {
@@ -139,6 +140,14 @@ internal fun DebugScreen(
                         OutlinedButton(onClick = onReadStatistics, enabled = !uiState.busy) {
                             Text(stringResource(R.string.debug_read_statistics))
                         }
+                    }
+                }
+            }
+            item(key = "database") {
+                DebugSection(stringResource(R.string.debug_database_entry)) {
+                    Text(stringResource(R.string.debug_database_entry_notice), style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = onOpenDatabase, modifier = Modifier.testTag("debug-database-entry")) {
+                        Text(stringResource(R.string.debug_database_entry))
                     }
                 }
             }

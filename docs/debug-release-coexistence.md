@@ -25,7 +25,7 @@ Debug 配置为 `applicationIdSuffix = ".debug"`、`versionNameSuffix = "-debug"
 - 不同 Application ID 由 Android 分配独立应用数据空间，Room3 数据库无需改名，也无需修改 Schema、DAO 或 Hilt 配置。
 - Release 安装身份和升级路径保持不变；此前使用原 Application ID 安装的旧 Debug 不会自动迁移到新的 Debug 身份，其数据仍属于原应用。不要为了安装新 Debug 而卸载原应用或清除其数据。
 - 原有备份策略保持不变（`allowBackup="true"`）。备份身份分离不代表已验证云备份和设备迁移行为。
-- Debug 使用专用图标，底部导航为“模型｜收藏｜对比｜设置｜调试”；调试页与另外四页同级，不再位于设置中，不显示返回按钮，始终保留底栏。页面提供应用／设备信息、三张目录表全量数量（不包含收藏表）、复制诊断信息与手动刷新。统计只读、非实时，仅切入停稳或手动操作后读取；刷新复用现有仓库与服务器限流，成功后同步列表状态，不提供清空目录或应用数据操作。
+- Debug 使用专用图标，底部导航为“模型｜收藏｜对比｜设置｜调试”；调试页与另外四页同级，不再位于设置中，不显示返回按钮，始终保留底栏。页面提供应用／设备信息、三张目录表全量数量（不包含收藏表）、复制诊断信息与手动刷新。顶层统计非实时，仅切入停稳或手动操作后读取；刷新复用现有仓库与服务器限流，成功后同步列表状态。独立数据库管理子页另支持四表逐条 CRUD；服务商删除级联、收藏删除不可撤销，目录同步可能覆盖修改，不提供批量清空或任意 SQL。详见[本地目录数据](local-data.md#debug-数据库管理)。
 - `main` 只调用 `ui.debug.DebugFeature` 的统一接口；`debug` 提供导航条目、完整页面及 ViewModel，`release` 的导航条目为 null、内容为空，保持“模型｜收藏｜对比｜设置”四栏。调试资源仅置于 `src/debug/res/`，Release 不编译真实调试页面、ViewModel 或调试专用资源，不依赖运行时 `BuildConfig.DEBUG` 判断。
 - 主 Manifest 没有自定义 ContentProvider。以后添加 FileProvider 时，authorities 应使用 `${applicationId}.fileprovider`，不要写死 Release 包名；依赖合并的 Provider 也应确认不会发生冲突。
 

@@ -57,7 +57,7 @@ class DebugFeatureTest {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 ModelAtlasScaffold(
-                    debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) },
+                    debugContent = { padding, _, onOpen -> DebugScreen(state, info, {}, {}, onOpenDatabase = onOpen, bottomOverlayPadding = padding) },
                 ) { padding, list, _ ->
                     ModelListScreen(
                         ModelListUiState(models = List(20) { ModelSummary("lab/$it", "测试模型 $it") }, isLoading = false),
@@ -90,7 +90,7 @@ class DebugFeatureTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) }) { _, _, _ -> }
+                ModelAtlasScaffold(debugContent = { padding, _, onOpen -> DebugScreen(state, info, {}, {}, onOpenDatabase = onOpen, bottomOverlayPadding = padding) }) { _, _, _ -> }
             }
         }
         compose.onNodeWithTag("nav-debug").performClick()
@@ -106,7 +106,7 @@ class DebugFeatureTest {
     @Test fun fiveTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) }) { _, _, _ -> }
+                ModelAtlasScaffold(debugContent = { padding, _, onOpen -> DebugScreen(state, info, {}, {}, onOpenDatabase = onOpen, bottomOverlayPadding = padding) }) { _, _, _ -> }
             }
         }
         compose.onNodeWithTag("nav-settings").performClick()
@@ -137,7 +137,7 @@ class DebugFeatureTest {
         var entries = 0
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(debugContent = { _, visible ->
+                ModelAtlasScaffold(debugContent = { _, visible, _ ->
                     LaunchedEffect(visible) { if (visible) entries++ }
                 }) { _, _, _ -> }
             }
@@ -191,7 +191,7 @@ class DebugFeatureTest {
     @Test fun lastDiagnosticActionCanScrollFullyAboveFloatingNavigation() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) }) { _, _, _ -> }
+                ModelAtlasScaffold(debugContent = { padding, _, onOpen -> DebugScreen(state, info, {}, {}, onOpenDatabase = onOpen, bottomOverlayPadding = padding) }) { _, _, _ -> }
             }
         }
         compose.onNodeWithTag("nav-debug").performClick()
@@ -268,7 +268,7 @@ class DebugFeatureTest {
             ) {
                 ModelAtlasTheme(darkTheme = true, dynamicColor = false) {
                     Box(Modifier.width(320.dp)) {
-                        ModelAtlasScaffold(debugContent = { padding, _ -> DebugScreen(state, info, {}, {}, bottomOverlayPadding = padding) }) { _, _, _ -> }
+                        ModelAtlasScaffold(debugContent = { padding, _, onOpen -> DebugScreen(state, info, {}, {}, onOpenDatabase = onOpen, bottomOverlayPadding = padding) }) { _, _, _ -> }
                     }
                 }
             }

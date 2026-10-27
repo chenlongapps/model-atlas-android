@@ -9,5 +9,8 @@ internal object DebugFeature {
     val navigationItem: GlassNavigationItem? = null
 
     @Composable
-    fun Content(bottomOverlayPadding: Dp, isVisible: Boolean) = Unit
+    fun Content(bottomOverlayPadding: Dp, isVisible: Boolean, onOpenDatabase: () -> Unit) = Unit
+
+    @Composable
+    fun DatabaseContent(onClose: () -> Unit) = Unit
 }

@@ -11,6 +11,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModel
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
@@ -21,7 +24,7 @@ internal object DebugFeature {
     )
 
     @Composable
-    fun Content(bottomOverlayPadding: Dp, isVisible: Boolean) {
+    fun Content(bottomOverlayPadding: Dp, isVisible: Boolean, onOpenDatabase: () -> Unit) {
         val viewModel: DebugViewModel = hiltViewModel()
         val catalogViewModel: ModelListViewModel = hiltViewModel()
         val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -44,7 +47,36 @@ internal object DebugFeature {
         DebugScreen(
             state, info, viewModel::readStatistics,
             onRefresh = { viewModel.refresh(onRefreshed = catalogViewModel::onCatalogRefreshedExternally) },
+            onOpenDatabase = onOpenDatabase,
             bottomOverlayPadding = bottomOverlayPadding,
         )
+    }
+
+    @Composable
+    fun DatabaseContent(onClose: () -> Unit) {
+        val viewModel: DebugDatabaseViewModel = hiltViewModel()
+        val catalogViewModel: ModelListViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LaunchedEffect(viewModel) { if (viewModel.state.value.overview == null) viewModel.loadOverview() }
+        val back = { if (viewModel.back()) onClose() }
+        val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+        NavigationBackHandler(state = backState, isBackEnabled = true, onBackCompleted = back)
+        DebugDatabaseScreen(state, DatabaseActions(
+            back = back,
+            openTable = viewModel::openTable,
+            search = viewModel::search,
+            page = { viewModel.loadPage(it) },
+            openRow = viewModel::openRow,
+            create = viewModel::create,
+            edit = viewModel::edit,
+            change = viewModel::change,
+            save = { viewModel.save(catalogViewModel::onCatalogMutatedExternally) },
+            requestDelete = viewModel::requestDelete,
+            dismissDelete = viewModel::dismissDelete,
+            delete = { viewModel.delete(catalogViewModel::onCatalogMutatedExternally) },
+            dismissDiscard = viewModel::dismissDiscard,
+            discard = viewModel::discard,
+            retry = viewModel::retry,
+        ))
     }
 }
