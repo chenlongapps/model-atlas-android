@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/runinfra.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="400"
+    android:viewportHeight="400">
+  <path
+      android:pathData="M110,80h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M170,80h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M110,140h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M230,140h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M110,200h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M170,200h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M110,260h60v60h-60z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M230,260h60v60h-60z"
+      android:fillColor="#000000"/>
+</vector>

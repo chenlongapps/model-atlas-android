@@ -9,10 +9,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -156,6 +160,31 @@ class ModelCompareScreenTest {
         scrollToDescription("Model B，推理：暂无数据")
         toggleDetail("license")
         scrollToDescription("Model A，模型许可：A complete license name that must not be truncated")
+        compose.onNodeWithText("开放权重不等于开源或允许商用，请核对模型许可与使用条款。").assertDoesNotExist()
+    }
+
+    @Test fun canonicalIdsAreNotShownButPickerCanStillSearchAndSelectById() {
+        var selection: Pair<Int, String>? = null
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            ModelCompareScreen(ready, onSelect = { index, id -> selection = index to id })
+        } }
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasText("基本信息"))
+        compose.onNodeWithTag("compare-model-id-toggle").assertDoesNotExist()
+        compose.onNodeWithText("查看模型 ID").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Model A，模型 ID：deepseek/a").assertDoesNotExist()
+        compose.onNode(hasText("deepseek/a") and hasAnyAncestor(hasTestTag("compare-list")), useUnmergedTree = true)
+            .assertDoesNotExist()
+
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasText("模型对比"))
+        compose.onNodeWithTag("compare-slot-0").performClick()
+        val option = hasAnyAncestor(hasTestTag("compare-option:deepseek/a"))
+        compose.onNode(hasText("deepseek/a") and option, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("compare-search").performTextInput("deepseek/a")
+        compose.onNodeWithTag("compare-option:deepseek/a").assertIsDisplayed()
+        compose.onNodeWithTag("compare-option:openai/b").assertDoesNotExist()
+        compose.onNode(hasText("deepseek/a") and option, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("compare-option:deepseek/a").performClick()
+        compose.runOnIdle { assertEquals(0 to "deepseek/a", selection) }
     }
 
     @Test fun phoneUsesFullWidthValuePairsAndEqualHeightAlignedSelectionCards() {
@@ -235,13 +264,11 @@ class ModelCompareScreenTest {
         val state = mutableStateOf(ready)
         restoration.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state.value) } }
         val descriptions = listOf(
-            "model-id" to "Model A，模型 ID：deepseek/a",
             "service-id" to "Model A，报价服务 ID：selected-service",
             "license" to "Model A，模型许可：A complete license name that must not be truncated",
         )
         descriptions.forEach { (key, description) ->
             compose.onNodeWithTag("compare-list").performScrollToNode(hasText(when (key) {
-                "model-id" -> "查看模型 ID"
                 "service-id" -> "查看报价服务 ID"
                 else -> "查看完整许可"
             }))
@@ -263,12 +290,40 @@ class ModelCompareScreenTest {
         }
         descriptions.forEach { (key, _) ->
             compose.onNodeWithTag("compare-list").performScrollToNode(hasText(when (key) {
-                "model-id" -> "查看模型 ID"
                 "service-id" -> "查看报价服务 ID"
                 else -> "查看完整许可"
             }))
             compose.onNodeWithTag("compare-$key-toggle").assertIsDisplayed()
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "已收起"))
         }
+    }
+
+    @Test fun selectedSlotsWithoutNamesUseAccessiblePlaceholdersInsteadOfIds() {
+        var removed = -1
+        var retried = -1
+        val state = mutableStateOf(ModelCompareUiState(catalogStatus = CompareReadStatus.CONTENT,
+            first = CompareModelState("missing/first", CompareReadStatus.NOT_FOUND),
+            second = CompareModelState("missing/second", CompareReadStatus.ERROR)))
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            ModelCompareScreen(state.value, onRemove = { removed = it }, onRetry = { retried = it })
+        } }
+        compose.onNodeWithTag("compare-name-0", useUnmergedTree = true).assertTextEquals("模型 1（名称暂无数据）")
+        compose.onNodeWithTag("compare-name-1", useUnmergedTree = true).assertTextEquals("模型 2（名称暂无数据）")
+        listOf("missing/first", "missing/second").forEach { id ->
+            compose.onNodeWithText(id, useUnmergedTree = true).assertDoesNotExist()
+        }
+        compose.onNodeWithContentDescription("移除对比模型：模型 1（名称暂无数据）").performClick()
+        compose.onNodeWithText("重试").performClick()
+        compose.runOnIdle {
+            assertEquals(0, removed)
+            assertEquals(1, retried)
+            state.value = state.value.copy(first = CompareModelState("missing/first"))
+        }
+        compose.onNodeWithText("正在读取本地模型数据…").assertIsDisplayed()
+        compose.onNodeWithTag("compare-name-0", useUnmergedTree = true).assertTextEquals("模型 1（名称暂无数据）")
+        compose.onNodeWithText("missing/first", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("compare-slot-0").performClick()
+        compose.onNodeWithText("本地暂无可选模型，请先到“模型”页加载目录。").assertIsDisplayed()
     }
 
     @Test fun loadingMissingAndErrorNeverShowOldComparisonAndRetryIsLocalCallback() {

@@ -61,9 +61,6 @@ internal fun LazyListScope.comparisonItems(
             TextRow(R.string.model_list_release_date_label, models.map { it.metadata.releaseDate }, models)
             TextRow(R.string.detail_family, models.map { it.metadata.family }, models)
             TextRow(R.string.detail_knowledge_cutoff, models.map { it.metadata.knowledgeCutoff }, models)
-            CompareDisclosure("model-id", stringResource(R.string.detail_model_id), expandedDetails, onToggleDetail) {
-                TextRow(R.string.detail_model_id, models.map { it.id }, models)
-            }
         }
     }
     item("io") {
@@ -115,8 +112,6 @@ internal fun LazyListScope.comparisonItems(
             CompareDisclosure("license", stringResource(R.string.compare_full_license), expandedDetails, onToggleDetail) {
                 TextRow(R.string.detail_license, models.map { it.license }, models)
             }
-            Text(stringResource(R.string.detail_weights_notice), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

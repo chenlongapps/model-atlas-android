@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/qihang-ai.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M20,2L36.4,11V29L20,38L3.6,29V11L20,2ZM20,20V2M20,20L36.4,11M20,20L36.4,29M20,20V38M20,20L3.6,29M20,20L3.6,11"
+      android:strokeLineJoin="round"
+      android:strokeWidth="3"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"
+      android:strokeLineCap="round"/>
+</vector>

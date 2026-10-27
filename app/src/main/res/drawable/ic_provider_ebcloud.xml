@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/ebcloud.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="29"
+    android:viewportHeight="29">
+  <path
+      android:pathData="M17.884,4.277L25.227,8.554L25.227,23.956L17.884,19.68L17.884,4.277Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M10.644,24.246L17.987,28.522L25.228,23.956L17.885,19.68L10.644,24.246Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M3.3,4.584L10.643,8.861L10.643,24.263L3.3,19.986L3.3,4.584Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M3.3,4.583L10.643,8.86L17.885,4.277L10.541,0L3.3,4.583Z"
+      android:fillColor="#000000"/>
+</vector>

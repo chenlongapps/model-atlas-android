@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/inference.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M34.625,33.712H27.473V6.281H34.625V33.712ZM23.703,33.712H18.63V6.281H23.703V33.712ZM15.267,33.712H11.377V6.281H15.267V33.712ZM8.158,33.712H5.375V6.281H8.158V33.712Z"
+      android:fillColor="#000000"/>
+</vector>

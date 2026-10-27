@@ -148,6 +148,9 @@ DTO 位于 [`data/remote/dto/`](../app/src/main/java/io/github/chenlongapps/mode
 - 分发上游数据或其重大部分时，应保留版权声明及完整 MIT 许可文本（含免责条款）；**仅写来源名称或放链接不能替代许可声明**。全文已随 `res/raw/models_dev_license.txt` 打包，可通过设置页的“数据来源与许可”进入独立页面查看，无需先加载目录。
 - 来源说明继续注明 Models.dev，并说明本应用为独立第三方；这与保留许可文本是不同事项。上游 MIT 不自动决定本项目自身的许可证，也不替代各模型权重许可、服务商条款或商标使用规则。
 - 列表的 LAB 彩色 logo 同样来自 Models.dev 的 Logos 服务，已转换为 Android 矢量资源随 `app/src/main/res/drawable/ic_lab_*.xml` 打包，不运行时请求；logo 为品牌商标，仅用于标示目录中的 LAB 前缀，不代表隶属、赞助或认可。
+- 详情“价格”的服务商 logo 来自 `https://models.dev/logos/{provider-ID}.svg`，按本地详情的服务商稳定 ID 精确匹配，与 LAB 素材独立。2026-10-27 核对当次 `api.json?type=all` 的 232 个 ID，收录 212 个 ID 对应的 187 份 SVG 矢量资源（`ic_provider_*.xml`，不含独立兜底图）；仅原始 SVG 内容完全相同才共用资源。保留路径、变换及显式颜色，`currentColor` 固定为黑色以配合白底，不运行时下载或改数据库。12 个 ID（`alibaba-token-plan-cn`、`chutes`、`cline-pass`、`cortecs`、`gmicloud`、`morph`、`requesty`、`sakana`、`sap-ai-core`、`sarvam`、`synthetic`、`upstage`）返回与不存在 ID 相同的通用图；8 个 ID（`abliteration-ai`、`atomic-chat`、`hpc-ai`、`kenari`、`orcarouter`、`umans-ai`、`umans-ai-coding-plan`、`wafer.ai`）包含当前矢量导入器不支持的文字、嵌入位图或纹理。以上及未来未收录 ID 均显示中性兜底图，不展示不完整图形或借用同名 LAB 图案。素材同样仅用于品牌识别，不代表隶属、赞助或认可；本次数量是来源快照，不是固定接口契约。
+
+服务商素材使用 Android 工具链 `Svg2Vector` 导入，移除非绘制元数据并按原 `viewBox` 转换，统一固有尺寸为 24dp、由组件等比绘制。`lucidquery` 原始单路径超过 Android 资源字符串编码限制，先经构建期 SVGO 路径优化后导入；没有拆散复合路径或用其他品牌替代。每份资源注释保留原始地址和收录日期，后续更新仍需验证 Compose 加载及实际图形；这些是已生成的随包资源，不要求用户或应用运行时安装转换工具。
 
 ## 核实依据
 

@@ -4,6 +4,7 @@
     <string name="compare_subtitle">逐项了解两个模型的参数、能力与报价</string>
     <string name="compare_vs" translatable="false">VS</string>
     <string name="compare_select">选择模型 %1$d</string>
+    <string name="compare_unknown_model">模型 %1$d（名称暂无数据）</string>
     <string name="compare_replace">替换模型：%1$s</string>
     <string name="compare_change">更换模型</string>
     <string name="compare_remove">移除对比模型：%1$s</string>

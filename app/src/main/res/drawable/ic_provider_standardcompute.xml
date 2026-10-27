@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/standardcompute.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M5.5,2.5L18.5,2.5A3,3 0,0 1,21.5 5.5L21.5,18.5A3,3 0,0 1,18.5 21.5L5.5,21.5A3,3 0,0 1,2.5 18.5L2.5,5.5A3,3 0,0 1,5.5 2.5z"
+      android:strokeWidth="1.8"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"/>
+  <path
+      android:pathData="M12.5,7h5v10h-5z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M6,15h4.5v2h-4.5z"
+      android:fillColor="#000000"/>
+</vector>

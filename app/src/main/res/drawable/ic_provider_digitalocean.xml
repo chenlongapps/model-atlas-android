@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/digitalocean.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100.8"
+    android:viewportHeight="100.8">
+  <path
+      android:pathData="M50.4,72.7l-14,0l0,-14.1l0,0l14,0l0,0l0,14.1z"
+      android:fillColor="#000000"
+      android:fillType="evenOdd"/>
+  <path
+      android:pathData="M36.4,83.5l-10.8,0l0,0l0,-10.8l10.8,0l0,10.8z"
+      android:fillColor="#000000"
+      android:fillType="evenOdd"/>
+  <path
+      android:pathData="M25.6,72.7l-9.1,0l0,0l0,-9.1l0,0l9,0l0.1,0l0,9.1z"
+      android:fillColor="#000000"
+      android:fillType="evenOdd"/>
+  <path
+      android:pathData="M50.4,14C30.3,14 14,30.3 14,50.4h14.1c0,-12.3 10,-22.3 22.3,-22.3s22.3,10 22.3,22.3 -10,22.3 -22.3,22.3h0v14.1h0c20.1,0 36.4,-16.3 36.4,-36.4S70.5,14 50.4,14Z"
+      android:fillColor="#000000"/>
+</vector>

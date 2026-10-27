@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/infomaniak.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="81"
+    android:viewportHeight="80">
+  <path
+      android:pathData="M34.567,13.333H19.333V66.667H34.567V56.626L40.17,51.169L48.044,66.667H64.853L50.095,41.564L64.047,28.031H45.7L34.567,40.837V13.333Z"
+      android:fillColor="#000000"/>
+</vector>

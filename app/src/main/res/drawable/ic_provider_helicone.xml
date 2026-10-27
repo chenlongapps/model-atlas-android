@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/helicone.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M18.37,8.088L12,10.875V11.729V17.866L18.37,8.088Z"
+      android:fillColor="#000000"
+      android:fillAlpha="0.25"/>
+  <path
+      android:pathData="M3.3,7.068V14.914L10.047,10.02L3.3,7.068Z"
+      android:fillColor="#000000"
+      android:fillAlpha="0.25"/>
+  <path
+      android:pathData="M11.875,3.316L3.3,7.068L10.047,10.02L12,10.875L18.37,8.088L20.7,7.068L12.125,3.316C12.045,3.282 11.955,3.282 11.875,3.316Z"
+      android:fillColor="#000000"
+      android:fillAlpha="0.35"/>
+  <path
+      android:pathData="M3.3,7.068L11.875,3.316C11.955,3.282 12.045,3.282 12.125,3.316L20.7,7.068M3.3,7.068V14.914M3.3,7.068L10.047,10.02M20.7,7.068L18.37,8.088M20.7,7.068V9.088M3.3,14.914V16.882C3.3,17.007 3.375,17.12 3.491,17.169L4.077,17.415M3.3,14.914L10.047,10.02M10.047,10.02L12,10.875M18.37,8.088L12,10.875M18.37,8.088L12,17.866M20.7,9.088V16.882C20.7,17.007 20.625,17.12 20.51,17.169L13.942,19.925M20.7,9.088L13.942,19.925M12,20.74V17.866M12,20.74L13.942,19.925M12,20.74L4.077,17.415M12,17.866V11.729M4.077,17.415L12,11.729M12,10.875V11.729"
+      android:strokeLineJoin="round"
+      android:strokeWidth="0.62143"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"
+      android:strokeLineCap="round"/>
+</vector>

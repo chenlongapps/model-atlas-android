@@ -21,6 +21,7 @@ class ModelCompareQueryTest {
         val favorites = setOf("other/c", "lab/b")
         assertEquals(listOf("other/c", "lab/a"), ids(favorites, " ALPHA "))
         assertEquals(listOf("lab/b", "lab/a"), ids(favorites, "lab"))
+        assertEquals(listOf("lab/b"), ids(favorites, "lab/b"))
         assertEquals(listOf("other/c"), ids(favorites, "other preview"))
         assertEquals(emptyList<String>(), ids(favorites, "missing"))
     }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/nebius.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M30.333,7.536V29.232C30.333,29.232 35.5,28.92 35.5,23.013V7.536H30.333ZM9.667,32.976V11.28C9.667,11.28 4.5,11.592 4.5,17.5V32.974L9.667,32.976Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M25.578,25.883L19.078,10.938C18.014,8.52 16.278,7.159 13.812,7.159C11.347,7.159 9.664,9.148 9.664,11.279C9.664,11.279 12.771,10.849 14.418,14.629L20.923,29.573C21.983,31.989 23.723,33.353 26.186,33.353C28.647,33.353 30.334,31.362 30.334,29.232C30.334,29.232 27.226,29.664 25.578,25.883Z"
+      android:fillColor="#000000"/>
+</vector>

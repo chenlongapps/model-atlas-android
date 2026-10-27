@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/cohere.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M9.149,13.555C9.581,13.555 10.445,13.534 11.654,13.037C13.058,12.454 15.823,11.417 17.832,10.337C19.236,9.581 19.841,8.587 19.841,7.248C19.841,5.412 18.35,3.9 16.493,3.9H8.717C6.06,3.9 3.9,6.06 3.9,8.717C3.9,11.374 5.93,13.555 9.149,13.555Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M10.466,16.86C10.466,15.564 11.244,14.376 12.454,13.879L14.894,12.864C17.378,11.849 20.1,13.663 20.1,16.342C20.1,18.415 18.415,20.1 16.342,20.1H13.685C11.914,20.1 10.466,18.653 10.466,16.86Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M6.686,14.182C5.153,14.182 3.9,15.434 3.9,16.968V17.335C3.9,18.847 5.153,20.1 6.686,20.1C8.22,20.1 9.473,18.847 9.473,17.314V16.946C9.451,15.434 8.22,14.182 6.686,14.182Z"
+      android:fillColor="#000000"/>
+</vector>

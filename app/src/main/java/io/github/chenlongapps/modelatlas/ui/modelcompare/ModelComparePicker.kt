@@ -103,8 +103,6 @@ internal fun ModelComparePicker(
                                     Text(model.name, style = MaterialTheme.typography.titleMedium)
                                     Text(model.lab?.let(::labDisplayName) ?: stringResource(R.string.no_data),
                                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                                    Text(model.id, style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (excluded) Text(stringResource(R.string.compare_selected), style = MaterialTheme.typography.labelMedium)
                                 }
                             }

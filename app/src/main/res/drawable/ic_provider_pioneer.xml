@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/pioneer.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="80"
+    android:viewportHeight="80">
+  <path
+      android:pathData="M42.804,33.971L61.722,17.577L62.423,18.278L46.028,37.194L80,39.418V40.582L46.027,42.804L62.423,61.724L61.722,62.424L42.804,46.028L40.582,80H39.418L37.194,46.028L18.276,62.423L17.576,61.722L33.969,42.805L0,40.582V39.418L33.969,37.193L17.577,18.278L18.278,17.577L37.194,33.971L39.418,0H40.582L42.804,33.971Z"
+      android:fillColor="#000000"/>
+</vector>

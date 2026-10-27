@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/llmtr.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="38"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M24,12A11,11 0,1 0,2 12A11,11 0,1 0,24 12ZM24,12A8,8 0,1 0,8 12A8,8 0,1 0,24 12Z"
+      android:fillColor="#000000"
+      android:fillType="evenOdd"/>
+  <path
+      android:pathData="M32,7l1.12,3.45l3.64,0l-2.94,2.14l1.12,3.46l-2.94,-2.14l-2.94,2.14l1.12,-3.46l-2.94,-2.14l3.64,0z"
+      android:fillColor="#000000"/>
+</vector>

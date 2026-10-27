@@ -196,7 +196,10 @@ private fun CompareSelection(
         val stacked = maxWidth < 280.dp * density.fontScale
         val slots = listOf(state.first, state.second)
         val summaries = slots.map { slot -> state.models.firstOrNull { it.id == slot.modelId } }
-        val names = slots.mapIndexed { index, slot -> slot.detail?.name ?: summaries[index]?.name ?: slot.modelId }
+        val names = slots.mapIndexed { index, slot ->
+            slot.detail?.name ?: summaries[index]?.name
+                ?: slot.modelId?.let { stringResource(R.string.compare_unknown_model, index + 1) }
+        }
         val labs = slots.mapIndexed { index, slot -> slot.detail?.lab ?: summaries[index]?.lab }
         val titles = names.mapIndexed { index, name -> name ?: stringResource(R.string.compare_select, index + 1) }
         val labNames = labs.map { it?.let(::labDisplayName) ?: stringResource(R.string.no_data) }
@@ -247,7 +250,8 @@ private fun CompareSelectionCard(
                 Box(Modifier.weight(1f))
                 if (state.modelId != null) {
                     IconButton(onClick = onRemove, modifier = Modifier.testTag("compare-remove-$index")) {
-                        Icon(painterResource(R.drawable.ic_close), stringResource(R.string.compare_remove, name ?: state.modelId),
+                        Icon(painterResource(R.drawable.ic_close), stringResource(R.string.compare_remove,
+                            name ?: stringResource(R.string.compare_unknown_model, index + 1)),
                             Modifier.size(20.dp))
                     }
                 }

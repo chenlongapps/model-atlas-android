@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -68,7 +68,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -77,9 +76,6 @@ import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
-import io.github.chenlongapps.modelatlas.data.model.ModelDetailOffering
-import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
-import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
@@ -303,7 +299,7 @@ private fun ModelDetailBody(
                             }
                             ModelDetailStatus.NOT_FOUND -> item(key = "missing") {
                                 DetailSection(stringResource(if (favoriteState.isFavorite) R.string.favorite_unavailable else R.string.detail_missing_title)) {
-                                    favoriteState.identity?.let { FavoriteHistoricalIdentity(it) }
+                                    favoriteState.identity?.let { FavoriteHistoricalIdentity(it, showModelId = false) }
                                     Text(stringResource(R.string.detail_missing))
                                     Button(onClick = onBack) { Text(stringResource(R.string.navigate_back)) }
                                 }
@@ -365,26 +361,20 @@ private fun DetailTabs(selected: DetailTab, onSelect: (DetailTab) -> Unit) {
     }
 }
 
-private fun LazyListScope.overviewItems(model: ModelDetail) {
-    item(key = "parameters") {
-        DetailSection(stringResource(R.string.detail_parameters)) {
-            DetailField(stringResource(R.string.detail_model_id), model.id)
-            MetadataParameters(model.metadata)
-        }
-    }
-    item(key = "weights") { WeightsSection(model) }
-}
-
 private fun LazyListScope.providerItems(model: ModelDetail) {
     if (model.providers.all { it.offerings.isEmpty() }) item(key = "providers") {
         DetailSection(stringResource(R.string.detail_providers)) {
             Text(stringResource(R.string.detail_no_providers))
         }
     }
+    if (model.providers.any { it.offerings.isNotEmpty() }) item(key = "price-unit") {
+        Text(stringResource(R.string.model_list_price_unit), Modifier.padding(horizontal = 20.dp),
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     model.providers.forEach { provider ->
         provider.offerings.forEach { offering ->
             item(key = "offering:${provider.id.length}:${provider.id}${offering.id}") {
-                OfferingSection(offering, provider.name,
+                ModelServiceCard(offering, provider.id, provider.name,
                     Modifier.testTag("model-service:${provider.id.length}:${provider.id}${offering.id}"))
             }
         }
@@ -423,82 +413,6 @@ private fun BenchmarkSection(benchmark: ModelBenchmark) {
         DetailField(stringResource(R.string.detail_benchmark_dataset), benchmark.dataset)
         DetailField(stringResource(R.string.detail_benchmark_harness), benchmark.harness)
     }
-}
-
-@Composable
-private fun WeightsSection(model: ModelDetail) {
-    DetailSection(stringResource(R.string.detail_weights)) {
-        DetailField(stringResource(R.string.model_filter_weights), weightStatus(model.metadata.openWeights))
-        DetailField(stringResource(R.string.detail_license), model.license)
-        // 当前 Models.dev 未提供参数量，不从名称或描述猜测，也不换算为虚构精确值。
-        DetailField(stringResource(R.string.detail_parameter_count), null)
-        Text(stringResource(R.string.detail_weights_notice), style = MaterialTheme.typography.bodySmall)
-        when {
-            model.weights == null -> Text(stringResource(R.string.no_data))
-            model.weights.isEmpty() -> Text(stringResource(R.string.model_list_no_modalities))
-            else -> model.weights.forEach { weight ->
-                DetailLink(weight.label?.takeIf(String::isNotBlank) ?: stringResource(R.string.detail_weight_link), weight.url)
-            }
-        }
-    }
-}
-
-@Composable
-private fun OfferingSection(
-    offering: ModelDetailOffering,
-    providerName: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DetailField(stringResource(R.string.detail_offering_provider), providerName)
-            DetailField(stringResource(R.string.detail_offering_id), offering.id)
-            DetailField(stringResource(R.string.detail_offering_context), tokens(offering.metadata.contextLimitTokens))
-            DetailField(stringResource(R.string.detail_offering_output), tokens(offering.metadata.outputLimitTokens))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.detail_offering_price), style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall)
-                val metrics = listOf(R.string.model_list_input_label to offering.price?.input,
-                    R.string.model_list_output_label to offering.price?.output)
-                BoxWithConstraints {
-                    val columns = (maxWidth / (112.dp * LocalDensity.current.fontScale)).toInt().coerceIn(1, 2)
-                    FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = columns,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        metrics.forEach { (label, value) ->
-                            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {},
-                                verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(stringResource(label), style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(value?.let(::formatUsdPerMillionTokens) ?: stringResource(R.string.no_data),
-                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetadataParameters(metadata: ModelDetailMetadata) {
-    DetailField(stringResource(R.string.model_list_release_date_label), metadata.releaseDate)
-    DetailField(stringResource(R.string.detail_knowledge_cutoff), metadata.knowledgeCutoff)
-    DetailField(stringResource(R.string.model_list_context_label), tokens(metadata.contextLimitTokens))
-    DetailField(stringResource(R.string.detail_input_limit), tokens(metadata.inputLimitTokens))
-    DetailField(stringResource(R.string.model_list_output_limit_label), tokens(metadata.outputLimitTokens))
-}
-
-private fun tokens(value: Long?) = value?.let { "${formatTokenCount(it)} tokens" }
-
-@Composable
-private fun weightStatus(value: Boolean?): String? = when (value) {
-    true -> stringResource(R.string.model_list_open_weights_yes)
-    false -> stringResource(R.string.model_list_open_weights_no)
-    null -> null
 }
 
 @Composable

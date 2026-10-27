@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/blueclaw.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M21.8,6C19.6,8.2 16.4,10.2 13.6,11.15Q12,11.5 13.4,12.1C16.6,12.3 19.2,13.9 21.2,16.2C18.7,17.4 15.9,18.3 13.2,18.6C8.4,19.2 3.9,17.2 3,13.4C2.2,9.6 5.2,6 9.4,5C13.8,4 19.3,4.3 21.8,6Z"
+      android:fillColor="#000000"/>
+</vector>

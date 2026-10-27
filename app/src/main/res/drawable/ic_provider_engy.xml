@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/engy.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+  <path
+      android:pathData="M271,246L611,246A66,66 0,0 1,677 312L677,312A66,66 0,0 1,611 378L271,378A66,66 0,0 1,205 312L205,312A66,66 0,0 1,271 246z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M414,444L752,444A67,67 0,0 1,819 511L819,511A67,67 0,0 1,752 578L414,578A67,67 0,0 1,347 511L347,511A67,67 0,0 1,414 444z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M271,647L611,647A66,66 0,0 1,677 713L677,713A66,66 0,0 1,611 779L271,779A66,66 0,0 1,205 713L205,713A66,66 0,0 1,271 647z"
+      android:fillColor="#000000"/>
+</vector>

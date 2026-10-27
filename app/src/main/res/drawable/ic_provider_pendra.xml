@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/pendra.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="150"
+    android:viewportHeight="150">
+  <path
+      android:pathData="M135.02,17.38l0,111.74l-120.94,0l-0,-111.74z"
+      android:strokeWidth="6.12"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"/>
+  <path
+      android:pathData="M93.17,87.09l24.65,0l0,24.64l-24.65,0z"
+      android:fillColor="#000000"/>
+</vector>

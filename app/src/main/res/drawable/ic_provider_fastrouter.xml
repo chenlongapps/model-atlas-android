@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/fastrouter.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M31.883,10.41L28.016,16.868V13.384H20.259L17.762,17.69C17.613,17.913 17.613,18.212 17.724,18.435C17.873,18.659 18.097,18.808 18.394,18.808H26.695L15.491,36L17.65,25.707C17.687,25.484 17.65,25.26 17.501,25.073C17.352,24.887 17.129,24.812 16.906,24.812H8.195L14.15,7.425H18.326V7.415L28.016,7.425V4L31.883,10.41Z"
+      android:fillColor="#000000"/>
+</vector>

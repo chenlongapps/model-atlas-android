@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/io-net.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M2.4,9.601L4.42,10.969H2.4V16.062H4.42V10.969V7.914H2.4V9.601Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M16.074,9.948C16.359,9.948 16.58,10.17 16.58,10.456V11.632L18.604,12.998V9.948C18.604,8.836 17.687,7.914 16.58,7.914H4.465L7.502,9.948H16.105H16.074Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M9.991,14.028C9.707,14.028 9.485,13.806 9.485,13.52V12.344L7.461,10.978V14.028C7.461,15.14 8.378,16.062 9.485,16.062H21.6L18.563,14.028H9.96H9.991Z"
+      android:fillColor="#000000"/>
+</vector>

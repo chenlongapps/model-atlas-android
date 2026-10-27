@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/bothub.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="500"
+    android:viewportHeight="500">
+  <path
+      android:pathData="M238,170L238,126A20,20 0,1 1,262 126L262,170L335,170A35,35 0,0 1,370 205L370,225A12,12 0,0 1,382 237L382,263A12,12 0,0 1,370 275L370,315A35,35 0,0 1,335 350L165,350A35,35 0,0 1,130 315L130,275A12,12 0,0 1,118 263L118,237A12,12 0,0 1,130 225L130,205A35,35 0,0 1,165 170Z"
+      android:strokeLineJoin="round"
+      android:strokeWidth="12"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"
+      android:strokeLineCap="round"/>
+  <path
+      android:pathData="M202,242m-21,0a21,21 0,1 1,42 0a21,21 0,1 1,-42 0"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M298,242m-21,0a21,21 0,1 1,42 0a21,21 0,1 1,-42 0"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M218,288L282,288A13,13 0,0 1,295 301L295,301A13,13 0,0 1,282 314L218,314A13,13 0,0 1,205 301L205,301A13,13 0,0 1,218 288z"
+      android:fillColor="#000000"/>
+</vector>

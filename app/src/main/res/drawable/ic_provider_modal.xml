@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/modal.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="368"
+    android:viewportHeight="192">
+  <path
+      android:pathData="M148.87,4 L183.51,64 111.92,188a8,8 0,0 1,-6.93 4L40.33,192a8,8 0,0 1,-6.93 -4L1.07,132a8,8 0,0 1,0 -8L70.36,4a8,8 0,0 1,6.93 -4h64.66a8,8 0,0 1,6.92 4ZM365.96,124L296.67,4a8,8 0,0 0,-6.93 -4h-64.66a8,8 0,0 0,-6.93 4l-34.64,60 71.59,124a8,8 0,0 0,6.93 4h64.66a8,8 0,0 0,6.93 -4l32.33,-56a8,8 0,0 0,0.01 -8Z"
+      android:fillColor="#000000"/>
+</vector>

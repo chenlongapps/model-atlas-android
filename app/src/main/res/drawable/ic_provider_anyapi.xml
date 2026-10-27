@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/anyapi.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="44"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M30.463,10.977L0,39.657L23.877,0L30.463,10.977ZM30.504,19.897C32.265,19.898 33.897,20.824 34.799,22.338L43.07,36.222C43.864,37.555 42.903,39.245 41.352,39.245H35.362C33.601,39.245 31.969,38.318 31.067,36.805L20.995,19.897H30.504Z"
+      android:fillColor="#000000"/>
+</vector>

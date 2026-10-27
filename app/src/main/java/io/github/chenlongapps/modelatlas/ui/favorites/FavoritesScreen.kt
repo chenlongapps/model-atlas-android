@@ -189,11 +189,11 @@ internal fun FavoritesScreen(
 }
 
 @Composable
-internal fun FavoriteHistoricalIdentity(identity: FavoriteIdentity) {
+internal fun FavoriteHistoricalIdentity(identity: FavoriteIdentity, showModelId: Boolean = true) {
     Text(identity.name, style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.model_list_lab, identity.lab?.let(::labDisplayName) ?: stringResource(R.string.no_data)),
         color = MaterialTheme.colorScheme.primary)
-    Text(identity.id, style = MaterialTheme.typography.bodySmall)
+    if (showModelId) Text(identity.id, style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.favorite_historical_identity), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

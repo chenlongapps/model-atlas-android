@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/model-oracle-ai.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M4.55,10.3a7.7,7.7 0,0 1,14.9 0M19.45,13.7a7.7,7.7 0,0 1,-14.9 0"
+      android:strokeWidth="1.55"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"
+      android:strokeLineCap="round"/>
+  <path
+      android:pathData="M3.35,12m-1.45,0a1.45,1.45 0,1 1,2.9 0a1.45,1.45 0,1 1,-2.9 0"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M20.65,12m-1.45,0a1.45,1.45 0,1 1,2.9 0a1.45,1.45 0,1 1,-2.9 0"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M12,20.65m-1.45,0a1.45,1.45 0,1 1,2.9 0a1.45,1.45 0,1 1,-2.9 0"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M12,4.85 L17.05,7.8 12,10.75 6.95,7.8 12,4.85Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M6.65,8.95 L11.25,11.65v6.1l-4.6,-2.7v-6.1Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M17.35,8.95 L12.75,11.65v6.1l4.6,-2.7v-6.1Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M3.35,12h3.3M17.35,12h3.3M12,17.75v2.9"
+      android:strokeWidth="1.05"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"
+      android:strokeLineCap="round"/>
+  <path
+      android:pathData="M12,12m-0.95,0a0.95,0.95 0,1 1,1.9 0a0.95,0.95 0,1 1,-1.9 0"
+      android:fillColor="#000000"/>
+</vector>

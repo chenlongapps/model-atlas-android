@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/oci.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M8,5.5h8a6.5,6.5 0,0 1,0 13L8,18.5a6.5,6.5 0,0 1,0 -13zM8,8.5a3.5,3.5 0,0 0,0 7h8a3.5,3.5 0,0 0,0 -7L8,8.5z"
+      android:fillColor="#000000"/>
+</vector>

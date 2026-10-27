@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/ovhcloud.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M33.5,11.709C36.634,17.342 36.039,24.324 32.033,29.362H23.504L26.122,24.721H22.671L26.757,17.541H30.248L33.5,11.709ZM16.721,29.362H8.033C3.947,24.324 3.352,17.302 6.526,11.67L12.159,21.428L18.347,10.638H27.471L16.721,29.362Z"
+      android:fillColor="#000000"
+      android:fillType="evenOdd"/>
+</vector>

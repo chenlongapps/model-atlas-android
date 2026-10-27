@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/perplexity.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M17.264,2.869L12.042,8.096M17.264,2.869V8.096H12.042M17.264,2.869V4.3M12.042,8.096L6.818,2.869V8.096H12.042ZM12.042,8.096L17.264,13.323V20.816L12.042,15.589M12.042,8.096V15.589M12.042,8.096L6.819,13.323M12.03,2.1V21.9M12.042,15.589L6.819,20.816V13.323M6.819,13.323L6.818,15.559H4.577V8.095H12.041L6.819,13.323ZM11.986,8.095L17.208,13.323V15.559H19.45V8.095H11.986Z"
+      android:strokeWidth="0.825"
+      android:fillColor="#00000000"
+      android:strokeColor="#000000"/>
+</vector>

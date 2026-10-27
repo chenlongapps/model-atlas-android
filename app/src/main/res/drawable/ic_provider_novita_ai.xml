@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/novita-ai.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <group>
+    <clip-path
+        android:pathData="M2.188,8.262h35v21.631h-35z"/>
+    <path
+        android:pathData="M15.556,8.262V16.524L2.188,29.893H15.556V21.63L23.819,29.893H37.188L15.556,8.262Z"
+        android:fillColor="#000000"/>
+  </group>
+</vector>

@@ -139,7 +139,7 @@
     <string name="detail_missing_title">模型已不在当前目录中</string>
     <string name="detail_missing">该模型可能已被移除或不再符合 LLM 收录规则。请返回列表查看当前目录。</string>
     <string name="detail_parameters">技术参数</string>
-    <string name="detail_model_id">模型 ID</string>
+    <string name="detail_modalities">模态</string>
     <string name="detail_description">描述</string>
     <string name="detail_description_missing">暂无模型描述</string>
     <string name="detail_family">模型系列</string>
@@ -160,8 +160,6 @@
     <string name="detail_offering_context">上下文长度</string>
     <string name="detail_offering_output">最大输出</string>
     <string name="detail_offering_price">价格</string>
-    <string name="detail_weights_notice">开放权重不等于开源或允许商用，请核对模型许可与使用条款。</string>
-    <string name="detail_weight_link">权重地址</string>
     <string name="detail_open_link">打开：%1$s（外部链接）</string>
     <string name="detail_link_failed">无法打开链接，请确认设备上有可用浏览器。</string>
     <string name="detail_link_invalid">此链接无效或不是可打开的 HTTP(S) 地址。</string>

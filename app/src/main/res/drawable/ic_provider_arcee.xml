@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/arcee.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M13.236,2.377 L2.751,20.493L0,20.493L11.863,0l1.373,2.377ZM16.79,8.533 L7.184,20.493L4.13,20.493L15.511,6.32l1.279,2.212ZM23.698,20.493L14.05,20.493l8.406,-2.151 1.242,2.15ZM20.278,14.571 L12.435,20.491L8.482,20.491l10.597,-7.997 1.2,2.077Z"
+      android:fillColor="#000000"
+      android:fillType="evenOdd"/>
+</vector>

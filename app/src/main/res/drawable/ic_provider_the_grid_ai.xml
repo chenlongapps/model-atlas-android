@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/the-grid-ai.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M4,3L7.765,6.405V8.351H4V3Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M4,21L7.765,17.595V15.649H4V21Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M20,3L16.235,6.405V8.351H20V3Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M20,21L16.235,17.595V15.649H20V21Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M9.176,3L11.059,6.405V8.351H9.176V3Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M9.176,21L11.059,17.595V15.649H9.176V21Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M14.824,3L12.941,6.405V8.351H14.824V3Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M14.824,21L12.941,17.595V15.649H14.824V21Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M4,8.595L7.765,10.54V13.459L4,15.405V8.595Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M9.176,8.595L11.059,10.54V13.459L9.176,15.405V8.595Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M14.824,8.595L12.941,10.54V13.459L14.824,15.405V8.595Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M20,8.595L16.235,10.54V13.459L20,15.405V8.595Z"
+      android:fillColor="#000000"/>
+</vector>

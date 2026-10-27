@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/merge-gateway.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="972.4"
+    android:viewportHeight="1200">
+  <path
+      android:pathData="M710.8,430.1c-113.2,26.2 -221.4,69.5 -320.7,127.4C229,455.1 95,310.8 5.5,135.6c-12.3,-24.1 -2.4,-53.9 22.5,-65L173.7,4.3c22.7,-10.4 49.6,-1.2 61.2,20.8 101.1,193.8 273.4,337.7 475.9,405Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M173.7,1195.7l-146,-66.4c-24.6,-11.3 -34.7,-40.9 -22.5,-65C182.4,718.1 534.1,491.8 922.5,473.8c27.2,-1.2 49.9,20.3 49.9,47.3v160.4c0,25 -19.4,45.6 -44.4,47 -292.8,15.6 -557.7,186.2 -693.3,446.4 -11.6,22.2 -38.5,31.2 -61.2,20.8h0.2Z"
+      android:fillColor="#000000"/>
+</vector>

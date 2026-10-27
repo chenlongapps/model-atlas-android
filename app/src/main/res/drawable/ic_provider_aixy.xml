@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/aixy.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+  <path
+      android:pathData="M18,47 L30.6,16h4.6L48,47h-8.2l-2.6,-7.2L27,39.8L24.2,47L16,47zM31.8,24.6 L29.1,32.8h6l-2.8,-8.2h-0.5z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M47,17m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"
+      android:fillColor="#000000"/>
+</vector>

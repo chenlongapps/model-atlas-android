@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/infer.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="1254"
+    android:viewportHeight="1254">
+  <path
+      android:pathData="M393,704 L455,538H531L548,446C568,346 656,270 755,270H889L840,424H781C746,424 722,444 715,477L707,538H895Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="m496,714 l199,-75 -77,313H436Z"
+      android:fillColor="#000000"/>
+</vector>

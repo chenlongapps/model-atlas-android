@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/liquid.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+  <path
+      android:pathData="M2.5,4.21l5.7,5.868 -5.697,5.828 2.006,1.961 6.652,-6.805 0.955,-0.976 -0.952,-0.98 -6.652,-6.851L2.5,4.21ZM12.012,14.76v2.977h7.593L19.605,14.76h-7.593Z"
+      android:fillColor="#000000"/>
+</vector>

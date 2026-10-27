@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/modelscope.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+  <path
+      android:pathData="M6.778,10.5H14.333V14.278H10.555V18.055H6.778V14.986H3.708V18.055H6.778V21.833H3V14.278H6.778V10.5ZM6.778,21.833H10.555V25.611H14.333V29.388H6.778V21.833ZM14.333,18.055H18.112V21.833H14.333V18.055ZM21.888,21.833V25.611H18.112V21.833H21.888ZM21.888,21.833V18.055H25.667V21.833H21.888Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M33.222,21.833V18.055H29.445V14.278H25.667V10.5H33.222V14.278H37V21.833H33.222ZM33.222,18.055H36.292V14.986H33.222V18.055Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M33.222,21.833V29.388H25.667V25.612H29.445V21.833H33.222Z"
+      android:fillColor="#000000"/>
+</vector>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models.dev: https://models.dev/logos/jiekou.svg (2026-10-27). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M16,4H4V20H16C18.209,20 20,18.209 20,16V8H24V16C24,20.418 20.418,24 16,24H4C1.791,24 0,22.209 0,20V0H16V4Z"
+      android:fillColor="#000000"/>
+  <path
+      android:pathData="M20,4H24V0H20V4Z"
+      android:fillColor="#000000"/>
+</vector>
