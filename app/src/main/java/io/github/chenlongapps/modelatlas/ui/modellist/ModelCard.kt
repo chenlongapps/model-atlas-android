@@ -59,6 +59,7 @@ internal fun ModelCard(
     onTogglePriceDetails: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenDetail: (() -> Unit)? = null,
+    isFavorite: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
@@ -76,7 +77,18 @@ internal fun ModelCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ModelIdentity(model.name, model.lab, model.openWeights, model.license, modelId = model.id)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                ModelIdentity(model.name, model.lab, model.openWeights, model.license,
+                    modifier = Modifier.weight(1f), modelId = model.id)
+                if (isFavorite) {
+                    Icon(painterResource(R.drawable.ic_favorite_filled), contentDescription = stringResource(R.string.favorite_saved),
+                        modifier = Modifier.size(18.dp).testTag("model-favorite:${model.id}"), tint = colors.primary)
+                }
+            }
             ModelCoreMetrics(model.releaseDate, model.contextLimitTokens, model.outputLimitTokens)
             ModelModalities(model.inputModalities, model.outputModalities)
             HorizontalDivider(

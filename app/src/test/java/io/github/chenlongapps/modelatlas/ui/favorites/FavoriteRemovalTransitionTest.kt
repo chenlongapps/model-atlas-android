@@ -10,6 +10,18 @@ class FavoriteRemovalTransitionTest {
     private val second = favorite("lab/b")
     private val third = favorite("lab/c")
 
+    @Test fun sourcePositionIsPinnedUntilReturnEvenWhenRemovalFails() {
+        val transition = FavoriteRemovalTransition()
+        transition.pin(second.identity.id, 7)
+        transition.source = { RetainedFavorite(second, 7) }
+        transition.begin(second.identity.id)
+        transition.clear(second.identity.id)
+        assertEquals(second.identity.id, transition.pinnedId)
+        assertEquals(7, transition.pinnedIndex)
+        transition.finishReturn()
+        assertNull(transition.pinnedId)
+    }
+
     @Test fun onlyExplicitRemovalRetainsOneSourceAtItsOriginalPositionWithoutFreezingOtherUpdates() {
         val transition = FavoriteRemovalTransition()
         transition.source = { RetainedFavorite(second, 1) }

@@ -1,6 +1,9 @@
 package io.github.chenlongapps.modelatlas.ui.modellist
 
 import android.content.res.Configuration
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +37,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,6 +61,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -70,6 +77,11 @@ import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelIdentitySnapshot
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteHistoricalIdentity
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesUiState
+import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesViewModel
+import io.github.chenlongapps.modelatlas.ui.favorites.LocalFavoriteRemovalTransition
+import io.github.chenlongapps.modelatlas.ui.favorites.RetainedFavorite
 import kotlinx.coroutines.delay
 
 @Composable
@@ -79,8 +91,10 @@ fun ModelListRoute(
     viewModel: ModelListViewModel = hiltViewModel(),
     listState: LazyListState = rememberLazyListState(),
     onModelClick: (String) -> Unit = {},
+    favoritesViewModel: FavoritesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val favoritesState by favoritesViewModel.uiState.collectAsStateWithLifecycle()
     ModelListScreen(
         uiState = uiState,
         onRetry = viewModel::retry,
@@ -92,6 +106,8 @@ fun ModelListRoute(
         bottomOverlayPadding = bottomOverlayPadding,
         listState = listState,
         onModelClick = onModelClick,
+        favoritesState = favoritesState,
+        onRetryFavorites = favoritesViewModel::retry,
     )
 }
 
@@ -108,6 +124,8 @@ internal fun ModelListScreen(
     listState: LazyListState = rememberLazyListState(),
     onQueryChange: (ModelListQuery) -> Unit = {},
     onModelClick: (String) -> Unit = {},
+    favoritesState: FavoritesUiState = FavoritesUiState(isLoading = false),
+    onRetryFavorites: () -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -118,6 +136,41 @@ internal fun ModelListScreen(
     var showFilters by rememberSaveable { mutableStateOf(false) }
     val isVisible = LocalModelListVisible.current
     val sharedTransition = LocalModelSharedTransition.current
+    val removal = LocalFavoriteRemovalTransition.current
+    val favorites = if (favoritesState.hasError) emptyList() else favoritesState.favorites
+    val rawEntries = catalogEntries(uiState.models, favorites, uiState.query).let { entries ->
+        // 目录读取失败不展示过期目录，但仍允许访问已独立保存的下架收藏。
+        if (uiState.error != null) entries.filter { it.model == null } else entries
+    }
+    val currentEntries by rememberUpdatedState(rawEntries)
+    DisposableEffect(removal) {
+        removal?.source = { id ->
+            val index = currentEntries.indexOfFirst { it.id == id }
+            currentEntries.getOrNull(index)?.favorite?.let { RetainedFavorite(it, index) }
+        }
+        onDispose { removal?.source = null }
+    }
+    val retained = removal?.retained
+    val missingRetained = retained != null && favorites.none { it.identity.id == retained.favorite.identity.id }
+    val retainedAlpha = remember(retained?.favorite?.identity?.id) { Animatable(1f) }
+    LaunchedEffect(retained, removal?.awaitingReturn, missingRetained, favoritesState.hasError) {
+        if (retained != null && favoritesState.hasError) removal.clear(retained.favorite.identity.id)
+        else if (retained != null && missingRetained && !removal.awaitingReturn) {
+            if (retained.favorite.model == null) retainedAlpha.animateTo(0f, tween(180))
+            removal.clear(retained.favorite.identity.id)
+        }
+    }
+    val entries = rawEntries.toMutableList().apply {
+        if (retained != null && missingRetained && retained.favorite.model == null && !favoritesState.hasError &&
+            none { it.id == retained.favorite.identity.id }) {
+            add(retained.index.coerceIn(0, size), CatalogEntry(retained.favorite.identity.id, null, retained.favorite))
+        }
+        val pinnedIndex = indexOfFirst { it.id == removal?.pinnedId }
+        if (pinnedIndex >= 0 && removal != null) {
+            val entry = removeAt(pinnedIndex)
+            add(removal.pinnedIndex.coerceIn(0, size), entry)
+        }
+    }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(isVisible) {
         if (!isVisible) {
@@ -226,7 +279,7 @@ internal fun ModelListScreen(
                         )
                     }
                 }
-                if (showSkeletons || (!uiState.isLoading && uiState.error == null)) {
+                if (showSkeletons || (!uiState.isLoading && (uiState.error == null || favorites.isNotEmpty()))) {
                     item(key = "catalog-query", contentType = "catalog-query") {
                         ModelCatalogControls(
                             query = uiState.query,
@@ -237,7 +290,13 @@ internal fun ModelListScreen(
                         )
                     }
                 }
-                if (showSkeletons || uiState.visibleModels.isNotEmpty()) {
+                if (favoritesState.hasError && !showSkeletons) {
+                    item(key = "favorites-error") {
+                        CatalogStateCard(title = stringResource(R.string.nav_favorites),
+                            message = stringResource(R.string.favorites_read_error), onRetry = onRetryFavorites)
+                    }
+                }
+                if (showSkeletons || entries.isNotEmpty()) {
                     item(key = "sort-order", contentType = "sort-order") {
                         Text(
                             text = stringResource(R.string.model_list_order),
@@ -263,13 +322,13 @@ internal fun ModelListScreen(
                             onRetry = onRetry,
                         )
                     }
-                    uiState.models.isEmpty() -> item(key = "empty") {
+                    uiState.models.isEmpty() && entries.isEmpty() -> item(key = "empty") {
                         CatalogStateCard(
                             title = stringResource(R.string.model_list_empty_title),
                             message = stringResource(R.string.model_list_empty),
                         )
                     }
-                    uiState.visibleModels.isEmpty() -> item(key = "no-results") {
+                    entries.isEmpty() -> item(key = "no-results") {
                         CatalogStateCard(
                             title = stringResource(R.string.model_query_empty_title),
                             message = stringResource(R.string.model_query_empty),
@@ -277,10 +336,16 @@ internal fun ModelListScreen(
                         )
                     }
                 }
-                items(items = uiState.visibleModels, key = { "model:${it.id}" }) { model ->
-                    ModelCard(
+                if (!showSkeletons) items(items = entries, key = { "model:${it.id}" }) { entry ->
+                    val model = entry.model
+                    val isRetained = retained?.favorite?.identity?.id == entry.id && missingRetained
+                    Box(Modifier.animateItem(placementSpec = tween(220))
+                        .graphicsLayer { alpha = if (isRetained && model == null) retainedAlpha.value else 1f }
+                        .then(if (isRetained && model == null) Modifier.clearAndSetSemantics {} else Modifier)) {
+                    if (model != null) ModelCard(
                         model = model,
                         onOpenDetail = {
+                            removal?.pin(model.id, entries.indexOfFirst { it.id == model.id })
                             sharedTransition?.captureIdentity(ModelIdentitySnapshot(
                                 model.id, model.name, model.lab, model.openWeights, model.license,
                             ))
@@ -291,12 +356,26 @@ internal fun ModelListScreen(
                             expandedPriceModelId =
                                 if (expandedPriceModelId == model.id) null else model.id
                         },
+                        isFavorite = entry.favorite != null,
                     )
+                    else entry.favorite?.let { favorite ->
+                        Surface(Modifier.fillMaxWidth().testTag("favorite-unavailable:${entry.id}")
+                            .clickable(enabled = !isRetained, role = Role.Button, onClickLabel = stringResource(R.string.detail_open)) {
+                                removal?.pin(entry.id, entries.indexOfFirst { it.id == entry.id })
+                                onModelClick(entry.id)
+                            }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FavoriteHistoricalIdentity(favorite.identity)
+                                Text(stringResource(R.string.favorite_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    }
                 }
             }
         }
     }
-    if (showFilters && isVisible && !uiState.isLoading && uiState.error == null) {
+    if (showFilters && isVisible && !uiState.isLoading && (uiState.error == null || favorites.isNotEmpty())) {
         ModelFilterSheet(
             models = uiState.models,
             query = uiState.query,

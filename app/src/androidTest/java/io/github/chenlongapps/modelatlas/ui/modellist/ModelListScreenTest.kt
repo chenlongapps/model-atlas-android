@@ -69,7 +69,7 @@ class ModelListScreenTest {
         compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
         val header = compose.onNodeWithTag("catalog-header").getUnclippedBoundsInRoot()
         val notice = compose.onNodeWithTag("catalog-notice").getUnclippedBoundsInRoot()
-        val order = compose.onNodeWithText("按发布时间 · 最新在前").getUnclippedBoundsInRoot()
+        val order = compose.onNodeWithText("收藏优先 · 组内按发布时间从新到旧").getUnclippedBoundsInRoot()
         assertTrue("Notice must follow the header", notice.top >= header.bottom)
         assertTrue("Notice must precede the sort order", notice.bottom <= order.top)
         assertEquals(0, applies)

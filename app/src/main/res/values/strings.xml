@@ -38,7 +38,7 @@
     <string name="model_list_lab">研发机构 · %1$s</string>
     <string name="model_list_title">模型目录</string>
     <string name="model_list_count">模型目录 · %1$d 个模型</string>
-    <string name="model_list_order">按发布时间 · 最新在前</string>
+    <string name="model_list_order">收藏优先 · 组内按发布时间从新到旧</string>
     <string name="model_search_label">搜索模型</string>
     <string name="model_search_hint">搜索模型名称或研发机构…</string>
     <string name="model_search_clear">清空搜索</string>

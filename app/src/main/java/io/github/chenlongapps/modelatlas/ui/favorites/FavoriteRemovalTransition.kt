@@ -14,13 +14,25 @@ internal class FavoriteRemovalTransition {
         private set
     var awaitingReturn by mutableStateOf(false)
         private set
+    var pinnedId by mutableStateOf<String?>(null)
+        private set
+    var pinnedIndex by mutableStateOf(0)
+        private set
+
+    fun pin(id: String, index: Int) {
+        pinnedId = id
+        pinnedIndex = index
+    }
 
     fun begin(id: String) {
         retained = source?.invoke(id)
         awaitingReturn = retained != null
     }
 
-    fun finishReturn() { awaitingReturn = false }
+    fun finishReturn() {
+        awaitingReturn = false
+        pinnedId = null
+    }
 
     fun clear(id: String) {
         if (retained?.favorite?.identity?.id != id) return

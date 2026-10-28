@@ -78,7 +78,6 @@ import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareRoute
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareScreen
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareUiState
-import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesRoute
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesScreen
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesUiState
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteRemovalTransition
@@ -98,7 +97,6 @@ fun ModelAtlasApp(
         debugContent = { bottomPadding, isVisible, onOpen -> DebugFeature.Content(bottomPadding, isVisible, onOpen) },
         databaseContent = { onClose -> DebugFeature.DatabaseContent(onClose) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
-        favoritesContent = { bottomPadding, onModelClick -> FavoritesRoute(bottomPadding, onModelClick) },
     ) { bottomOverlayPadding, listState, onModelClick ->
         ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
     }
@@ -123,7 +121,7 @@ internal fun ModelAtlasScaffold(
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
-        listOf(GlassNavigationItem.Models, GlassNavigationItem.Favorites, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
+        listOf(GlassNavigationItem.Models, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
     }
     val pagerState = rememberPagerState(pageCount = { navigationItems.size })
     val modelListState = rememberLazyListState()
@@ -189,7 +187,7 @@ internal fun ModelAtlasScaffold(
         LaunchedEffect(selectedModelId, transitioning, detailVisibility.transition.currentState) {
             if (selectedModelId == null && !transitioning && detailVisibility.transition.currentState == EnterExitState.PostExit) {
                 // 共享覆盖层也完成交接后，才允许收藏来源卡片开始自己的退出动画。
-                if (detailSourceTag == GlassNavigationItem.Favorites.tag) favoriteRemoval.finishReturn()
+                favoriteRemoval.finishReturn()
                 retainedModelId = null
                 initialIdentity = null
             }
@@ -222,12 +220,10 @@ internal fun ModelAtlasScaffold(
                     when (navigationItems[page]) {
                         GlassNavigationItem.Models -> CompositionLocalProvider(
                             LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == page),
+                            LocalFavoriteRemovalTransition provides favoriteRemoval,
                         ) {
                             modelContent(bottomOverlayPadding, modelListState, openModel)
                         }
-                        GlassNavigationItem.Favorites -> CompositionLocalProvider(
-                            LocalFavoriteRemovalTransition provides favoriteRemoval,
-                        ) { favoritesContent(bottomOverlayPadding, openModel) }
                         GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
                         GlassNavigationItem.Settings -> SettingsScreen(
                             bottomOverlayPadding = bottomOverlayPadding,
@@ -282,9 +278,7 @@ internal fun ModelAtlasScaffold(
                     sharedScope, detailVisibility, enabled = true,
                     expansionProgress = expansion,
                     initialIdentity = initialIdentity?.takeIf { it.id == id },
-                ), LocalFavoriteRemovalTransition provides favoriteRemoval.takeIf {
-                    detailSourceTag == GlassNavigationItem.Favorites.tag
-                }) {
+                ), LocalFavoriteRemovalTransition provides favoriteRemoval) {
                     key(id) {
                         ModelDetailContainer(id) { detailContent(id, detailTransition::exit) }
                     }
