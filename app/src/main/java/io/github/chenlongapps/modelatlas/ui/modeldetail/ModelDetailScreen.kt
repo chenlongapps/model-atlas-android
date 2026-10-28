@@ -385,6 +385,9 @@ private fun LazyListScope.benchmarkItems(model: ModelDetail) {
     item(key = "benchmark-notice") {
         DetailSection(stringResource(R.string.detail_tab_benchmarks)) {
             Text(stringResource(R.string.detail_benchmarks_notice), style = MaterialTheme.typography.bodySmall)
+            if (model.benchmarks?.any { it.sourceType == "test" } == true) {
+                Text(stringResource(R.string.detail_benchmark_test_notice), style = MaterialTheme.typography.bodySmall)
+            }
             if (model.benchmarks == null) Text(stringResource(R.string.detail_benchmarks_missing))
             else if (model.benchmarks.isEmpty()) Text(stringResource(R.string.detail_benchmarks_empty))
         }
@@ -400,6 +403,14 @@ private fun BenchmarkSection(benchmark: ModelBenchmark) {
     DetailSection(benchmark.name.takeIf(String::isNotBlank) ?: stringResource(R.string.no_data)) {
         DetailField(stringResource(R.string.detail_benchmark_score), benchmark.score.toString())
         DetailField(stringResource(R.string.detail_benchmark_metric), benchmark.metric)
+        benchmark.unit?.let { DetailField(stringResource(R.string.detail_benchmark_unit), it) }
+        benchmark.higherIsBetter?.let {
+            DetailField(stringResource(R.string.detail_benchmark_direction), stringResource(if (it) R.string.detail_benchmark_higher else R.string.detail_benchmark_lower))
+        }
+        benchmark.reasoningEffort?.let { DetailField(stringResource(R.string.detail_benchmark_reasoning), it) }
+        benchmark.toolsEnabled?.let {
+            DetailField(stringResource(R.string.detail_benchmark_tools), stringResource(if (it) R.string.detail_benchmark_tools_enabled else R.string.detail_benchmark_tools_disabled))
+        }
         val source = benchmark.source?.takeIf(String::isNotBlank)
         // source 也可能是出处名称而非网址；普通文字保留原文，不伪造地址。
         if (source != null && isSafeDetailUrl(source)) {

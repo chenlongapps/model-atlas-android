@@ -29,6 +29,7 @@ class DebugDatabaseStoreTest {
         table.columns.associate { column -> column.name to when {
             !column.required -> null
             column.type == DatabaseFieldType.INTEGER -> "100"
+            column.type == DatabaseFieldType.REAL -> "1.25"
             column.name == "source" -> "models.dev"
             else -> "test"
         } } + extra.toMap()
@@ -48,7 +49,7 @@ class DebugDatabaseStoreTest {
             "pricing" to """{"input":0,"future":"preserve"}""")
         val favorite = insert(DatabaseTable.FAVORITES, "modelId" to "lab/model", "name" to "Model", "lab" to "lab")
         assertEquals(mapOf(DatabaseTable.MODELS to 1L, DatabaseTable.PROVIDERS to 1L,
-            DatabaseTable.OFFERINGS to 1L, DatabaseTable.FAVORITES to 1L), store.overview().counts)
+            DatabaseTable.OFFERINGS to 1L, DatabaseTable.FAVORITES to 1L, DatabaseTable.BENCHMARK_SCORES to 0L), store.overview().counts)
 
         val edited = model.values + mapOf("name" to "Edited", "description" to "", "attachment" to "1")
         assertEquals(DatabaseWriteResult.Success, store.save(DatabaseTable.MODELS, edited, model))
@@ -70,6 +71,24 @@ class DebugDatabaseStoreTest {
         assertNotNull(store.read(DatabaseTable.FAVORITES, favorite.key))
         assertEquals(DatabaseWriteResult.Success, store.delete(store.deleteImpact(favorite)!!))
         assertNull(store.read(DatabaseTable.FAVORITES, favorite.key))
+    }
+
+    @Test fun benchmarkScoreCrudSupportsRealSearchAndNullBooleans() = runBlocking {
+        val table = DatabaseTable.BENCHMARK_SCORES
+        val initial = insert(table, "id" to "score", "modelId" to "lab/model", "benchmarkId" to "bench-v1",
+            "score" to "0.003", "toolsEnabled" to "0")
+        assertEquals("bench-v1", store.page(table, "bench", 0).rows.single().name)
+        val saved = store.read(table, initial.key)!!
+        assertEquals("0.003", saved.values["score"])
+        assertEquals("0", saved.values["toolsEnabled"])
+        assertNull(saved.values["higherIsBetter"])
+        assertNull(saved.values["cost"])
+        assertEquals(DatabaseWriteResult.Success, store.save(table, saved.values + mapOf("score" to "-4.5", "cost" to "0.003"), saved))
+        val edited = store.read(table, saved.key)!!
+        assertEquals("-4.5", edited.values["score"])
+        assertEquals("0.003", edited.values["cost"])
+        assertEquals(DatabaseWriteResult.Success, store.delete(store.deleteImpact(edited)!!))
+        assertNull(store.read(table, saved.key))
     }
 
     @Test fun validatesDuplicatesForeignKeysAndConflictWithoutPartialWrites() = runBlocking {

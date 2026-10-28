@@ -3,7 +3,6 @@ package io.github.chenlongapps.modelatlas.data.local.converter
 import androidx.room3.ColumnTypeConverter
 import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
-import io.github.chenlongapps.modelatlas.data.local.model.ModelBenchmarkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
@@ -37,12 +36,6 @@ class CatalogTypeConverters {
 
     @ColumnTypeConverter
     fun jsonToLinks(value: String?): List<ModelLinkLocal>? = decode(value)
-
-    @ColumnTypeConverter
-    fun benchmarksToJson(value: List<ModelBenchmarkLocal>?): String? = encode(value)
-
-    @ColumnTypeConverter
-    fun jsonToBenchmarks(value: String?): List<ModelBenchmarkLocal>? = decode(value)
 
     @ColumnTypeConverter
     fun reasoningOptionsToJson(value: List<ReasoningOptionLocal>?): String? = encode(value)

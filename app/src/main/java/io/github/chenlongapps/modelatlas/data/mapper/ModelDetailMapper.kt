@@ -5,7 +5,6 @@ import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
 import io.github.chenlongapps.modelatlas.data.model.LlmInclusionPolicy
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
-import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailOffering
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailPrice
@@ -92,9 +91,6 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
         license = m.license.nonBlank(),
         weights = m.weights?.map { ModelWeight(it.url, it.label, it.quantization, it.format) },
         links = m.links?.map { ModelLink(it.url, it.label, it.type) },
-        benchmarks = m.benchmarks?.map {
-            ModelBenchmark(it.name, it.score, it.metric, it.source, it.date, it.version, it.variant, it.dataset, it.harness)
-        },
         source = m.source, fetchedAtEpochMillis = m.fetchedAtEpochMillis, providers = providers,
     )
 }

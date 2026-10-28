@@ -51,6 +51,11 @@ data class ModelBenchmark(
     val variant: String? = null,
     val dataset: String? = null,
     val harness: String? = null,
+    val unit: String? = null,
+    val higherIsBetter: Boolean? = null,
+    val reasoningEffort: String? = null,
+    val toolsEnabled: Boolean? = null,
+    val sourceType: String? = null,
 )
 
 data class ModelDetailProvider(

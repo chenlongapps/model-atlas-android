@@ -5,7 +5,7 @@ import io.github.chenlongapps.modelatlas.R
 
 /** 仅允许操作已知业务表；列顺序、主键和类型与 Room Schema v1 一致。 */
 internal enum class DatabaseFieldType {
-    TEXT, INTEGER, BOOLEAN, STRING_LIST, WEIGHTS, LINKS, BENCHMARKS,
+    TEXT, INTEGER, REAL, BOOLEAN, STRING_LIST, WEIGHTS, LINKS,
     REASONING_OPTIONS, INTERLEAVED, PRICING, PROVIDER_OVERRIDE, EXPERIMENTAL_MODES,
 }
 
@@ -18,9 +18,10 @@ internal data class DatabaseColumn(
 ) {
     val affinity: String get() = when (type) {
         DatabaseFieldType.INTEGER, DatabaseFieldType.BOOLEAN -> "INTEGER"
+        DatabaseFieldType.REAL -> "REAL"
         else -> "TEXT"
     }
-    val isJson: Boolean get() = type !in setOf(DatabaseFieldType.TEXT, DatabaseFieldType.INTEGER, DatabaseFieldType.BOOLEAN)
+    val isJson: Boolean get() = type !in setOf(DatabaseFieldType.TEXT, DatabaseFieldType.INTEGER, DatabaseFieldType.REAL, DatabaseFieldType.BOOLEAN)
 }
 
 private fun text(name: String, required: Boolean = false, primary: Boolean = false) =
@@ -38,13 +39,12 @@ private fun metadataColumns() = listOf(
     json("inputModalities", DatabaseFieldType.STRING_LIST), json("outputModalities", DatabaseFieldType.STRING_LIST),
 )
 
-internal enum class DatabaseTable(val tableName: String, val titleResource: Int, val columns: List<DatabaseColumn>) {
+internal enum class DatabaseTable(val tableName: String, val titleResource: Int, val columns: List<DatabaseColumn>, val displayColumn: String = "name") {
     MODELS("models", R.string.debug_database_table_models, listOf(
         text("id", true, true), text("remoteId", true), text("name", true), number("fetchedAtEpochMillis", true),
         text("source", true),
     ) + metadataColumns() + listOf(
         text("license"), json("weights", DatabaseFieldType.WEIGHTS), json("links", DatabaseFieldType.LINKS),
-        json("benchmarks", DatabaseFieldType.BENCHMARKS),
     )),
     PROVIDERS("providers", R.string.debug_database_table_providers, listOf(
         text("id", true, true), text("remoteId", true), text("name", true), number("fetchedAtEpochMillis", true),
@@ -62,7 +62,14 @@ internal enum class DatabaseTable(val tableName: String, val titleResource: Int,
     )),
     FAVORITES("favorites", R.string.debug_database_table_favorites, listOf(
         text("modelId", true, true), text("name", true), text("lab"), number("favoritedAtEpochMillis", true),
-    ));
+    )),
+    BENCHMARK_SCORES("benchmark_scores", R.string.debug_database_table_benchmark_scores, listOf(
+        text("id", true, true), text("modelId", true), text("benchmarkId", true),
+        DatabaseColumn("score", DatabaseFieldType.REAL, required = true),
+        text("metric"), text("unit"), bool("higherIsBetter"), text("subset"), text("harness"),
+        text("reasoningEffort"), bool("toolsEnabled"), text("sourceUrl"), text("sourceType"), text("evaluatedAt"),
+        DatabaseColumn("cost", DatabaseFieldType.REAL),
+    ), displayColumn = "benchmarkId");
 
     val primaryColumns: List<DatabaseColumn> get() = columns.filter { it.primary }
 }
@@ -94,6 +101,9 @@ internal fun validateDatabaseRow(
         if (column.type == DatabaseFieldType.INTEGER && value.toLongOrNull() == null) {
             return DatabaseValidationError(column.name, R.string.debug_database_invalid_integer)
         }
+        if (column.type == DatabaseFieldType.REAL && value.toDoubleOrNull()?.isFinite() != true) {
+            return DatabaseValidationError(column.name, R.string.debug_database_invalid_real)
+        }
         if (column.type == DatabaseFieldType.BOOLEAN && value !in listOf("0", "1")) {
             return DatabaseValidationError(column.name, R.string.debug_database_invalid_boolean)
         }
@@ -103,7 +113,6 @@ internal fun validateDatabaseRow(
                     DatabaseFieldType.STRING_LIST -> converters.jsonToStringList(value)
                     DatabaseFieldType.WEIGHTS -> converters.jsonToWeights(value)
                     DatabaseFieldType.LINKS -> converters.jsonToLinks(value)
-                    DatabaseFieldType.BENCHMARKS -> converters.jsonToBenchmarks(value)
                     DatabaseFieldType.REASONING_OPTIONS -> converters.jsonToReasoningOptions(value)
                     DatabaseFieldType.INTERLEAVED -> converters.jsonToInterleaved(value)
                     DatabaseFieldType.PRICING -> converters.jsonToPricing(value)

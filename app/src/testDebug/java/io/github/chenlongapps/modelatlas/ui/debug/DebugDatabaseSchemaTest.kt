@@ -9,12 +9,13 @@ class DebugDatabaseSchemaTest {
         column.name to when {
             !column.required -> null
             column.type == DatabaseFieldType.INTEGER -> "123"
+            column.type == DatabaseFieldType.REAL -> "1.25"
             else -> "required"
         }
     }
 
-    @Test fun allFourTablesAcceptMinimumRecordsAndPreserveNullAndEmpty() {
-        assertEquals(setOf("models", "providers", "model_offerings", "favorites"), DatabaseTable.entries.map { it.tableName }.toSet())
+    @Test fun allFiveTablesAcceptMinimumRecordsAndPreserveNullAndEmpty() {
+        assertEquals(setOf("models", "providers", "model_offerings", "favorites", "benchmark_scores"), DatabaseTable.entries.map { it.tableName }.toSet())
         for (table in DatabaseTable.entries) assertNull(validateDatabaseRow(table, values(table)))
         val model = values(DatabaseTable.MODELS) + mapOf("description" to "", "attachment" to "0", "inputModalities" to "[]")
         assertNull(validateDatabaseRow(DatabaseTable.MODELS, model))
@@ -39,7 +40,6 @@ class DebugDatabaseSchemaTest {
         assertNull(validateDatabaseRow(DatabaseTable.MODELS, model + ("weights" to """[{"url":"https://example.test","future":1}]""")))
         assertEquals("weights", validateDatabaseRow(DatabaseTable.MODELS, model + ("weights" to "[{}]"))?.field)
         assertEquals("inputModalities", validateDatabaseRow(DatabaseTable.MODELS, model + ("inputModalities" to "null"))?.field)
-        assertEquals("benchmarks", validateDatabaseRow(DatabaseTable.MODELS, model + ("benchmarks" to "[{}]"))?.field)
         val offerings = values(DatabaseTable.OFFERINGS)
         assertNull(validateDatabaseRow(DatabaseTable.OFFERINGS, offerings + mapOf(
             "pricing" to """{"input":0,"future":"retained"}""",
@@ -53,5 +53,16 @@ class DebugDatabaseSchemaTest {
         val broken = DatabaseRow(DatabaseTable.OFFERINGS, offerings + ("pricing" to "bad"))
         assertNull(validateDatabaseRow(DatabaseTable.OFFERINGS, broken.values + ("name" to "Changed"), broken))
         assertNotNull(validateDatabaseRow(DatabaseTable.OFFERINGS, broken.values + ("pricing" to "still bad"), broken))
+    }
+
+    @Test fun scoresValidateFiniteRealAndNullableBooleans() {
+        val table = DatabaseTable.BENCHMARK_SCORES
+        val score = values(table)
+        assertNull(validateDatabaseRow(table, score + mapOf("score" to "-0.003", "toolsEnabled" to "0", "higherIsBetter" to "1")))
+        assertNull(validateDatabaseRow(table, score + ("cost" to "0")))
+        for (invalid in listOf("NaN", "Infinity", "1e999", "text")) {
+            assertEquals(R.string.debug_database_invalid_real, validateDatabaseRow(table, score + ("score" to invalid))?.messageResource)
+            assertEquals(R.string.debug_database_invalid_real, validateDatabaseRow(table, score + ("cost" to invalid))?.messageResource)
+        }
     }
 }

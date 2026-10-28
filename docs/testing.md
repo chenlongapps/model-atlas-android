@@ -15,6 +15,7 @@
 | 收藏 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`FavoritesScreenTest` 中相关用例 | 存储变化加 `FavoriteDatabaseTest`；返回动画变化加共享转场及零动画用例 |
 | 外观／设置 | `AppearanceViewModelTest`、`AppearanceColorTest`、`SettingsRepositoryTest` 及对应界面用例 | 全局主题变化覆盖 `ModelAtlasThemeTest` 和主要页面浅深色；持久化／备份变化补对应测试 |
 | 数据解析／映射／仓库 | 对应 Parser、Mapper、Repository 单元测试 | Room 查询／事务变化加 `CatalogDatabaseTest`／`FavoriteDatabaseTest`；共享字段变化覆盖所有受影响消费者 |
+| 独立 Benchmark | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`；实际生成的随包字节由 Kotlin 解析并核摘要 | `BenchmarkIntegrationTest` 覆盖隔离 Room、离线重开、Python v3 原字节经生产 HTTPS source（注入响应）更新 v2 及失败保留；来源许可修改加 `ModelAtlasAppTest` 对应来源页用例 |
 | 全局导航／共享转场 | `ModelAtlasAppTest`、`ModelDetailNavigationTest`、`ModelSharedTransitionTest` 中相关用例 | 按影响补收藏来源、预测性返回、零动画、RTL／状态恢复；大范围修改扩大回归 |
 
 这是选测起点，不是固定打包执行的套件。小改可定位到方法，功能完成应覆盖相关类及受影响的跨页面链路；影响不明确时扩大范围，不因表中未列出而跳过受影响测试。

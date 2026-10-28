@@ -735,6 +735,17 @@ class ModelDetailScreenTest {
         compose.onNode(hasText("javascript:alert(1)") and hasClickAction()).assertDoesNotExist()
     }
 
+    @Test fun benchmarkTestDataIsExplicitlyLabeled() {
+        show(detail().copy(benchmarks = listOf(ModelBenchmark("示例评测", 42.0, sourceType = "test", unit = "points", toolsEnabled = false))))
+        selectTab("BENCHMARKS")
+        scrollTo("以下包含虚构测试数据，不代表真实评测成绩。")
+        compose.onNodeWithText("以下包含虚构测试数据，不代表真实评测成绩。").assertIsDisplayed()
+        scrollTo("points")
+        compose.onNodeWithText("points").assertIsDisplayed()
+        scrollTo("未启用")
+        compose.onNodeWithText("未启用").assertIsDisplayed()
+    }
+
     @Test fun missingAndExplicitlyEmptyBenchmarksHaveDifferentEmptyStates() {
         val state = mutableStateOf(content(detail()))
         compose.setContent { ModelAtlasTheme(dynamicColor = false) { ModelDetailScreen(state.value, {}) } }

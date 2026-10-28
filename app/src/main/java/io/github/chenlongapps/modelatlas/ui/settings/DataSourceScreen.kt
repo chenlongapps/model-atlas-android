@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -33,6 +34,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.data.benchmark.BenchmarkAttributions
+import io.github.chenlongapps.modelatlas.data.benchmark.BenchmarkJson
+import io.github.chenlongapps.modelatlas.data.benchmark.validatedAssetPath
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 @Composable
@@ -40,6 +44,15 @@ internal fun DataSourceScreen(onBack: () -> Unit, modifier: Modifier = Modifier)
     val resources = LocalResources.current
     val license = remember(resources) {
         resources.openRawResource(R.raw.models_dev_license).bufferedReader().use { it.readText() }
+    }
+    val assets = LocalContext.current.assets
+    val benchmarkLicenses = remember(assets) {
+        val attributions = assets.open("benchmark-attributions.json").bufferedReader().use {
+            BenchmarkJson.decodeFromString<BenchmarkAttributions>(it.readText())
+        }
+        attributions.sources.map { source ->
+            source to assets.open(source.license.validatedAssetPath()).bufferedReader().use { it.readText() }
+        }
     }
     Scaffold(
         modifier = modifier.testTag("data-source-screen"),
@@ -87,6 +100,21 @@ internal fun DataSourceScreen(onBack: () -> Unit, modifier: Modifier = Modifier)
                         text = license,
                         bodyStyle = MaterialTheme.typography.bodySmall,
                     )
+                }
+                item(key = "benchmark-source-notice") {
+                    DataSourceSection(
+                        title = stringResource(R.string.benchmark_data_source_title),
+                        text = stringResource(R.string.benchmark_data_source_notice),
+                    )
+                }
+                benchmarkLicenses.forEachIndexed { index, (source, text) ->
+                    item(key = "benchmark-license-$index") {
+                        DataSourceSection(
+                            title = "Benchmark · ${source.publisher}",
+                            text = "${source.license.attribution}\n\n${source.url}\n\n${source.license.name}\n\n$text",
+                            bodyStyle = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }

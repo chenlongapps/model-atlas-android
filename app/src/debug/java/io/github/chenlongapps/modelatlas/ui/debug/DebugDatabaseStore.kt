@@ -67,7 +67,7 @@ internal class DebugDatabaseStore @Inject constructor(
     override suspend fun page(table: DatabaseTable, search: String, requestedOffset: Int): DatabasePage = withContext(ioDispatcher) {
         database.withReadTransaction {
             checkSchema(this)
-            val searchColumns = (table.primaryColumns.map { it.name } + "name").distinct()
+            val searchColumns = (table.primaryColumns.map { it.name } + table.displayColumn).distinct()
             val predicate = if (search.isEmpty()) "" else searchColumns.joinToString(" OR ", prefix = " WHERE (", postfix = ")") {
                 "instr(lower(`$it`), lower(?)) > 0"
             }
@@ -79,7 +79,7 @@ internal class DebugDatabaseStore @Inject constructor(
             }
             val lastOffset = if (total == 0L) 0 else (((total - 1) / PAGE_SIZE) * PAGE_SIZE).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             val offset = requestedOffset.coerceAtLeast(0).coerceAtMost(lastOffset)
-            val selected = (table.primaryColumns.map { it.name } + "name").distinct()
+            val selected = (table.primaryColumns.map { it.name } + table.displayColumn).distinct()
             val order = table.primaryColumns.joinToString(", ") { "`${it.name}`" }
             val sql = "SELECT ${selected.joinToString(", ") { "`$it`" }} FROM `${table.tableName}`$predicate ORDER BY $order LIMIT ? OFFSET ?"
             val rows = usePrepared(sql) { statement ->
@@ -89,7 +89,7 @@ internal class DebugDatabaseStore @Inject constructor(
                 buildList {
                     while (statement.step()) {
                         val key = table.primaryColumns.associate { it.name to statement.getText(selected.indexOf(it.name)) }
-                        add(DatabaseRowSummary(key, statement.getText(selected.indexOf("name"))))
+                        add(DatabaseRowSummary(key, statement.getText(selected.indexOf(table.displayColumn))))
                     }
                 }
             }
@@ -177,7 +177,7 @@ internal class DebugDatabaseStore @Inject constructor(
             if (!statement.step()) null else DatabaseRow(table, table.columns.mapIndexed { index, column ->
                 val value = if (statement.isNull(index)) null else if (column.affinity == "INTEGER") {
                     statement.getLong(index).toString()
-                } else statement.getText(index)
+                } else if (column.affinity == "REAL") statement.getDouble(index).toString() else statement.getText(index)
                 column.name to value
             }.toMap())
         }
@@ -210,6 +210,7 @@ internal class DebugDatabaseStore @Inject constructor(
         when {
             value == null -> bindNull(index)
             column.affinity == "INTEGER" -> bindLong(index, value.toLong())
+            column.affinity == "REAL" -> bindDouble(index, value.toDouble())
             else -> bindText(index, value)
         }
     }

@@ -4,7 +4,6 @@ import androidx.room3.ColumnTypeConverters
 import androidx.room3.Entity
 import androidx.room3.PrimaryKey
 import io.github.chenlongapps.modelatlas.data.local.converter.CatalogTypeConverters
-import io.github.chenlongapps.modelatlas.data.local.model.ModelBenchmarkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
 
@@ -43,5 +42,4 @@ data class ModelEntity(
     val license: String? = null,
     val weights: List<ModelWeightLocal>? = null,
     val links: List<ModelLinkLocal>? = null,
-    val benchmarks: List<ModelBenchmarkLocal>? = null,
 )

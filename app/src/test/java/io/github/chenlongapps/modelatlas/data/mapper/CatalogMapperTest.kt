@@ -29,7 +29,6 @@ class CatalogMapperTest {
         assertEquals(262144L, model.contextLimitTokens)
         assertEquals("fp8", model.weights!!.first().quantization)
         assertEquals("model_card", model.links!!.first().type)
-        assertEquals("example-harness", model.benchmarks!!.first().harness)
         assertEquals(200L, offering.fetchedAtEpochMillis)
         assertFalse(offering.attachment!!)
         assertEquals("example/atlas", offering.canonicalModelId)

@@ -122,7 +122,19 @@
     <string name="detail_tab_benchmarks">评测</string>
     <string name="detail_header_brand" translatable="false">MODEL ATLAS</string>
     <string name="detail_metric_tokens">%1$s · tokens</string>
-    <string name="detail_benchmarks_notice">以下为来源报告的评测结果，未经本应用独立验证。分数保留原始口径，不默认是百分比或越高越好；不同版本、配置、数据集和评测框架的结果不可直接比较，不生成综合排名。</string>
+    <string name="benchmark_manifest_url" translatable="false">https://chenlongapps.github.io/model-atlas-data/manifest.json</string>
+    <string name="detail_benchmarks_notice">不同来源和配置的结果不一定可以直接比较。</string>
+    <string name="benchmark_data_source_title">Benchmark 数据来源与许可</string>
+    <string name="benchmark_data_source_notice">评测成绩由独立的 ModelAtlas Data 项目摘录并重组，不是本应用测得，也不代表评测机构或模型开发商。首批为 DeepSeek-AI 官方自报结果，保留出处、执行配置及文档许可；未知字段不补造，不生成排名。成绩存储在本地，网络失败不影响已有数据；远程新版本校验后整体替换。文档许可不等于模型权重或原始评测数据集许可。</string>
+    <string name="detail_benchmark_test_notice">以下包含虚构测试数据，不代表真实评测成绩。</string>
+    <string name="detail_benchmark_unit">单位</string>
+    <string name="detail_benchmark_direction">分数方向</string>
+    <string name="detail_benchmark_higher">越高越好</string>
+    <string name="detail_benchmark_lower">越低越好</string>
+    <string name="detail_benchmark_reasoning">推理设置</string>
+    <string name="detail_benchmark_tools">工具使用</string>
+    <string name="detail_benchmark_tools_enabled">已启用</string>
+    <string name="detail_benchmark_tools_disabled">未启用</string>
     <string name="detail_benchmarks_missing">暂无评测数据。</string>
     <string name="detail_benchmarks_empty">来源未列出评测记录。</string>
     <string name="detail_benchmark_score">分数（来源原值）</string>
@@ -132,7 +144,7 @@
     <string name="detail_benchmark_version">评测版本</string>
     <string name="detail_benchmark_variant">评测配置／变体</string>
     <string name="detail_benchmark_dataset">数据集</string>
-    <string name="detail_benchmark_harness">评测框架</string>
+    <string name="detail_benchmark_harness">评测框架／执行配置</string>
     <string name="detail_open">查看模型详情</string>
     <string name="detail_loading">正在读取模型详情…</string>
     <string name="detail_read_error">无法读取本地模型详情，请重试。</string>

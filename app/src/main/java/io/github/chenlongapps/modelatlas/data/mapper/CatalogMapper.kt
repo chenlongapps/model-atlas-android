@@ -6,7 +6,6 @@ import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
 import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
-import io.github.chenlongapps.modelatlas.data.local.model.ModelBenchmarkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPriceTierLocal
@@ -76,12 +75,6 @@ private fun ModelDto.toEntity(key: String, fetchedAt: Long) = ModelEntity(
     license = license,
     weights = weights?.map { ModelWeightLocal(it.url, it.label, it.quantization, it.format) },
     links = links?.map { ModelLinkLocal(it.url, it.label, it.type) },
-    benchmarks = benchmarks?.map {
-        ModelBenchmarkLocal(
-            it.name, it.score, it.metric, it.source, it.date,
-            it.version, it.variant, it.dataset, it.harness,
-        )
-    },
 )
 
 private fun ModelOfferingDto.toEntity(providerKey: String, key: String, fetchedAt: Long) =

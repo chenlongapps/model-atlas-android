@@ -243,6 +243,7 @@ internal fun DebugDatabaseScreen(state: DatabaseUiState, actions: DatabaseAction
             DatabaseTable.MODELS -> stringResource(R.string.debug_database_delete_model)
             DatabaseTable.OFFERINGS -> stringResource(R.string.debug_database_delete_offering)
             DatabaseTable.FAVORITES -> stringResource(R.string.debug_database_delete_favorite)
+            DatabaseTable.BENCHMARK_SCORES -> stringResource(R.string.debug_database_delete_benchmark_score)
         }
         AlertDialog(
             onDismissRequest = { if (!state.saving) actions.dismissDelete() },
@@ -304,6 +305,7 @@ private fun DatabaseFieldEditor(
         val type = when {
             column.isJson -> R.string.debug_database_json
             column.type == DatabaseFieldType.INTEGER -> R.string.debug_database_integer
+            column.type == DatabaseFieldType.REAL -> R.string.debug_database_real
             column.type == DatabaseFieldType.BOOLEAN -> R.string.debug_database_boolean
             else -> R.string.debug_database_text
         }

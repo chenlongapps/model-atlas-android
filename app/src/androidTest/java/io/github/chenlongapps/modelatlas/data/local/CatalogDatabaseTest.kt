@@ -5,6 +5,7 @@ import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
@@ -27,6 +28,50 @@ class CatalogDatabaseTest {
     private val dao = database.catalogDao()
 
     @After fun close() = database.close()
+
+    @Test fun benchmarkSnapshotsAreAtomicVersionedAndDoNotOverwriteExistingOnInitialization() = runBlocking {
+        val scores = database.benchmarkScoreDao()
+        val existing = BenchmarkScoreEntity("existing", "model", "bench", 1.0)
+        scores.upsert(existing)
+        scores.initialize(1, listOf(BenchmarkScoreEntity("sample", "model", "bench", 2.0)))
+        assertEquals(0L, scores.version())
+        assertEquals(listOf(existing), scores.observeForModel("model").first())
+        assertTrue(scores.replaceIfNewer(2, emptyList()))
+        assertEquals(2L, scores.version())
+        assertTrue(scores.observeForModel("model").first().isEmpty())
+        scores.initialize(1, listOf(existing))
+        assertEquals(false, scores.replaceIfNewer(1, listOf(existing)))
+        assertTrue(scores.observeForModel("model").first().isEmpty())
+        try {
+            scores.replaceIfNewer(3, listOf(existing, existing))
+            throw AssertionError("duplicate key must fail")
+        } catch (_: android.database.sqlite.SQLiteConstraintException) { }
+        assertEquals(2L, scores.version())
+        assertTrue(scores.observeForModel("model").first().isEmpty())
+    }
+
+    @Test fun independentBenchmarkScoresSurviveCatalogReplacementAndPreserveConfigurations() = runBlocking {
+        val scores = database.benchmarkScoreDao()
+        val first = BenchmarkScoreEntity(
+            id = "score-1", modelId = "model", benchmarkId = "bench-v1", score = 0.003,
+            metric = "Accuracy", unit = "%", higherIsBetter = true, subset = "test",
+            harness = "agent", reasoningEffort = "high", toolsEnabled = false,
+            sourceUrl = "https://example.org", sourceType = "third-party", evaluatedAt = "2026-10", cost = 0.003,
+        )
+        val second = BenchmarkScoreEntity("score-2", "model", "bench-v1", 0.0)
+        scores.upsert(first)
+        scores.upsert(second)
+        assertEquals(listOf(first, second), scores.observeForModel("model").first())
+        assertEquals(listOf(first, second), scores.observeForBenchmark("bench-v1").first())
+        assertTrue(scores.observeForModel("other").first().isEmpty())
+        dao.replaceCatalog(snapshot())
+        dao.replaceCatalog(CatalogSnapshot(emptyList(), emptyList(), emptyList()))
+        assertEquals(listOf(first, second), scores.observeForModel("model").first())
+        scores.upsert(first.copy(score = -1.25, higherIsBetter = null))
+        assertEquals(-1.25, scores.observeForModel("model").first().first().score, 0.0)
+        scores.delete("score-1")
+        assertEquals(listOf(second), scores.observeForModel("model").first())
+    }
 
     @Test fun detailReadsExplicitServicesIncludingUnpricedOnesAndTracksRemoval() = runBlocking {
         val initial = snapshot()

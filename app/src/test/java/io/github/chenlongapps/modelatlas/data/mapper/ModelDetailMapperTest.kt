@@ -8,7 +8,6 @@ import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
 import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
-import io.github.chenlongapps.modelatlas.data.local.model.ModelBenchmarkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPriceTierLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
@@ -120,38 +119,8 @@ class ModelDetailMapperTest {
             outputModalities = listOf("text")), emptyList()).toModelDetail())
     }
 
-    @Test fun retainsAllBenchmarkFieldsOrderDuplicatesAndRawScores() {
-        val benchmark = ModelBenchmarkLocal("Test", 0.003, "accuracy", "https://example.org/eval",
-            "2026-10", "2", "no tools", "public", "harness")
-        val detail = ModelDetailRecord(model.copy(benchmarks = listOf(
-            benchmark, benchmark.copy(score = 0.0, variant = "tools"), benchmark.copy(score = -1.0),
-        )), emptyList()).toModelDetail()!!
-        val values = requireNotNull(detail.benchmarks)
-        assertEquals(listOf(0.003, 0.0, -1.0), values.map { it.score })
-        assertEquals(listOf("no tools", "tools", "no tools"), values.map { it.variant })
-        val first = values.first()
-        assertEquals(benchmark.name, first.name)
-        assertEquals(benchmark.metric, first.metric)
-        assertEquals(benchmark.source, first.source)
-        assertEquals(benchmark.date, first.date)
-        assertEquals(benchmark.version, first.version)
-        assertEquals(benchmark.dataset, first.dataset)
-        assertEquals(benchmark.harness, first.harness)
-    }
-
-    @Test fun distinguishesMissingEmptyAndUnknownBenchmarkMetadata() {
+    @Test fun detailDoesNotUseUnverifiedBenchmarkData() {
         assertNull(ModelDetailRecord(model, emptyList()).toModelDetail()!!.benchmarks)
-        assertEquals(emptyList<Any>(), ModelDetailRecord(model.copy(benchmarks = emptyList()), emptyList())
-            .toModelDetail()!!.benchmarks)
-        val benchmark = ModelDetailRecord(model.copy(benchmarks = listOf(ModelBenchmarkLocal("Test", 0.0))),
-            emptyList()).toModelDetail()!!.benchmarks!!.single()
-        assertNull(benchmark.metric)
-        assertNull(benchmark.source)
-        assertNull(benchmark.date)
-        assertNull(benchmark.version)
-        assertNull(benchmark.variant)
-        assertNull(benchmark.dataset)
-        assertNull(benchmark.harness)
     }
 
     private fun service(provider: String, id: String) = ModelDetailOfferingRecord(

@@ -126,6 +126,24 @@ class DebugDatabaseScreenTest {
         assertEquals(DatabaseDestination.EDIT, vm.state.value.destination)
     }
 
+    @Test fun benchmarkScoreTableCreatesAndDisplaysRealValue() {
+        show()
+        openDatabase()
+        compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-table-benchmark_scores"))
+        compose.onNodeWithTag("database-table-benchmark_scores").performClick()
+        await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        compose.onNodeWithTag("database-add").performClick()
+        field("id", "score-1")
+        field("modelId", "model-1")
+        field("benchmarkId", "benchmark-1")
+        field("score", "0.003")
+        compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-save"))
+        compose.onNodeWithTag("database-save").performClick()
+        await { it.destination == DatabaseDestination.DETAIL && it.row != null && !it.loading }
+        assertEquals("0.003", vm.state.value.row!!.values["score"])
+        assertEquals("benchmark-1", vm.state.value.row!!.values["benchmarkId"])
+    }
+
     @Test fun databaseSubpageAndDraftSurviveStateRestoration() {
         val restoration = StateRestorationTester(compose)
         show(restoration)

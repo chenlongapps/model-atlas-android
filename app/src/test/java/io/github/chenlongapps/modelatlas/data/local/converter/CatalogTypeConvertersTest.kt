@@ -2,7 +2,6 @@ package io.github.chenlongapps.modelatlas.data.local.converter
 
 import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
-import io.github.chenlongapps.modelatlas.data.local.model.ModelBenchmarkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPriceTierLocal
@@ -30,8 +29,6 @@ class CatalogTypeConvertersTest {
         assertNull(converters.jsonToWeights(null))
         assertNull(converters.linksToJson(null))
         assertNull(converters.jsonToLinks(null))
-        assertNull(converters.benchmarksToJson(null))
-        assertNull(converters.jsonToBenchmarks(null))
         assertNull(converters.reasoningOptionsToJson(null))
         assertNull(converters.jsonToReasoningOptions(null))
         assertNull(converters.interleavedToJson(null))
@@ -83,27 +80,6 @@ class CatalogTypeConvertersTest {
 
         assertEquals(links, converters.jsonToLinks(converters.linksToJson(links)))
         assertEquals(emptyList<ModelLinkLocal>(), converters.jsonToLinks("[]"))
-    }
-
-    @Test
-    fun benchmarksRoundTripAllProvenanceFields() {
-        val benchmarks = listOf(
-            ModelBenchmarkLocal(
-                name = "Example benchmark",
-                score = 95.5,
-                metric = "accuracy",
-                source = "https://example.com/benchmark",
-                date = "2026-10",
-                version = "2",
-                variant = "no tools",
-                dataset = "public",
-                harness = "example-harness",
-            ),
-            ModelBenchmarkLocal(name = "Integer score", score = 96.0),
-        )
-
-        assertEquals(benchmarks, converters.jsonToBenchmarks(converters.benchmarksToJson(benchmarks)))
-        assertEquals(emptyList<ModelBenchmarkLocal>(), converters.jsonToBenchmarks("[]"))
     }
 
     @Test
@@ -269,7 +245,6 @@ class CatalogTypeConvertersTest {
             { converters.jsonToStringList("[null]") },
             { converters.jsonToWeights("[{}]") },
             { converters.jsonToLinks("[{}]") },
-            { converters.jsonToBenchmarks("""[{"name":"Example","score":false}]""") },
             { converters.jsonToPricing("[]") },
             { converters.jsonToPricing("""{"input":false}""") },
             { converters.jsonToPricing("""{"tiers":[{"condition":{"type":"context"}}]}""") },

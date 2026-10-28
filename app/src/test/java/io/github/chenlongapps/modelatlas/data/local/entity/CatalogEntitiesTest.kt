@@ -37,7 +37,6 @@ class CatalogEntitiesTest {
         assertNull(model.license)
         assertNull(model.weights)
         assertNull(model.links)
-        assertNull(model.benchmarks)
     }
 
     @Test

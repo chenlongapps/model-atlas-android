@@ -110,15 +110,7 @@
 
 ### 评测
 
-- Benchmark 名称（例：ExampleBench）
-- 原始分数（例：`82.5`，不自动加百分号或推断越高越好）
-- 评测指标（例：`accuracy`）
-- 评测来源（例：`https://example.com/example-chat/evaluation`）
-- 评测日期（例：`2026-09-18`）
-- 评测版本（例：`v1.0`）
-- 评测配置／变体（例：`5-shot`）
-- 数据集（例：`example-bench-test`）
-- 评测框架（例：`example-eval`）
+按规范模型 ID 显示独立成绩表中的原始分数、指标、来源和可用配置；尚无成绩时显示空态。不推断单位或跨配置可比性。当前真实随包 v2 为五条 DeepSeek 官方自报成绩，执行条件显示为“评测框架／执行配置”；合成测试仍保留明确的虚构提示。
 
 ## 3. 模型目录中的收藏
 
@@ -234,6 +226,7 @@
 - 研发机构与开放权重说明（例：LAB 为规范模型 ID 前缀；开放权重不等于开源或允许商用）
 - 价格单位与适用条件说明（例：美元 / 百万 tokens；缓存、档位、模式等条件以服务商说明为准）
 - Models.dev 版权及 MIT 许可全文（例：`Copyright (c) 2025 models.dev`；页面同时展示完整 MIT 文本，不仅是这一行）
+- Benchmark 独立来源、摘录重组与更新说明；随包来源的归属、固定出处及许可全文（首批 DeepSeek-AI，`Copyright (c) 2023 DeepSeek`）。远程 v1 不动态更新此许可清单。
 
 ## 6. 调试页（仅 Debug）
 
@@ -260,6 +253,6 @@
 
 ### 数据库管理子页
 
-- 数据库名、Schema 版本、数据库／WAL／SHM 近似字节数，以及 `models`、`providers`、`model_offerings`、`favorites` 四表行数；不包含外观 DataStore。
+- 数据库名、Schema 版本、数据库／WAL／SHM 近似字节数，以及 `models`、`providers`、`model_offerings`、`favorites`、`benchmark_scores` 五表行数；不包含外观 DataStore。
 - 按主键或名称搜索并分页浏览记录，查看及编辑完整列；新增／编辑／删除直接影响 Debug 数据库。服务商删除显示级联数量，收藏删除提示不可撤销；目录同步可能覆盖目录编辑。
 - 可空字段区分 SQL NULL 与空值，复杂列显示本地 JSON；可能包含请求 body／headers 的列默认隐藏、可主动展开，不加入诊断复制。

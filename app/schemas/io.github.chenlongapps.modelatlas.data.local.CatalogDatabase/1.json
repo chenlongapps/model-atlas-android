@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "4e499ee9785a0bb7ddb3eadfcc63a885",
+    "identityHash": "9e243e9658faa03f6caa033eb93f7ed9",
     "entities": [
       {
         "tableName": "models",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `description` TEXT, `family` TEXT, `type` TEXT, `knowledgeCutoff` TEXT, `releaseDate` TEXT, `sourceLastUpdated` TEXT, `attachment` INTEGER, `reasoning` INTEGER, `toolCall` INTEGER, `structuredOutput` INTEGER, `temperature` INTEGER, `openWeights` INTEGER, `contextLimitTokens` INTEGER, `inputLimitTokens` INTEGER, `outputLimitTokens` INTEGER, `inputModalities` TEXT, `outputModalities` TEXT, `license` TEXT, `weights` TEXT, `links` TEXT, `benchmarks` TEXT, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `description` TEXT, `family` TEXT, `type` TEXT, `knowledgeCutoff` TEXT, `releaseDate` TEXT, `sourceLastUpdated` TEXT, `attachment` INTEGER, `reasoning` INTEGER, `toolCall` INTEGER, `structuredOutput` INTEGER, `temperature` INTEGER, `openWeights` INTEGER, `contextLimitTokens` INTEGER, `inputLimitTokens` INTEGER, `outputLimitTokens` INTEGER, `inputModalities` TEXT, `outputModalities` TEXT, `license` TEXT, `weights` TEXT, `links` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -136,11 +136,6 @@
           {
             "fieldPath": "links",
             "columnName": "links",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "benchmarks",
-            "columnName": "benchmarks",
             "affinity": "TEXT"
           }
         ],
@@ -440,11 +435,146 @@
             "modelId"
           ]
         }
+      },
+      {
+        "tableName": "benchmark_scores",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `modelId` TEXT NOT NULL, `benchmarkId` TEXT NOT NULL, `score` REAL NOT NULL, `metric` TEXT, `unit` TEXT, `higherIsBetter` INTEGER, `subset` TEXT, `harness` TEXT, `reasoningEffort` TEXT, `toolsEnabled` INTEGER, `sourceUrl` TEXT, `sourceType` TEXT, `evaluatedAt` TEXT, `cost` REAL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modelId",
+            "columnName": "modelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "benchmarkId",
+            "columnName": "benchmarkId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "score",
+            "columnName": "score",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metric",
+            "columnName": "metric",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "higherIsBetter",
+            "columnName": "higherIsBetter",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "subset",
+            "columnName": "subset",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "harness",
+            "columnName": "harness",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "reasoningEffort",
+            "columnName": "reasoningEffort",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "toolsEnabled",
+            "columnName": "toolsEnabled",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sourceUrl",
+            "columnName": "sourceUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "sourceType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "evaluatedAt",
+            "columnName": "evaluatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cost",
+            "columnName": "cost",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_benchmark_scores_modelId",
+            "unique": false,
+            "columnNames": [
+              "modelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_benchmark_scores_modelId` ON `${TABLE_NAME}` (`modelId`)"
+          },
+          {
+            "name": "index_benchmark_scores_benchmarkId",
+            "unique": false,
+            "columnNames": [
+              "benchmarkId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_benchmark_scores_benchmarkId` ON `${TABLE_NAME}` (`benchmarkId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "benchmark_version",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `version` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4e499ee9785a0bb7ddb3eadfcc63a885')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9e243e9658faa03f6caa033eb93f7ed9')"
     ]
   }
 }

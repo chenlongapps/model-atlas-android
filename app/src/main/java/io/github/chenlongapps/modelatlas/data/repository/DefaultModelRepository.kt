@@ -6,6 +6,7 @@ import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
 import io.github.chenlongapps.modelatlas.data.mapper.toModelSummaries
 import io.github.chenlongapps.modelatlas.data.mapper.toModelDetail
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
+import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.di.IoDispatcher
 import java.io.IOException
 import java.time.Clock
@@ -50,8 +51,14 @@ class DefaultModelRepository @Inject constructor(
         rows.toModelSummaries(priceRows.groupBy { it.canonicalModelId })
     }.flowOn(ioDispatcher)
 
-    override fun observeModelDetail(id: String) = store.observeModelDetail(id)
-        .map { it?.toModelDetail() }
+    override fun observeModelDetail(id: String) = combine(store.observeModelDetail(id), store.observeBenchmarkScores(id)) { record, scores ->
+        record?.toModelDetail()?.copy(benchmarks = scores.map {
+            ModelBenchmark(name = it.benchmarkId, score = it.score, metric = it.metric, source = it.sourceUrl,
+                date = it.evaluatedAt, dataset = it.subset, harness = it.harness, unit = it.unit,
+                higherIsBetter = it.higherIsBetter, reasoningEffort = it.reasoningEffort,
+                toolsEnabled = it.toolsEnabled, sourceType = it.sourceType)
+        })
+    }
         .distinctUntilChanged()
         .flowOn(ioDispatcher)
 

@@ -1,0 +1,18 @@
+{
+  "sources": [
+    {
+      "license": {
+        "attribution": "DeepSeek-AI, DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning (2025), https://arxiv.org/abs/2501.12948. Copyright (c) 2023 DeepSeek.",
+        "licenseFile": "third_party/deepseek-r1/MIT.txt",
+        "name": "MIT (repository documentation)",
+        "notes": "仅摘录 MIT 仓库 README 的事实性表值并重组字段，不分发模型权重、题目、答案或模型输出。保留许可和归属；不宣称原始 Benchmark 数据集或 V3 权重采用 MIT。维护者于 2026-10-28 在本次任务中明确批准五条成绩首批试用，未授权上线。",
+        "redistribution": "allowed",
+        "url": "https://github.com/deepseek-ai/DeepSeek-R1/blob/0cf78561f1d51c84a21b2190626b21116d5c68bb/LICENSE"
+      },
+      "publisher": "DeepSeek-AI",
+      "sourceId": "deepseek-r1-readme-0cf78561",
+      "url": "https://github.com/deepseek-ai/DeepSeek-R1/blob/0cf78561f1d51c84a21b2190626b21116d5c68bb/README.md#4-evaluation-results"
+    }
+  ],
+  "version": 2
+}
