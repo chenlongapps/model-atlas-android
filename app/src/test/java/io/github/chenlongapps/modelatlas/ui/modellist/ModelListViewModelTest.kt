@@ -38,6 +38,17 @@ class ModelListViewModelTest {
 
     @After fun tearDown() = store.clear()
 
+    @Test fun setQueryNormalizesSavedMimeConditionsWithoutRequestingData() = runTest {
+        val repository = FakeRepository()
+        val viewModel = create(repository)
+        advanceUntilIdle()
+        val refreshes = repository.refreshes
+        viewModel.setQuery(ModelListQuery(search = "atlas", inputModalities = setOf("image/png", "image/jpeg")))
+        assertEquals(ModelListQuery(search = "atlas", inputModalities = setOf("image")), viewModel.uiState.value.query)
+        assertEquals(1, viewModel.uiState.value.query.filterCount)
+        assertEquals(refreshes, repository.refreshes)
+    }
+
     @Test fun loadsThenObservesRealRepositoryData() = runTest {
         val repository = FakeRepository()
         val viewModel = create(repository)

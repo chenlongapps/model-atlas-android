@@ -10,7 +10,7 @@ data class BenchmarkScoreEntity(
     @PrimaryKey val id: String,
     val modelId: String,
     val benchmarkId: String,
-    val score: Double,
+    val score: Double?,
     val metric: String? = null,
     val unit: String? = null,
     val higherIsBetter: Boolean? = null,
@@ -22,4 +22,8 @@ data class BenchmarkScoreEntity(
     val sourceType: String? = null,
     val evaluatedAt: String? = null,
     val cost: Double? = null,
+    val name: String? = null,
+    val version: String? = null,
+    val variant: String? = null,
+    val scoreText: String? = null,
 )

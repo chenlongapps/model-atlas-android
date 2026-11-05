@@ -10,12 +10,14 @@
 | --- | --- | --- |
 | 纯文档 | 链接、命令和描述一致性检查 | 不启动模拟器、不构建应用 |
 | 搜索／筛选 | `ModelListQueryTest`、`ModelListViewModelTest` 中相关用例；UI 变化加 `ModelCatalogControlsTest` | 卡片／列表状态变化加 `ModelListScreenTest`；切页恢复变化加外壳相关用例 |
+| 模态格式兼容 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、Query／ViewModel；保留 null／空／未知、方向、旧 MIME 条件恢复 | 真实随包格式经过生产映射后覆盖列表图标、详情头部／概览、对比、筛选；`AtlasCatalogIntegrationTest` 验证已有缓存与收藏无需联网或改写原值 |
 | 详情字段／布局 | `ModelDetailMapperTest`、`ModelDetailViewModelTest` 中相关用例及 `ModelDetailScreenTest` | 入口／返回／恢复加 `ModelDetailNavigationTest`；共享身份或容器布局变化加 `ModelSharedTransitionTest` 相关用例 |
 | 对比 | `ModelCompareQueryTest`、`ModelCompareViewModelTest`、`ModelCompareScreenTest` 中相关用例 | 默认报价规则变化再覆盖价格映射及列表展示 |
 | 收藏 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`FavoritesScreenTest` 中相关用例 | 存储变化加 `FavoriteDatabaseTest`；返回动画变化加共享转场及零动画用例 |
 | 外观／设置 | `AppearanceViewModelTest`、`AppearanceColorTest`、`SettingsRepositoryTest` 及对应界面用例 | 全局主题变化覆盖 `ModelAtlasThemeTest` 和主要页面浅深色；持久化／备份变化补对应测试 |
 | 数据解析／映射／仓库 | 对应 Parser、Mapper、Repository 单元测试 | Room 查询／事务变化加 `CatalogDatabaseTest`／`FavoriteDatabaseTest`；共享字段变化覆盖所有受影响消费者 |
 | 独立 Benchmark | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`；实际生成的随包字节由 Kotlin 解析并核摘要 | `BenchmarkIntegrationTest` 覆盖隔离 Room、离线重开、Python v3 原字节经生产 HTTPS source（注入响应）更新 v2 及失败保留；来源许可修改加 `ModelAtlasAppTest` 对应来源页用例 |
+| ModelAtlas Data 新发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest`；原字节 manifest、严格类型、文本／数字成绩、定义匹配、中文回退、候选确认及失败保留 | `AtlasCatalogIntegrationTest` 覆盖 HTTPS source → Room、离线重开、整包事务回滚、收藏隔离与事务详情；共享存储再覆盖 Catalog／Favorite／Debug 数据库，界面覆盖评测、来源说明与返回。旧 Benchmark 用例仅回归历史协议 |
 | 全局导航／共享转场 | `ModelAtlasAppTest`、`ModelDetailNavigationTest`、`ModelSharedTransitionTest` 中相关用例 | 按影响补收藏来源、预测性返回、零动画、RTL／状态恢复；大范围修改扩大回归 |
 
 这是选测起点，不是固定打包执行的套件。小改可定位到方法，功能完成应覆盖相关类及受影响的跨页面链路；影响不明确时扩大范围，不因表中未列出而跳过受影响测试。

@@ -41,6 +41,7 @@ import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.testing.realAtlasModalityFixture
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.*
@@ -49,6 +50,16 @@ import org.junit.Test
 
 class ModelCompareScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun actualAtlasMimeFormatsUseTheSameCategoriesInComparison() {
+        val fixture = realAtlasModalityFixture()
+        val state = ready.copy(models = listOf(fixture.summary, summaries[1]),
+            first = CompareModelState(fixture.detail.id, CompareReadStatus.CONTENT, fixture.detail))
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state) } }
+        scrollToDescription("${fixture.detail.name}，输入模态：文本、图片、音频、视频、PDF")
+        scrollToDescription("${fixture.detail.name}，输出模态：文本")
+        fixture.rawInputs.filter { '/' in it }.forEach { compose.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
+    }
     private val details = listOf(
         ModelDetail("deepseek/a", "Model A", metadata = ModelDetailMetadata(
             releaseDate = "2026-10", contextLimitTokens = 131_072, outputLimitTokens = 4_294_967_296,

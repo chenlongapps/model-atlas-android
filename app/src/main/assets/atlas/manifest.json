@@ -1,0 +1,24 @@
+{
+  "data_version": "sha256:8dee3dc814c3bd2041cdb06db60d2c50fc81e102ddcf8d8eddd183045d17a41d",
+  "files": {
+    "LICENSE.models-dev": {
+      "sha256": "dc2dc41c9fea2fd3c41c21c6f484844cab367800b88ff24781f980ad3a9d160a",
+      "size": 1067
+    },
+    "benchmarks.json": {
+      "sha256": "bb5bd9691d713945d96199d93412ae53c0e9b5f49ccadf8e9e0a4315a0d13cef",
+      "size": 7242
+    },
+    "i18n/zh-CN.json": {
+      "sha256": "6f7d5a9ff9a2ace87361fbda2832405a9a833812e73b3fefc6ee329d9e52fb9f",
+      "size": 110790
+    },
+    "models.json": {
+      "sha256": "ea7d089df5b0d49d937eb5da434ff3178d3091062488a9bceda3cf1f5d40a850",
+      "size": 1212810
+    }
+  },
+  "git_commit": "6d7c10c2e98d9537f03412bf010e63d14ad0a960",
+  "published_at": "2026-11-05T10:56:34Z",
+  "schema_version": 1
+}

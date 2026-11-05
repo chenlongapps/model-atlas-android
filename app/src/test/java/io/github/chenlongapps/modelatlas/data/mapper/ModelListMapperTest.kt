@@ -10,6 +10,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelListMapperTest {
+    @Test fun projectsMimeModalitiesWithoutChangingThePersistedRow() {
+        val source = row("lab/model", null, null).copy(
+            type = "llm",
+            inputModalities = listOf("text", "image/png", "image/jpeg", "audio/wav", "video/mp4", "application/pdf"),
+            outputModalities = listOf("image/webp", "image", "future"),
+        )
+        val summary = listOf(source).toModelSummaries().single()
+        assertEquals(listOf("text", "image", "audio", "video", "pdf"), summary.inputModalities)
+        assertEquals(listOf("image", "future"), summary.outputModalities)
+        assertEquals("image/png", source.inputModalities!![1])
+        assertEquals(6, source.inputModalities.size)
+    }
+
     @Test fun emitsOneSummaryPerCanonicalModelRegardlessOfProviders() {
         val models = listOf(
             row("a", "p1", "First"), row("a", "p1", "First"), row("a", "p2", "Second"),

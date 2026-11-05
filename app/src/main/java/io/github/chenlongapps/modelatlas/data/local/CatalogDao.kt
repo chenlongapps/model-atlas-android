@@ -8,6 +8,9 @@ import androidx.room3.Upsert
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.CatalogReleaseEntity
 import io.github.chenlongapps.modelatlas.data.model.LlmInclusionPolicy
 import kotlinx.coroutines.flow.Flow
 
@@ -28,10 +31,22 @@ abstract class CatalogDao {
     @Query("SELECT * FROM model_offerings ORDER BY providerId, id")
     protected abstract suspend fun readOfferings(): List<ModelOfferingEntity>
 
+    @Query("SELECT * FROM benchmark_scores ORDER BY id")
+    protected abstract suspend fun readScores(): List<BenchmarkScoreEntity>
+
+    @Query("SELECT * FROM benchmark_definitions ORDER BY id")
+    protected abstract suspend fun readDefinitions(): List<BenchmarkDefinitionEntity>
+
+    @Query("SELECT * FROM catalog_release WHERE id = 1")
+    protected abstract suspend fun readRelease(): CatalogReleaseEntity?
+
     /** 同一事务内读取完整目录，不能仅用筛选后的 LLM 数量判断有无本地数据。 */
     @Transaction
-    open suspend fun readCatalog(): CatalogSnapshot =
-        CatalogSnapshot(readModels(), readProviders(), readOfferings())
+    open suspend fun readCatalog(): CatalogSnapshot {
+        val release = readRelease()
+        return CatalogSnapshot(readModels(), readProviders(), readOfferings(),
+            if (release != null) readScores() else null, if (release != null) readDefinitions() else null, release)
+    }
 
     @Query(
         """
@@ -98,6 +113,21 @@ abstract class CatalogDao {
     @Query("SELECT modelId FROM favorites")
     protected abstract suspend fun favoriteIds(): List<String>
 
+    @Query("DELETE FROM benchmark_scores")
+    protected abstract suspend fun deleteScores()
+
+    @Query("DELETE FROM benchmark_definitions")
+    protected abstract suspend fun deleteDefinitions()
+
+    @Insert
+    protected abstract suspend fun insertScores(scores: List<BenchmarkScoreEntity>)
+
+    @Insert
+    protected abstract suspend fun insertDefinitions(definitions: List<BenchmarkDefinitionEntity>)
+
+    @Upsert
+    protected abstract suspend fun saveRelease(release: CatalogReleaseEntity)
+
     /** 全量快照事务；先移除旧服务，再写入新服务，不用 REPLACE 意外触发级联。 */
     @Transaction
     open suspend fun replaceCatalog(snapshot: CatalogSnapshot) {
@@ -115,5 +145,14 @@ abstract class CatalogDao {
             }
         val retainedIds = snapshot.providers.mapTo(hashSetOf()) { it.id }
         providerIds().filterNot { it in retainedIds }.forEach { deleteProvider(it) }
+        if (snapshot.release != null) {
+            requireNotNull(snapshot.scores)
+            requireNotNull(snapshot.definitions)
+            deleteScores()
+            deleteDefinitions()
+            insertDefinitions(snapshot.definitions)
+            insertScores(snapshot.scores)
+            saveRelease(snapshot.release)
+        }
     }
 }

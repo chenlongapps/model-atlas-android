@@ -12,6 +12,7 @@ import io.github.chenlongapps.modelatlas.data.benchmark.RoomBenchmarkSnapshotSto
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
+import io.github.chenlongapps.modelatlas.data.remote.atlas.HttpAtlasDataSource
 import io.github.chenlongapps.modelatlas.data.repository.DefaultModelRepository
 import io.github.chenlongapps.modelatlas.di.DataModule
 import java.time.Clock
@@ -39,7 +40,8 @@ import org.junit.runner.RunWith
 class BenchmarkIntegrationTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private fun database() = Room.inMemoryDatabaseBuilder<CatalogDatabase>(context).setDriver(AndroidSQLiteDriver()).build()
-    private fun bundled() = context.assets.open("benchmarks.json").use { it.readBytes() }
+    private val testAssets get() = InstrumentationRegistry.getInstrumentation().context.assets
+    private fun bundled() = testAssets.open("benchmark-contract-v2/benchmarks.json").use { it.readBytes() }
 
     @Test fun bundledImportAndSubsequentLocalUpdateReachDetail() = runBlocking {
         val db = database()
@@ -49,7 +51,7 @@ class BenchmarkIntegrationTest {
                 listOf(ModelEntity(id, id, "Example", 0, type = "llm")), emptyList(), emptyList()))
             val client = OkHttpClient()
             val repository = DefaultModelRepository(DataModule.api(client), RoomCatalogStore(db.catalogDao(), db.benchmarkScoreDao()),
-                CatalogMapper(), Clock.systemUTC(), Dispatchers.IO)
+                CatalogMapper(), Clock.systemUTC(), Dispatchers.IO, HttpAtlasDataSource(context, client, Dispatchers.IO))
             assertTrue(repository.observeModelDetail(id).first()!!.benchmarks!!.isEmpty())
             val dao = db.benchmarkScoreDao()
             val runner = BenchmarkSyncRunner(RoomBenchmarkSnapshotStore(dao), ::bundled) { _, _ -> throw IOException("offline") }
@@ -76,7 +78,7 @@ class BenchmarkIntegrationTest {
             db.catalogDao().replaceCatalog(CatalogSnapshot(listOf(ModelEntity(id, id, "R1", 0, type = "llm")), emptyList(), emptyList()))
             db.favoriteDao().add(id, 123L)
             db.benchmarkScoreDao().initialize(1, listOf(BenchmarkScoreEntity("old-test", id, "test", 0.0)))
-            val manifest = context.assets.open("benchmark-manifest.json").use { it.readBytes() }
+            val manifest = testAssets.open("benchmark-contract-v2/benchmark-manifest.json").use { it.readBytes() }
             val scores = bundled()
             val runner = BenchmarkSyncRunner(RoomBenchmarkSnapshotStore(db.benchmarkScoreDao()), { error("existing version") }) { url, _ ->
                 if (url.endsWith("manifest.json")) manifest else scores
@@ -155,7 +157,7 @@ class BenchmarkIntegrationTest {
         val header = testAssets.open("benchmark-contract-v3/benchmark-manifest.json").use { it.readBytes() }
         val bytes = testAssets.open("benchmark-contract-v3/benchmarks.json").use { it.readBytes() }
         val manifest = BenchmarkJson.decodeFromString<BenchmarkManifest>(header.decodeToString())
-        val manifestUrl = context.getString(io.github.chenlongapps.modelatlas.R.string.benchmark_manifest_url)
+        val manifestUrl = "https://example.org/legacy-manifest.json"
         var snapshotDownloads = 0
         // Real production HTTPS parsing, status and size checks; only HTTP responses are injected.
         val client = OkHttpClient.Builder().addInterceptor { chain ->
@@ -176,7 +178,8 @@ class BenchmarkIntegrationTest {
             assertEquals(2L, dao.version())
             db.catalogDao().replaceCatalog(CatalogSnapshot(listOf(ModelEntity(id, id, "R1", 0, type = "llm")), emptyList(), emptyList()))
             dao.upsert(BenchmarkScoreEntity("local-manual-test", id, "synthetic", 0.0, sourceType = "test"))
-            val repository = DefaultModelRepository(DataModule.api(client), RoomCatalogStore(db.catalogDao(), dao), CatalogMapper(), Clock.systemUTC(), Dispatchers.IO)
+            val repository = DefaultModelRepository(DataModule.api(client), RoomCatalogStore(db.catalogDao(), dao), CatalogMapper(), Clock.systemUTC(), Dispatchers.IO,
+                HttpAtlasDataSource(context, client, Dispatchers.IO))
             assertEquals(3, repository.observeModelDetail(id).first()!!.benchmarks!!.size)
             val observed = async {
                 withTimeout(5_000) { repository.observeModelDetail(id).first { it?.benchmarks?.size == 2 } }

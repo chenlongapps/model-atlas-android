@@ -42,4 +42,5 @@ data class ModelEntity(
     val license: String? = null,
     val weights: List<ModelWeightLocal>? = null,
     val links: List<ModelLinkLocal>? = null,
+    val descriptionZhCn: String? = null,
 )

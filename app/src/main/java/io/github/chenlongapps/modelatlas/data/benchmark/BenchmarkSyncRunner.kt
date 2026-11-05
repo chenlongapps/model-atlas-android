@@ -21,7 +21,7 @@ internal class RoomBenchmarkSnapshotStore(private val dao: BenchmarkScoreDao) : 
     override suspend fun replaceIfNewer(version: Long, scores: List<BenchmarkScoreEntity>) = dao.replaceIfNewer(version, scores)
 }
 
-/** 可独立验证的同一条生产链路；调用者负责 IO dispatcher、日志和异常边界。 */
+/** 历史整数版本协议的兼容回归入口；生产目录只使用 remote/atlas，不启动此同步器。 */
 internal class BenchmarkSyncRunner(
     private val store: BenchmarkSnapshotStore,
     private val bundled: () -> ByteArray,

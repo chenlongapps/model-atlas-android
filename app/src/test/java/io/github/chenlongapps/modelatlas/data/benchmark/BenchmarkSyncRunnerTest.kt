@@ -146,7 +146,7 @@ class BenchmarkSyncRunnerTest {
     }
 
     @Test fun pythonGeneratedReleaseParsesWithActualKotlinContractAndUpdates() = runTest {
-        val assets = File("src/main/assets")
+        val assets = File("src/androidTest/assets/benchmark-contract-v2")
         val bytes = File(assets, "benchmarks.json").readBytes()
         val header = File(assets, "benchmark-manifest.json").readBytes()
         val snapshot = BenchmarkJson.decodeFromString<BenchmarkSnapshot>(bytes.decodeToString())
@@ -162,10 +162,11 @@ class BenchmarkSyncRunnerTest {
             true
         })
         assertTrue(committed)
-        val attributions = BenchmarkJson.decodeFromString<BenchmarkAttributions>(File(assets, "benchmark-attributions.json").readText())
+        val attributionAssets = File("src/main/assets")
+        val attributions = BenchmarkJson.decodeFromString<BenchmarkAttributions>(File(attributionAssets, "benchmark-attributions.json").readText())
         assertEquals(snapshot.version, attributions.version)
         attributions.sources.forEach { source ->
-            assertTrue(File(assets, source.license.validatedAssetPath()).readText().contains("Copyright (c) 2023 DeepSeek"))
+            assertTrue(File(attributionAssets, source.license.validatedAssetPath()).readText().contains("Copyright (c) 2023 DeepSeek"))
         }
     }
 }

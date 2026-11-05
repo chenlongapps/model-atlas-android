@@ -17,6 +17,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ModelDetailMapperTest {
+    @Test fun projectsCanonicalAndServiceMimeValuesIndependentlyWithoutChangingEntities() {
+        val canonical = model.copy(inputModalities = listOf("text", "image/png", "image/jpeg", "application/pdf"),
+            outputModalities = listOf("text", "audio/mp3", "audio/wav"))
+        val offering = service("openai", "s").let { it.copy(offering = it.offering.copy(
+            inputModalities = listOf("video/mp4", "video/webm"), outputModalities = emptyList(),
+        )) }
+        val detail = ModelDetailRecord(canonical, listOf(offering)).toModelDetail()!!
+        assertEquals(listOf("text", "image", "pdf"), detail.metadata.inputModalities)
+        assertEquals(listOf("text", "audio"), detail.metadata.outputModalities)
+        val serviceMetadata = detail.providers.single().offerings.single().metadata
+        assertEquals(listOf("video"), serviceMetadata.inputModalities)
+        assertEquals(emptyList<String>(), serviceMetadata.outputModalities)
+        assertEquals(4, canonical.inputModalities!!.size)
+        assertEquals(listOf("video/mp4", "video/webm"), offering.offering.inputModalities)
+    }
+
     private val model = ModelEntity(
         "openai/canonical", "remote-id", "Canonical", 100, type = "llm",
         contextLimitTokens = 5_000_000_000L, inputModalities = listOf("text", "future"),
@@ -119,8 +135,8 @@ class ModelDetailMapperTest {
             outputModalities = listOf("text")), emptyList()).toModelDetail())
     }
 
-    @Test fun detailDoesNotUseUnverifiedBenchmarkData() {
-        assertNull(ModelDetailRecord(model, emptyList()).toModelDetail()!!.benchmarks)
+    @Test fun detailWithoutPersistedScoresHasNoInventedBenchmarks() {
+        assertTrue(ModelDetailRecord(model, emptyList()).toModelDetail()!!.benchmarks!!.isEmpty())
     }
 
     private fun service(provider: String, id: String) = ModelDetailOfferingRecord(

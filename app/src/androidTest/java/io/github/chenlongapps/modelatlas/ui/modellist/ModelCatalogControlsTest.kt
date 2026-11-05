@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso.pressBack
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.testing.realAtlasModalityFixture
+import androidx.compose.ui.test.assertCountEquals
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
@@ -32,6 +34,28 @@ import org.junit.Test
 
 class ModelCatalogControlsTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun actualAtlasFiltersOfferOneCategoryPerFamilyAndRestoreMimeSelections() {
+        val fixture = realAtlasModalityFixture()
+        val query = restoreModelListQuery("""{"inputModalities":["image/png","image/jpeg"]}""")
+        val state = mutableStateOf(ModelListUiState(listOf(fixture.summary), isLoading = false, query = query))
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            ModelListScreen(state.value, onQueryChange = { state.value = state.value.copy(query = it) })
+        } }
+        compose.onNodeWithText("筛选 · 1").performClick()
+        listOf("text", "image", "audio", "video", "pdf").forEach {
+            compose.onAllNodes(hasTestTag("filter-input:$it")).assertCountEquals(1)
+            compose.onNodeWithTag("filter-input:$it").performScrollTo().assertIsDisplayed()
+        }
+        compose.onNodeWithTag("filter-input:image").performScrollTo().assertIsSelected()
+        fixture.rawInputs.filter { '/' in it }.forEach { compose.onNodeWithTag("filter-input:$it").assertDoesNotExist() }
+        compose.onNodeWithTag("filter-input:pdf").performScrollTo().performClick()
+        compose.onNodeWithTag("filter-result-count").assertTextContains("预览匹配 1 / 1 个模型")
+        compose.onNodeWithTag("filter-apply").performClick()
+        compose.onNodeWithTag("active-filter:input:image").assertExists()
+        compose.onNodeWithTag("active-filter:input:pdf").assertExists()
+        compose.runOnIdle { assertEquals(setOf("image", "pdf"), state.value.query.inputModalities) }
+    }
     private val models = listOf(
         ModelSummary(
             "alpha/vision", "Atlas Vision", openWeights = true,

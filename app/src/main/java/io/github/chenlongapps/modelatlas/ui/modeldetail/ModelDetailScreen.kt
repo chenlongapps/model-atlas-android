@@ -401,7 +401,8 @@ private fun LazyListScope.benchmarkItems(model: ModelDetail) {
 @Composable
 private fun BenchmarkSection(benchmark: ModelBenchmark) {
     DetailSection(benchmark.name.takeIf(String::isNotBlank) ?: stringResource(R.string.no_data)) {
-        DetailField(stringResource(R.string.detail_benchmark_score), benchmark.score.toString())
+        benchmark.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        DetailField(stringResource(R.string.detail_benchmark_score), benchmark.scoreText ?: benchmark.score?.toString())
         DetailField(stringResource(R.string.detail_benchmark_metric), benchmark.metric)
         benchmark.unit?.let { DetailField(stringResource(R.string.detail_benchmark_unit), it) }
         benchmark.higherIsBetter?.let {

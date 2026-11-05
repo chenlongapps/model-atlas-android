@@ -8,6 +8,7 @@ import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.model.PriceProviderPolicy
+import io.github.chenlongapps.modelatlas.data.model.toModalityCategories
 
 /**
  * 输入来自按名称和稳定 ID 排序的左连接；缺少服务商时仍保留规范模型。
@@ -32,8 +33,8 @@ fun List<ModelListRow>.toModelSummaries(
             releaseDate = model.releaseDate?.takeIf { it.isNotBlank() },
             contextLimitTokens = model.contextLimitTokens,
             outputLimitTokens = model.outputLimitTokens,
-            inputModalities = model.inputModalities,
-            outputModalities = model.outputModalities,
+            inputModalities = model.inputModalities.toModalityCategories(),
+            outputModalities = model.outputModalities.toModalityCategories(),
             openWeights = model.openWeights,
             license = model.license?.takeIf { it.isNotBlank() },
             price = priceRowsByCanonicalModelId[model.id].selectPriceFor(model.id),

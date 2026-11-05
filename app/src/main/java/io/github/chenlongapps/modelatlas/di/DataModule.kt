@@ -18,6 +18,8 @@ import io.github.chenlongapps.modelatlas.data.local.CatalogStore
 import io.github.chenlongapps.modelatlas.data.local.RoomCatalogStore
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevJson
+import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasDataSource
+import io.github.chenlongapps.modelatlas.data.remote.atlas.HttpAtlasDataSource
 import io.github.chenlongapps.modelatlas.data.repository.DefaultModelRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
@@ -43,6 +45,9 @@ annotation class IoDispatcher
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class DataBindings {
+    @Binds
+    abstract fun atlas(source: HttpAtlasDataSource): AtlasDataSource
+
     @Binds
     abstract fun settings(repository: DataStoreSettingsRepository): SettingsRepository
 

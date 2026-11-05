@@ -14,20 +14,15 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 class ModelsDevApiTest {
-    @Test fun requestsAllTypesAndDecodesBothEndpointsWithProductionJson() {
+    @Test fun requestsOnlyProvidersAndDecodesWithProductionJson() {
         MockWebServer().use { server ->
-            server.enqueue(jsonResponse(fixture("models")))
             server.enqueue(jsonResponse(fixture("api")))
             server.start()
             val api = api(server)
             runBlocking {
-                assertEquals("Example Atlas", api.getModels()["example/atlas"]!!.name)
                 assertEquals(2, api.getProviders().size)
             }
-            val modelsRequest = server.takeRequest().url
             val providersRequest = server.takeRequest().url
-            assertEquals("/models.json", modelsRequest.encodedPath)
-            assertEquals("all", modelsRequest.queryParameter("type"))
             assertEquals("/api.json", providersRequest.encodedPath)
             assertEquals("all", providersRequest.queryParameter("type"))
         }
@@ -38,7 +33,7 @@ class ModelsDevApiTest {
             server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "120").build())
             server.start()
             val error = assertThrows(HttpException::class.java) {
-                runBlocking { api(server).getModels() }
+                runBlocking { api(server).getProviders() }
             }
             assertEquals(503, error.code())
             assertEquals("120", error.response()!!.headers()["Retry-After"])
@@ -51,7 +46,7 @@ class ModelsDevApiTest {
             server.enqueue(jsonResponse("{\"model\":{\"id\":\"model\"}}"))
             server.start()
             assertThrows(SerializationException::class.java) {
-                runBlocking { api(server).getModels() }
+                runBlocking { api(server).getProviders() }
             }
         }
     }

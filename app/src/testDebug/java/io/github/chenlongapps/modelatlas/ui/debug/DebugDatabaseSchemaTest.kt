@@ -7,6 +7,7 @@ import org.junit.Test
 class DebugDatabaseSchemaTest {
     private fun values(table: DatabaseTable): Map<String, String?> = table.columns.associate { column ->
         column.name to when {
+            table == DatabaseTable.BENCHMARK_SCORES && column.name == "score" -> "1.25"
             !column.required -> null
             column.type == DatabaseFieldType.INTEGER -> "123"
             column.type == DatabaseFieldType.REAL -> "1.25"
@@ -60,6 +61,8 @@ class DebugDatabaseSchemaTest {
         val score = values(table)
         assertNull(validateDatabaseRow(table, score + mapOf("score" to "-0.003", "toolsEnabled" to "0", "higherIsBetter" to "1")))
         assertNull(validateDatabaseRow(table, score + ("cost" to "0")))
+        assertNull(validateDatabaseRow(table, score + mapOf("score" to null, "scoreText" to "899 ± 18")))
+        assertEquals("score", validateDatabaseRow(table, score + mapOf("score" to null, "scoreText" to null))?.field)
         for (invalid in listOf("NaN", "Infinity", "1e999", "text")) {
             assertEquals(R.string.debug_database_invalid_real, validateDatabaseRow(table, score + ("score" to invalid))?.messageResource)
             assertEquals(R.string.debug_database_invalid_real, validateDatabaseRow(table, score + ("cost" to invalid))?.messageResource)

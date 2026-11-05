@@ -3,10 +3,11 @@ package io.github.chenlongapps.modelatlas.data.repository
 import io.github.chenlongapps.modelatlas.data.local.CatalogSnapshot
 import io.github.chenlongapps.modelatlas.data.local.CatalogStore
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
+import io.github.chenlongapps.modelatlas.data.mapper.mapAtlas
+import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasDataSource
 import io.github.chenlongapps.modelatlas.data.mapper.toModelSummaries
 import io.github.chenlongapps.modelatlas.data.mapper.toModelDetail
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
-import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.di.IoDispatcher
 import java.io.IOException
 import java.time.Clock
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import retrofit2.HttpException
 
 class CatalogRateLimitException(val retryAtEpochMillis: Long, cause: Throwable? = null) :
@@ -35,13 +38,22 @@ class DefaultModelRepository @Inject constructor(
     private val mapper: CatalogMapper,
     private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val atlas: AtlasDataSource,
 ) : ModelRepository {
     private val refreshMutex = Mutex()
     private var retryNotBefore = 0L
     private var pendingSnapshot: CatalogSnapshot? = null
 
-    override suspend fun hasLocalCatalog() = withContext(ioDispatcher) {
-        store.hasCatalog()
+    override suspend fun hasLocalCatalog() = refreshMutex.withLock {
+        withContext(ioDispatcher) {
+            if (!store.hasCatalog() && store.readCatalog().release == null) {
+                atlas.bundled()?.let { release ->
+                    coroutineContext.ensureActive()
+                    store.replaceCatalog(mapper.mapAtlas(release, emptyMap(), clock.millis(), clock.millis()))
+                }
+            }
+            store.hasCatalog()
+        }
     }
 
     override fun observeModels() = combine(
@@ -51,14 +63,7 @@ class DefaultModelRepository @Inject constructor(
         rows.toModelSummaries(priceRows.groupBy { it.canonicalModelId })
     }.flowOn(ioDispatcher)
 
-    override fun observeModelDetail(id: String) = combine(store.observeModelDetail(id), store.observeBenchmarkScores(id)) { record, scores ->
-        record?.toModelDetail()?.copy(benchmarks = scores.map {
-            ModelBenchmark(name = it.benchmarkId, score = it.score, metric = it.metric, source = it.sourceUrl,
-                date = it.evaluatedAt, dataset = it.subset, harness = it.harness, unit = it.unit,
-                higherIsBetter = it.higherIsBetter, reasoningEffort = it.reasoningEffort,
-                toolsEnabled = it.toolsEnabled, sourceType = it.sourceType)
-        })
-    }
+    override fun observeModelDetail(id: String) = store.observeModelDetail(id).map { it?.toModelDetail() }
         .distinctUntilChanged()
         .flowOn(ioDispatcher)
 
@@ -101,11 +106,12 @@ class DefaultModelRepository @Inject constructor(
         if (clock.millis() < retryNotBefore) throw CatalogRateLimitException(retryNotBefore)
         try {
             return withContext(ioDispatcher) {
-                val models = async { api.getModels() to clock.millis() }
+                val models = async { atlas.fetch() to clock.millis() }
                 val providers = async { api.getProviders() to clock.millis() }
                 val (modelData, modelsFetchedAt) = models.await()
                 val (providerData, providersFetchedAt) = providers.await()
-                mapper.map(modelData, providerData, modelsFetchedAt, providersFetchedAt)
+                coroutineContext.ensureActive()
+                mapper.mapAtlas(modelData, providerData, modelsFetchedAt, providersFetchedAt)
             }
         } catch (error: HttpException) {
             if (error.code() == 429 || error.code() == 503) {

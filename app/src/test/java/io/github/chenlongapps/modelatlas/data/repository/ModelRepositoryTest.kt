@@ -8,10 +8,14 @@ import io.github.chenlongapps.modelatlas.data.local.ModelDetailRecord
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
+import io.github.chenlongapps.modelatlas.data.mapper.mapAtlas
+import io.github.chenlongapps.modelatlas.data.remote.atlas.*
+import kotlinx.serialization.json.JsonPrimitive
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
 import io.github.chenlongapps.modelatlas.data.remote.dto.CostDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelLimitDto
+import io.github.chenlongapps.modelatlas.data.remote.dto.ModelBenchmarkDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelOfferingDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ProviderDto
 import java.io.IOException
@@ -151,8 +155,9 @@ class ModelRepositoryTest {
     @Test fun successfulEmptyResponsesAreNotErrors() = runTest {
         api.models = emptyMap()
         api.providers = emptyMap()
-        assertEquals(false, repository(StandardTestDispatcher(testScheduler)).refresh())
-        assertEquals(0, store.writes)
+        assertEquals(true, repository(StandardTestDispatcher(testScheduler)).refresh())
+        assertEquals(1, store.writes)
+        assertTrue(store.snapshot!!.isEmpty)
     }
 
     @Test fun modelAdditionStagesFullSnapshotAndApplyDoesNotDownloadAgain() = runTest {
@@ -212,7 +217,7 @@ class ModelRepositoryTest {
             openWeights = true, license = "MIT", lastUpdated = "2026-10-21",
         ) }
         assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
-        assertEquals(CatalogMapper().map(api.models, api.providers, clock.millis(), clock.millis()), store.snapshot)
+        assertEquals(CatalogMapper().mapAtlas(release(), api.providers, clock.millis(), clock.millis()), store.snapshot)
         assertEquals(2, store.writes)
         assertEquals(false, repository.applyPendingUpdate())
         assertEquals(CatalogUpdateCheckResult.UNCHANGED, repository.checkForUpdates())
@@ -235,7 +240,7 @@ class ModelRepositoryTest {
         changes.forEachIndexed { index, providers ->
             api.providers = providers
             assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
-            assertEquals(CatalogMapper().map(api.models, api.providers, clock.millis(), clock.millis()), store.snapshot)
+            assertEquals(CatalogMapper().mapAtlas(release(), api.providers, clock.millis(), clock.millis()), store.snapshot)
             assertEquals(index + 2, store.writes)
             assertEquals(false, repository.applyPendingUpdate())
         }
@@ -323,8 +328,73 @@ class ModelRepositoryTest {
         assertEquals("New", store.snapshot!!.models.single().name)
     }
 
-    private fun repository(dispatcher: kotlinx.coroutines.CoroutineDispatcher) =
-        DefaultModelRepository(api, store, CatalogMapper(), clock, dispatcher)
+    @Test fun firstLocalReadImportsRealBundleOnceWithoutNetworkAndPreservesLocalChangesOnReopen() = runTest {
+        var imports = 0
+        val source = object : AtlasDataSource {
+            override suspend fun fetch(): AtlasRelease = error("No network on local read")
+            override suspend fun bundled() = release().also { imports++ }
+        }
+        val repository = repository(StandardTestDispatcher(testScheduler), source)
+        assertTrue(repository.hasLocalCatalog())
+        assertEquals(1, imports)
+        assertEquals(0, api.providerRequests)
+        assertTrue(store.snapshot!!.providers.isEmpty())
+        store.snapshot = store.snapshot!!.copy(models = store.snapshot!!.models.map { it.copy(name = "Local") })
+        assertTrue(repository.hasLocalCatalog())
+        assertEquals("Local", store.snapshot!!.models.single().name)
+        assertEquals(1, imports)
+        assertEquals(1, store.writes)
+    }
+
+    @Test fun benchmarkOnlyChangeCommitsSilentlyAndStagedModelChangeKeepsScoresTogether() = runTest {
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        repository.refresh()
+        api.models = api.models.mapValues { (_, m) -> m.copy(benchmarks = listOf(
+            ModelBenchmarkDto("Bench", 1.0, version = "v1", effort = "high", variant = "no tools"),
+        )) }
+        assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+        val score = store.snapshot!!.scores!!.single()
+        assertEquals("high", score.reasoningEffort)
+        assertEquals("v1", score.version)
+        api.models = api.models + ("new/model" to ModelDto("id", "New"))
+        api.models = api.models.mapValues { (_, m) -> m.copy(benchmarks = m.benchmarks?.map { it.copy(score = 2.0) }) }
+        assertEquals(CatalogUpdateCheckResult.UPDATE_AVAILABLE, repository.checkForUpdates())
+        assertEquals(1.0, requireNotNull(store.snapshot!!.scores!!.single().score), 0.0)
+        assertTrue(repository.applyPendingUpdate())
+        assertEquals(2.0, requireNotNull(store.snapshot!!.scores!!.single().score), 0.0)
+        assertEquals(2, store.snapshot!!.models.size)
+    }
+
+    @Test fun invalidAtlasReleaseKeepsLocalDataAndDoesNotFallBackToOldModelEndpoint() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        repository(dispatcher).refresh()
+        val previous = store.snapshot
+        val repository = repository(dispatcher, object : AtlasDataSource {
+            override suspend fun fetch(): AtlasRelease = throw kotlinx.serialization.SerializationException("invalid hash")
+        })
+        try { repository.refresh(); error("Expected invalid data") }
+        catch (_: kotlinx.serialization.SerializationException) {
+            assertEquals(previous, store.snapshot)
+            assertEquals(1, store.writes)
+        }
+    }
+
+    private fun repository(dispatcher: kotlinx.coroutines.CoroutineDispatcher, source: AtlasDataSource = object : AtlasDataSource {
+            override suspend fun fetch() = release()
+        }) = DefaultModelRepository(api, store, CatalogMapper(), clock, dispatcher, source)
+
+    private fun release() = AtlasRelease(
+        AtlasManifest(1, "sha256:test", "a".repeat(40), "2026-11-06T00:00:00Z", emptyMap()),
+        api.models.mapValues { (_, m) -> AtlasModelDto(
+            schema = 2, name = m.name, description = m.description, family = m.family, type = m.type,
+            knowledge = m.knowledge, releaseDate = m.releaseDate, lastUpdated = m.lastUpdated,
+            openWeights = m.openWeights, license = m.license, modalities = m.modalities, limit = m.limit,
+            capabilities = AtlasCapabilitiesDto(AtlasSupportDto(m.reasoning), AtlasSupportDto(m.toolCall), m.temperature),
+            weights = m.weights, links = m.links, benchmarks = m.benchmarks?.map { b -> AtlasBenchmarkScoreDto(
+                b.name, JsonPrimitive(b.score), b.metric, b.source, b.date, b.version, b.variant, b.dataset, b.harness, b.effort,
+            ) },
+        ) }, emptyMap(), AtlasTranslationsDto(),
+    )
 
     private suspend fun tryRefresh(repository: ModelRepository): CatalogRateLimitException {
         try {
@@ -350,7 +420,6 @@ class ModelRepositoryTest {
         )))
         var providerFailure: Exception? = null
         var providerRequests = 0
-        override suspend fun getModels() = models
         override suspend fun getProviders(): Map<String, ProviderDto> {
             providerRequests++
             providerFailure?.let { throw it }

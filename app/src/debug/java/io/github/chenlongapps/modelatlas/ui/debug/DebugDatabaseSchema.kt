@@ -45,6 +45,7 @@ internal enum class DatabaseTable(val tableName: String, val titleResource: Int,
         text("source", true),
     ) + metadataColumns() + listOf(
         text("license"), json("weights", DatabaseFieldType.WEIGHTS), json("links", DatabaseFieldType.LINKS),
+        text("descriptionZhCn"),
     )),
     PROVIDERS("providers", R.string.debug_database_table_providers, listOf(
         text("id", true, true), text("remoteId", true), text("name", true), number("fetchedAtEpochMillis", true),
@@ -65,10 +66,12 @@ internal enum class DatabaseTable(val tableName: String, val titleResource: Int,
     )),
     BENCHMARK_SCORES("benchmark_scores", R.string.debug_database_table_benchmark_scores, listOf(
         text("id", true, true), text("modelId", true), text("benchmarkId", true),
-        DatabaseColumn("score", DatabaseFieldType.REAL, required = true),
+        DatabaseColumn("score", DatabaseFieldType.REAL),
         text("metric"), text("unit"), bool("higherIsBetter"), text("subset"), text("harness"),
         text("reasoningEffort"), bool("toolsEnabled"), text("sourceUrl"), text("sourceType"), text("evaluatedAt"),
         DatabaseColumn("cost", DatabaseFieldType.REAL),
+        text("name"), text("version"), text("variant"),
+        text("scoreText"),
     ), displayColumn = "benchmarkId");
 
     val primaryColumns: List<DatabaseColumn> get() = columns.filter { it.primary }
@@ -89,6 +92,9 @@ internal fun validateDatabaseRow(
     if (values.keys != table.columns.map { it.name }.toSet()) return DatabaseValidationError("", R.string.debug_database_invalid_schema)
     if (original != null && (original.table != table || table.primaryColumns.any { values[it.name] != original.values[it.name] })) {
         return DatabaseValidationError("", R.string.debug_database_invalid_primary_change)
+    }
+    if (table == DatabaseTable.BENCHMARK_SCORES && values["score"] == null && values["scoreText"].isNullOrBlank()) {
+        return DatabaseValidationError("score", R.string.debug_database_invalid_null)
     }
     val converters = CatalogTypeConverters()
     for (column in table.columns) {

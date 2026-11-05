@@ -43,7 +43,7 @@ data class ModelLink(val url: String, val label: String?, val type: String?)
 /** 来源报告的评测原值，不推断分数方向、百分比或跨配置可比性。 */
 data class ModelBenchmark(
     val name: String,
-    val score: Double,
+    val score: Double?,
     val metric: String? = null,
     val source: String? = null,
     val date: String? = null,
@@ -56,6 +56,8 @@ data class ModelBenchmark(
     val reasoningEffort: String? = null,
     val toolsEnabled: Boolean? = null,
     val sourceType: String? = null,
+    val description: String? = null,
+    val scoreText: String? = null,
 )
 
 data class ModelDetailProvider(

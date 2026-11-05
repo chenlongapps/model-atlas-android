@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "9e243e9658faa03f6caa033eb93f7ed9",
+    "identityHash": "5d4b44bbaade1e243b7ef9e9d4f7bfc5",
     "entities": [
       {
         "tableName": "models",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `description` TEXT, `family` TEXT, `type` TEXT, `knowledgeCutoff` TEXT, `releaseDate` TEXT, `sourceLastUpdated` TEXT, `attachment` INTEGER, `reasoning` INTEGER, `toolCall` INTEGER, `structuredOutput` INTEGER, `temperature` INTEGER, `openWeights` INTEGER, `contextLimitTokens` INTEGER, `inputLimitTokens` INTEGER, `outputLimitTokens` INTEGER, `inputModalities` TEXT, `outputModalities` TEXT, `license` TEXT, `weights` TEXT, `links` TEXT, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, `fetchedAtEpochMillis` INTEGER NOT NULL, `source` TEXT NOT NULL, `description` TEXT, `family` TEXT, `type` TEXT, `knowledgeCutoff` TEXT, `releaseDate` TEXT, `sourceLastUpdated` TEXT, `attachment` INTEGER, `reasoning` INTEGER, `toolCall` INTEGER, `structuredOutput` INTEGER, `temperature` INTEGER, `openWeights` INTEGER, `contextLimitTokens` INTEGER, `inputLimitTokens` INTEGER, `outputLimitTokens` INTEGER, `inputModalities` TEXT, `outputModalities` TEXT, `license` TEXT, `weights` TEXT, `links` TEXT, `descriptionZhCn` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -136,6 +136,11 @@
           {
             "fieldPath": "links",
             "columnName": "links",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "descriptionZhCn",
+            "columnName": "descriptionZhCn",
             "affinity": "TEXT"
           }
         ],
@@ -438,7 +443,7 @@
       },
       {
         "tableName": "benchmark_scores",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `modelId` TEXT NOT NULL, `benchmarkId` TEXT NOT NULL, `score` REAL NOT NULL, `metric` TEXT, `unit` TEXT, `higherIsBetter` INTEGER, `subset` TEXT, `harness` TEXT, `reasoningEffort` TEXT, `toolsEnabled` INTEGER, `sourceUrl` TEXT, `sourceType` TEXT, `evaluatedAt` TEXT, `cost` REAL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `modelId` TEXT NOT NULL, `benchmarkId` TEXT NOT NULL, `score` REAL, `metric` TEXT, `unit` TEXT, `higherIsBetter` INTEGER, `subset` TEXT, `harness` TEXT, `reasoningEffort` TEXT, `toolsEnabled` INTEGER, `sourceUrl` TEXT, `sourceType` TEXT, `evaluatedAt` TEXT, `cost` REAL, `name` TEXT, `version` TEXT, `variant` TEXT, `scoreText` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -461,8 +466,7 @@
           {
             "fieldPath": "score",
             "columnName": "score",
-            "affinity": "REAL",
-            "notNull": true
+            "affinity": "REAL"
           },
           {
             "fieldPath": "metric",
@@ -518,6 +522,26 @@
             "fieldPath": "cost",
             "columnName": "cost",
             "affinity": "REAL"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "variant",
+            "columnName": "variant",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scoreText",
+            "columnName": "scoreText",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -570,11 +594,138 @@
             "id"
           ]
         }
+      },
+      {
+        "tableName": "benchmark_definitions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `version` TEXT NOT NULL, `metric` TEXT NOT NULL, `description` TEXT, `descriptionZhCn` TEXT, `compatibleVersions` TEXT, `category` TEXT, `organization` TEXT, `url` TEXT, `methodology` TEXT, `unit` TEXT, `higherIsBetter` INTEGER, `minScore` REAL, `maxScore` REAL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metric",
+            "columnName": "metric",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "descriptionZhCn",
+            "columnName": "descriptionZhCn",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "compatibleVersions",
+            "columnName": "compatibleVersions",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "organization",
+            "columnName": "organization",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "methodology",
+            "columnName": "methodology",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "higherIsBetter",
+            "columnName": "higherIsBetter",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "minScore",
+            "columnName": "minScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "maxScore",
+            "columnName": "maxScore",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "catalog_release",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `dataVersion` TEXT NOT NULL, `gitCommit` TEXT NOT NULL, `publishedAt` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dataVersion",
+            "columnName": "dataVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gitCommit",
+            "columnName": "gitCommit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "publishedAt",
+            "columnName": "publishedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9e243e9658faa03f6caa033eb93f7ed9')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5d4b44bbaade1e243b7ef9e9d4f7bfc5')"
     ]
   }
 }

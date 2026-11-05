@@ -20,10 +20,12 @@
 | [`data/model/ModelPrice.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModelPrice.kt) | `ModelPriceSummary` 与 `ModelPriceTierSummary`，单条展示报价与条件档位，口径为 USD / 百万 tokens |
 | [`data/model/PriceProviderPolicy.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/PriceProviderPolicy.kt) | 官方服务商对应表与第三方优先级；决定同一模型多个报价中展示哪一家 |
 | [`data/model/LlmInclusionPolicy.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/LlmInclusionPolicy.kt) | 基于类型与输入、输出模态的 LLM 收录规则 |
+| [`data/model/ModalityCategory.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/model/ModalityCategory.kt) | 将 MIME 格式投影为既有模态类别，按方向保序去重；列表／详情映射及筛选恢复／匹配共用，不改原始存储 |
 | [`data/local/entity/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/entity/) | 三张 Room3 目录实体及独立收藏实体，区分规范模型、API 服务商、模型服务和本地用户数据，详见[本地目录数据](local-data.md) |
 | [`data/local/model/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/model/) | 独立于 DTO 的本地 JSON 值对象，保存权重、链接、完整报价、推理选项与模式等复杂信息 |
 | [`data/local/BenchmarkScoreDao.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/BenchmarkScoreDao.kt) | 独立评测成绩观察、逐条操作及版本化快照事务 |
-| [`data/benchmark/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/benchmark/) | 真实随包 v2 初始化、纯同步协调器、受限 HTTPS 下载、清单／摘要校验与本地优先更新；Pages 地址已配置，线上未部署 |
+| [`data/remote/atlas/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/remote/atlas/) | ModelAtlas Data v2 模型、评测定义／内嵌成绩、中文、内容哈希发布清单及受限 HTTPS 下载；当前随包同协议，见 [接入契约](atlas-data.md) |
+| [`data/benchmark/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/benchmark/) | 必要历史归属读取与旧评测协议回归；不再有 Application 启动同步入口 |
 | [`data/local/converter/CatalogTypeConverters.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/converter/CatalogTypeConverters.kt) | Room3 JSON 列转换器，保留 null 与空集合、零价的区别，不将损坏数据伪装成默认值 |
 | [`data/remote/ModelsDevParser.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevParser.kt) | 将 Models.dev 两种 JSON 字符串分别解析为模型字典和服务商字典，不发起网络请求 |
 | [`data/remote/ModelsDevApi.kt`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApi.kt) | Retrofit 异步端点，与纯解析入口共用 `ModelsDevJson` |
@@ -65,13 +67,13 @@
 本地目录 → ModelListViewModel 立即展示并持续观察
 
 DefaultModelRepository.checkForUpdates() / refresh()
-    → 并行请求 models.json?type=all、api.json?type=all
-    → CatalogMapper（分别记录两个响应的获取时间）
+    → 并行获取 Atlas 发布包（manifest + models + benchmark 定义 + zh-CN + 许可）与 Models.dev api.json?type=all
+    → 校验发布包字节数／摘要／结构 → AtlasCatalogMapper（两来源分别记录获取时间）
     → 与本地完整快照比较（忽略本地抓取时间、字典顺序）
     → 后台检查：规范模型 ID 集合变化 → 暂存完整快照、提示可更新 → 用户确认 applyPendingUpdate()
                  ID 集合不变、仅内容变化 → 静默提交完整快照，无提醒；内容一致不写库
     → 主动刷新：直接提交变化快照
-    → CatalogStore → CatalogDao.replaceCatalog()（全量快照事务）
+    → CatalogStore → CatalogDao.replaceCatalog()（目录、成绩、定义、翻译、发布状态全量快照事务）
     → CatalogDao.observeModelRows()（左连接并去重）
     → CatalogDao.observeOfferingPriceRows()（显式关联且有报价的模型服务）
     → ModelListMapper + LlmInclusionPolicy（去重、收录、发布时间倒序）+ selectPriceFor（挑选展示报价）→ Flow<List<ModelSummary>>
@@ -92,6 +94,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - `ModelListRoute` 负责获取 Hilt ViewModel 和生命周期感知的状态收集，不直接请求数据源。
 - `ModelListScreen` 通过参数接收状态，不依赖 Hilt 或 ViewModel。修改时保留这一边界，使预览和后续界面测试可以使用独立数据。
 - 查询条件由 `ModelListViewModel.setQuery()` 更新，在完整 LLM 列表上派生 `visibleModels`，不改变仓库、数据库、LLM 收录或报价选择。搜索去除首尾空白并按空白分词，不区分大小写，每个词须在名称、稳定 ID 或 LAB 中至少命中一处；保留原发布时间排序。筛选仅保留 LAB、权重公开状态和输入／输出模态：不同字段取交集，LAB 多选取并集，方向模态分别要求所选项全部具备，未知模态保留原文；权重为全部／公开／未公开／暂无数据。最低上下文、最低最大输出及有无报价已从查询模型、匹配、计数、标签和面板中移除。
+- 模态展示与筛选使用 `ModalityCategory`：具体图片／音频／视频／文本 MIME 格式及 PDF 归为原类别并去重，不为 PNG/JPEG 等逐个显示标签或筛选条件。数据库保持来源原值，列表与详情映射输出类别，收藏／对比沿用这些映射；已有缓存无需刷新即可修正。旧 MIME 查询和草稿恢复时合并类别，查询计数／删除标签／匹配保持一致；不跨输入输出方向、不把未知类型或缺失值补成已支持。
 - 搜索区参考胶囊式布局：无描边的填充搜索框、带图标与数量的筛选按钮，以及可逐个移除的已应用条件标签；旁边的“重置”仅清除筛选、保留搜索，搜索框可单独清空，无结果卡片可清除全部条件。搜索框和入口仍是页头提醒之后的普通列表项随内容滚动，不新增固定应用栏、排序功能、收藏或重复设置入口，沿用动态深浅主题，不复制参考图的固定橄榄色。
 - 筛选面板为大圆角底部弹层，标题在上方，不提供关闭图标按钮，分组内容滚动，底部固定等宽“重置／应用”操作，应用按钮不显示条件数；选项使用浅色胶囊，选中项以主题色细描边及淡底强调，输入／输出模态附原有图标。普通字号面板约占可用高度 75%，大字号提高到 90%。打开时从已应用条件建立独立草稿，实时预览匹配数量，但点击“应用”前不修改列表或 ViewModel；面板内重置只修改草稿并保留搜索，点击遮罩、系统返回和滑动关闭放弃未应用修改。草稿及 LAB 展开状态通过 UI 的 `rememberSaveable` 恢复，不将草稿写入业务保存状态。LAB 默认显示至多八个选项，已选项始终可见，超过时可“更多／收起”；已选项超过八个则全部保留。
 - `ModelCatalogControls.kt` 提供搜索／筛选入口、已选条件和筛选面板内容的独立深浅色预览，并覆盖窄屏双倍字号；面板预览直接复用内容组件，不依赖弹层窗口、ViewModel 或网络，合成样本仅供预览使用。
@@ -128,7 +131,7 @@ DefaultModelRepository.checkForUpdates() / refresh()
 - 价格区采用无独立背景的 `PriceSection`，取消内层圆角容器与额外内边距，标题、指标与分隔线左对齐；标题与计价单位统一采用 `labelSmall`（默认 11sp／16sp 行高），弱化说明文字、突出 `titleMedium` 单价，保留系统字号缩放。标题箭头缩至 16dp，不再设置 48dp 的布局最小高度，默认标题行随内容约为 16dp；`clickable` 在布局外扩展触摸区域，维持至少 48dp 的触摸高度，附近无其他可点击控件。标题与指标等区域间距 4dp，指标内部间距 2dp，换行间距 8dp。仍保留输入／输出／缓存分列、完整价格精度、单位及其他类别；档位门槛显示完整数值，不使用 K／M 近似。
 - 档位展开箭头遵循折叠区惯例：收起时朝下，展开后朝上，通过 0°／180° 旋转动画过渡；不使用目录树式的朝右／朝下组合。整行点击和读屏动作／状态不变，UI 回归比较箭头实际绘制的尖端方向，覆盖展开与再次收起。
 - 已实现本地优先与离线浏览：每个新的列表 ViewModel 有本地目录时后台检查一次，没有时自动加载；不轮询、不增加 WorkManager 或退出后的后台任务。仅比较完整规范模型的稳定 ID 集合来决定是否提示增删（同数量替换也提示），不受 LLM 收录结果、搜索或筛选影响。ID 集合不变时，参数、名称、类型、报价以及服务商／模型服务的增删改均静默以完整快照事务同步，列表随 Flow 更新，查询条件保留并重新匹配；不会把内容变化误当成模型增删。不将本地抓取时间或字典顺序变化当作内容更新，内容一致不重复写库。模型增删的待应用完整快照仅暂存在仓库内存中，进程重启后重新检查。目录页尚未展示统一更新时间，也未引入 TTL 策略；详情只观察本地，不额外检查网络。
-- 两端点均成功解析后才事务提交；失败或取消不会写入半份目录。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
+- Atlas 整包及 Models.dev 服务响应均成功后才事务提交；失败或取消不会写入半份目录。首次无目录且无发布标记时先导入 `assets/atlas/` 真数据，Application 不另起成绩同步。HTTP 429 / 503 尊重 `Retry-After`（秒数或 HTTP 日期），缺失或非法时冷却 60 秒。OkHttp 不自动重试请求。
 - 页面提供来源与第三方说明、随包 MIT 许可全文；[AndroidManifest.xml](../app/src/main/AndroidManifest.xml) 已声明普通 `INTERNET` 权限，不申请运行时危险权限。
 - 当前有模型、对比与设置三个常规顶层标签，Debug 另有同级的调试标签；模型详情、外观、来源许可及 Debug 数据库管理为子页面，没有基于路由的通用导航栈。
 - Models.dev 的收录、计价、能力与许可约定见[数据源说明](data-source.md)。
@@ -152,8 +155,8 @@ DefaultModelRepository.checkForUpdates() / refresh()
 
 ## 模型详情的数据与导航
 
-- `CatalogDao.observeModelDetail(id)` 在单个事务内通过嵌套 Relation 读取规范模型、所有 `canonicalModelId = id` 的模型服务和服务商；不使用只含有价服务的列表报价投影，不按名称推断关联。`DefaultModelRepository.observeModelDetail()` 在 IO dispatcher 映射并去除相同值，遵循列表相同的 LLM 收录规则。模型不存在／不再符合规则返回 null；空服务列表仍是有效详情。没有 Schema 修改或网络端点新增。
-- `ModelDetailMapper` 将全部服务分组，第一方服务商优先、第三方按已有优先级及 ID 兜底；同服务商的服务按稳定 ID 排序，不筛选最低价。规范模型与服务分别保留元数据，完整保存七类价格、精确档位和独立模式价到应用模型，不计算费用或合并模式，不展示／执行请求 body、headers 等配置。旧评测不再映射或存储；仓库合并独立成绩表 Flow，详情显示本地原值，测试成绩明确标注，在线更新不阻塞详情。
+- `CatalogDao.observeModelDetail(id)` 在单个事务内通过嵌套 Relation 读取规范模型、所有显式关联服务／服务商、该模型成绩及可选评测定义；不使用只含有价服务的列表报价投影，不按名称推断模型关联。`DefaultModelRepository.observeModelDetail()` 在 IO dispatcher 映射并去除相同值，遵循列表相同的 LLM 收录规则。模型不存在／不再符合规则返回 null；空服务列表仍是有效详情。模型／定义中文缺失回退原文，Schema v1 新列／表见[本地目录数据](local-data.md)。
+- `ModelDetailMapper` 将全部服务分组，第一方服务商优先、第三方按已有优先级及 ID 兜底；同服务商的服务按稳定 ID 排序，不筛选最低价。规范模型与服务分别保留元数据，完整保存七类价格、精确档位和独立模式价到应用模型，不计算费用或合并模式，不展示／执行请求 body、headers 等配置。评测由事务 Relation 映射，显示本地原值、明确的定义说明、版本、effort 和条件；测试成绩明确标注，在线更新不阻塞详情。
 - `ModelDetailViewModel` 的 `open(id)` 订阅本地 Flow，首个结果到达前保持加载；null 显示不存在／已移除，读取异常显示可重试错误，取消不当作错误。`retry()` 只重新订阅本地查询，不联网、不提交待更新目录。Route 进入时打开、退出时关闭，切换模型取消旧订阅，避免 Activity 级 Hilt ViewModel 累积全部已浏览模型。详情随目录提交更新，模型被移除后不继续显示旧内容。
 - 外壳通过 `rememberSaveable` 保存选中的稳定模型 ID，回调沿 Scaffold → Route → Screen → Card 传递；`SharedTransitionLayout` 统一承载列表与详情。`ModelContainerKey(modelId)` 匹配 `ModelCard` 外层与外壳的 `ModelDetailContainer`，使用 `sharedBounds` 在约 450ms 内将整卡扩展到全屏／缩回原卡片。内部 `ModelSharedElementKey(modelId, role)` 与容器键隔离：Logo 使用 `sharedElement`，名称／机构／权重使用 `sharedBounds` 及 `scaleToBounds`，与容器同为 450ms；身份在根覆盖层的层级为 2，高于卡片容器的 1 和详情容器的 0，默认继承最近父容器的动态裁剪路径，不叠加父级缩放与局部内容淡化，也不留两份身份。外层 `scaleToBounds(ContentScale.FillWidth, Alignment.TopStart)` 保持最终布局与等比缩放，避免逐帧文字重排或非等比拉伸；默认内容占位不影响其他列表项。两端使用同一扩展进度驱动根覆盖层圆角（24dp → 0dp），详情不透明表面在绘制阶段插值 `surface` → `surfaceContainerLowest`，其 Scaffold 在宿主中透明、独立预览仍保留背景；其他卡片及详情内容以 120ms 局部淡化交接，背景目录和悬浮导航不再整页淡出。可见性使用公开的 `Transition<EnterExitState>` 实现保留内容的 `AnimatedVisibilityScope`，不让通用页面切换容器销毁主分页器；动画期间两页参与放置，结束后隐藏主分页器但继续组合。退出页面立即清除可访问语义并阻挡触摸，列表不可见时暂停骨架、清除焦点／筛选面板。复用现有 `NavigationBackHandler` 统一处理说明／详情返回，不引入 Navigation 3 或通用导航栈。返回保留目录、查询、滚动、列表价格展开与提醒计时；详情退出动画结束后才移除组合并取消本地订阅，动画中再次返回不会退出应用。详情按模型 ID 保存所选标签与各正文位置，不再保存已删除的服务参数／档位展开，不把目录对象写入保存状态。
 - 点击卡片时仅捕获 `ModelIdentitySnapshot`（ID、名称、LAB、权重状态和许可）到外壳内存，经动画作用域供详情的加载头部使用，不构造假的 `ModelDetail`、不写入 ViewModel 或保存状态、不阻塞跳转等待读库。容器目标挂在稳定外壳上，不随加载／真实内容切换重建；加载和内容头部使用一致的布局起点，真实 Flow 到达后原位接管身份，错误／不存在状态不保留快照头部。恢复导航只保存 ID，不恢复或重播快照。详情公共头部有任何纵向滚动时停用身份共享匹配，但外层容器仍缩回原卡片，不强制恢复任一端滚动位置；来源卡片消失或无可见容器匹配时才使用 180ms 页面淡出兜底。快速返回可中断动画，系统关闭动画时立即完成布局和清理；模型详情已接入预测性返回，协调机制见下文。
@@ -196,7 +199,8 @@ Debug 专用单元测试位于 [`app/src/testDebug/java/.../ui/debug/`](../app/s
 | [`ModelListQueryTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/ModelListQueryTest.kt) | 名称／ID／LAB 搜索、多词与大小写、组合条件、方向模态、权重三态、保序、独立重置、空目录／无结果区别，以及旧门槛／报价字段忽略、有效条件保留与损坏值兜底 |
 | [`CatalogStatusNoticeTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/ui/modellist/CatalogStatusNoticeTest.kt) | 内联提醒的显示条件、无状态与刷新中不占位、首次加载与阻断错误不重复提醒、关闭结果保留待更新提示，以及动画目标不受模型列表变化影响 |
 | [`CatalogSnapshotTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/local/CatalogSnapshotTest.kt) | 规范模型 ID 集合增删／同数量替换与内容变化分离、完整内容比较、忽略抓取时间与字典顺序、增删及参数／报价变化、保留缺失与空集合／零值区别 |
-| [`ModelsDevApiTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApiTest.kt) | MockWebServer 验证真实 Retrofit 路径、`type=all`、两个端点的解析与 HTTP 错误不自动重试 |
+| [`ModelsDevApiTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevApiTest.kt) | MockWebServer 验证仅保留服务商 Retrofit 路径、`type=all`、解析与 HTTP 错误不自动重试 |
+| [`AtlasReleaseLoaderTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/atlas/AtlasReleaseLoaderTest.kt)、[`AtlasHttpSourceTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/remote/atlas/AtlasHttpSourceTest.kt)、[`AtlasCatalogMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/AtlasCatalogMapperTest.kt) | Pages 原字节清单、HTTPS 路径／取消／长度限制、摘要、严格已知类型、数值／文本成绩、能力三态、定义歧义与显式兼容版本、原文／中文回退 |
 | [`CatalogMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/CatalogMapperTest.kt)、[`ModelListMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelListMapperTest.kt) | 独立 ID、显式关联、完整复杂字段、缺失信息、规范模型去重、列表元数据映射、开放权重与许可三态、发布时间倒序、报价投影挂载与未匹配报价行 |
 | [`ModelPriceMapperTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/mapper/ModelPriceMapperTest.kt) | 官方优先、第三方优先级、同服务商取最低、零价与缺失价、纯档位报价、无服务商名称、缓存／推理／音频与旧版字段 |
 | [`PriceProviderPolicyTest`](../app/src/test/java/io/github/chenlongapps/modelatlas/data/model/PriceProviderPolicyTest.kt) | 已核实的第一方对应表、无官方对应的 LAB、第三方优先级顺序与未列入者排序 |

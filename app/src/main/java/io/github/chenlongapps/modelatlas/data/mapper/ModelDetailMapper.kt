@@ -14,7 +14,9 @@ import io.github.chenlongapps.modelatlas.data.model.ModelLink
 import io.github.chenlongapps.modelatlas.data.model.ModelInterleaved
 import io.github.chenlongapps.modelatlas.data.model.ModelReasoningOption
 import io.github.chenlongapps.modelatlas.data.model.ModelWeight
+import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.data.model.PriceProviderPolicy
+import io.github.chenlongapps.modelatlas.data.model.toModalityCategories
 
 fun ModelDetailRecord.toModelDetail(): ModelDetail? {
     val m = model
@@ -47,8 +49,8 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
                             contextLimitTokens = o.contextLimitTokens,
                             inputLimitTokens = o.inputLimitTokens,
                             outputLimitTokens = o.outputLimitTokens,
-                            inputModalities = o.inputModalities,
-                            outputModalities = o.outputModalities,
+                            inputModalities = o.inputModalities.toModalityCategories(),
+                            outputModalities = o.outputModalities.toModalityCategories(),
                         ),
                         status = o.status.nonBlank(), price = o.pricing?.toDetailPrice(),
                         modes = o.experimentalModes?.mapValues { (_, mode) -> mode.pricing?.toDetailPrice() },
@@ -71,7 +73,7 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
     return ModelDetail(
         id = m.id, name = m.name.nonBlank() ?: m.id,
         metadata = ModelDetailMetadata(
-            description = m.description.nonBlank(),
+            description = m.descriptionZhCn.nonBlank() ?: m.description.nonBlank(),
             family = m.family.nonBlank(),
             knowledgeCutoff = m.knowledgeCutoff.nonBlank(),
             releaseDate = m.releaseDate.nonBlank(),
@@ -85,13 +87,24 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
             contextLimitTokens = m.contextLimitTokens,
             inputLimitTokens = m.inputLimitTokens,
             outputLimitTokens = m.outputLimitTokens,
-            inputModalities = m.inputModalities,
-            outputModalities = m.outputModalities,
+            inputModalities = m.inputModalities.toModalityCategories(),
+            outputModalities = m.outputModalities.toModalityCategories(),
         ),
         license = m.license.nonBlank(),
         weights = m.weights?.map { ModelWeight(it.url, it.label, it.quantization, it.format) },
         links = m.links?.map { ModelLink(it.url, it.label, it.type) },
         source = m.source, fetchedAtEpochMillis = m.fetchedAtEpochMillis, providers = providers,
+        benchmarks = scores.sortedBy { it.score.id }.map { record ->
+            val s = record.score
+            ModelBenchmark(
+                name = s.name ?: s.benchmarkId, score = s.score, metric = s.metric,
+                source = s.sourceUrl, date = s.evaluatedAt, version = s.version, variant = s.variant,
+                dataset = s.subset, harness = s.harness, unit = s.unit, higherIsBetter = s.higherIsBetter,
+                reasoningEffort = s.reasoningEffort, toolsEnabled = s.toolsEnabled, sourceType = s.sourceType,
+                description = record.definition?.descriptionZhCn.nonBlank() ?: record.definition?.description.nonBlank(),
+                scoreText = s.scoreText,
+            )
+        },
     )
 }
 

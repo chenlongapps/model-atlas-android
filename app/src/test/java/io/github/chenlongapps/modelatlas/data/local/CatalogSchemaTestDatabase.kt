@@ -8,10 +8,12 @@ import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkVersionEntit
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.CatalogReleaseEntity
 
 /** 仅供测试编译时由 Room KSP 检查实体、外键、索引与列转换器，不创建运行时数据库。 */
 @Database(
-    entities = [ModelEntity::class, ProviderEntity::class, ModelOfferingEntity::class, FavoriteEntity::class, BenchmarkScoreEntity::class, BenchmarkVersionEntity::class],
+    entities = [ModelEntity::class, ProviderEntity::class, ModelOfferingEntity::class, FavoriteEntity::class, BenchmarkScoreEntity::class, BenchmarkVersionEntity::class, BenchmarkDefinitionEntity::class, CatalogReleaseEntity::class],
     version = 1,
     exportSchema = false,
 )

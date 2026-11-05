@@ -1,6 +1,8 @@
 package io.github.chenlongapps.modelatlas.ui.modellist
 
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.data.model.toModalityCategories
+import io.github.chenlongapps.modelatlas.data.model.toModalityCategory
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -8,7 +10,7 @@ import kotlinx.serialization.json.Json
 internal val ModelListQueryJson = Json { ignoreUnknownKeys = true }
 
 internal fun restoreModelListQuery(value: String): ModelListQuery = try {
-    ModelListQueryJson.decodeFromString<ModelListQuery>(value)
+    ModelListQueryJson.decodeFromString<ModelListQuery>(value).withModalityCategories()
 } catch (_: IllegalArgumentException) {
     ModelListQuery()
 }
@@ -26,7 +28,8 @@ data class ModelListQuery(
     val filterCount: Int
         get() = (if (labs.isEmpty()) 0 else 1) +
             (if (weights == WeightFilter.ALL) 0 else 1) +
-            inputModalities.size + outputModalities.size
+            inputModalities.map { it.toModalityCategory() }.distinct().size +
+            outputModalities.map { it.toModalityCategory() }.distinct().size
 
     val isActive: Boolean get() = search.isNotBlank() || filterCount > 0
 
@@ -36,10 +39,18 @@ data class ModelListQuery(
 @Serializable
 enum class WeightFilter { ALL, OPEN, CLOSED, UNKNOWN }
 
+/** 恢复曾保存的 MIME 条件时合并同类项，不清除搜索、机构和其他有效条件。 */
+internal fun ModelListQuery.withModalityCategories() = copy(
+    inputModalities = inputModalities.mapTo(linkedSetOf()) { it.toModalityCategory() },
+    outputModalities = outputModalities.mapTo(linkedSetOf()) { it.toModalityCategory() },
+)
+
 /** 保留仓库的原始顺序。搜索词之间为 AND，每个词可匹配名称、稳定 ID 或 LAB。 */
 internal fun filterModels(models: List<ModelSummary>, query: ModelListQuery): List<ModelSummary> {
     if (!query.isActive) return models
     val terms = query.search.trim().split(Regex("\\s+")).filter(String::isNotEmpty)
+    val inputs = query.inputModalities.map { it.toModalityCategory() }.toSet()
+    val outputs = query.outputModalities.map { it.toModalityCategory() }.toSet()
     return models.filter { model ->
         terms.all { term ->
             model.name.contains(term, ignoreCase = true) ||
@@ -53,7 +64,7 @@ internal fun filterModels(models: List<ModelSummary>, query: ModelListQuery): Li
                 WeightFilter.CLOSED -> model.openWeights == false
                 WeightFilter.UNKNOWN -> model.openWeights == null
             } &&
-            query.inputModalities.all { it in model.inputModalities.orEmpty() } &&
-            query.outputModalities.all { it in model.outputModalities.orEmpty() }
+            inputs.all { it in model.inputModalities.toModalityCategories().orEmpty() } &&
+            outputs.all { it in model.outputModalities.toModalityCategories().orEmpty() }
     }
 }

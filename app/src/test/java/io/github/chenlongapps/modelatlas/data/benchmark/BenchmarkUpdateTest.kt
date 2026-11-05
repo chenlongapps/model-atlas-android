@@ -19,7 +19,7 @@ class BenchmarkUpdateTest {
         var committed = false
         assertTrue(updateBenchmarkSnapshot(1, manifest(), { snapshot }) { version, scores ->
             assertEquals(2L, version)
-            assertEquals(0.0, scores.single().score, 0.0)
+            assertEquals(0.0, requireNotNull(scores.single().score), 0.0)
             assertEquals("test", scores.single().sourceType)
             assertEquals(0.003, scores.single().cost!!, 0.0)
             committed = true

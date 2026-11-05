@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.data.model.*
+import io.github.chenlongapps.modelatlas.testing.realAtlasModalityFixture
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -59,6 +60,23 @@ import org.junit.Test
 
 class ModelDetailScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun actualAtlasMimeFormatsCollapseInBothHeaderAndOverview() {
+        val fixture = realAtlasModalityFixture()
+        show(fixture.detail)
+        listOf("文本", "图片", "视频", "音频", "PDF").forEach { label ->
+            compose.onAllNodes(hasText(label) and hasAnyAncestor(hasTestTag("input-modalities")), useUnmergedTree = true)
+                .assertCountEquals(1)
+        }
+        fixture.rawInputs.filter { '/' in it }.forEach { compose.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
+        scrollTo("模态")
+        compose.onNodeWithContentDescription("输入模态：文本、图片、音频、视频、PDF").assertExists()
+        compose.onNodeWithContentDescription("输出模态：文本").assertExists()
+        listOf("文本", "图片", "视频", "音频", "PDF").forEach { label ->
+            compose.onAllNodes(hasText(label) and hasAnyAncestor(hasTestTag("overview-input-modalities")), useUnmergedTree = true)
+                .assertCountEquals(1)
+        }
+    }
 
     @Test fun distinguishesLoadingMissingAndReadErrorWithLocalRetry() {
         var retries = 0
@@ -733,6 +751,18 @@ class ModelDetailScreenTest {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         compose.onNode(hasText("javascript:alert(1)") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test fun atlasBenchmarkDescriptionEffortAndCompositeScoreAreDisplayedVerbatim() {
+        show(detail().copy(benchmarks = listOf(ModelBenchmark(
+            "GDPval-AA", null, version = "2.1", variant = "without tools", reasoningEffort = "Adaptive/Max",
+            description = "中文评测说明", scoreText = "899 ± 18",
+        ))))
+        selectTab("BENCHMARKS")
+        listOf("中文评测说明", "899 ± 18", "Adaptive/Max", "2.1", "without tools").forEach {
+            scrollTo(it)
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
     }
 
     @Test fun benchmarkTestDataIsExplicitlyLabeled() {

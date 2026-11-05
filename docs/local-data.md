@@ -2,10 +2,18 @@
 
 ## 当前实现与边界
 
+**ModelAtlas Data 迁移后补充**：当前远程协议见 [接入契约](atlas-data.md)。`CatalogSnapshot` 在原三表之外可携带 `scores`、`definitions` 和 `release`；正式新发布必须一起存在，一次事务同时提交。无 release 的旧本地三表操作仍只替换三表，供 Debug／兼容测试使用，不启动旧在线成绩同步。
+
+新增 `benchmark_definitions`（定义稳定 ID、名称／版本／指标、原文／中文描述、显式兼容版本、单位／方向及原始定义元数据）、`catalog_release`（单行内容哈希／提交／发布时间）。模型新增 `descriptionZhCn`，原文不覆盖；成绩新增 `name`、`version`、`variant`。新模型 `source = model-atlas-data`，无内嵌 ID，`remoteId` 使用明确的路径 ID；服务商／服务来源仍为 `models.dev`。详情 Relation 在同一事务内读取成绩和定义。仍为未发布的 Schema v1 基线，不清库、不自动迁移旧开发安装。
+
+成绩 `score` 改为可空 REAL，新增 `scoreText` 保存来源中的文本分数（百分号、置信区间等）；导入时二选一，文本不解析或填造数值。Debug 允许修复原值，但至少填写一种成绩。下文历史“非空数值 score”仅描述旧协议。
+
+下文涉及旧整数版本独立成绩初始化的说明仅适用于历史兼容 DAO／测试，不是当前生产同步。Debug 仍只开放原五表，定义与发布状态不提供编辑入口；原统计仍仅计算三张目录表。
+
 已定义并接通三张 Room3 目录实体、独立收藏表、本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成目录存储，支持本地优先读取、后台检查与主动更新。收藏由 `FavoriteDao` 与 `RoomFavoriteRepository` 独立管理，不进入远端快照。
 
 - `CatalogMapper` 实现 DTO → Entity，保留整个目录与完整复杂字段；数据库名为 `catalog.db`，由 Hilt 配置 `AndroidSQLiteDriver`。
-- Repository 并行请求两个端点，均成功后形成完整快照；后台检查发现规范模型 ID 增删时暂存完整快照，待用户确认；ID 集合不变、仅内容变化时静默以全量快照事务更新三表，不显示更新提醒。主动下拉刷新直接同步完整变化。规范模型与服务商左连接 Flow 驱动真实 LLM 列表。
+- Repository 并行获取 Atlas 发布包和 Models.dev 服务响应，均成功后形成完整快照；后台检查发现规范模型 ID 增删时暂存完整快照，待用户确认；ID 集合不变、仅内容变化时静默以全量快照事务更新目录、成绩、定义和发布状态，不显示更新提醒。主动下拉刷新直接同步完整变化。规范模型与服务商左连接 Flow 驱动真实 LLM 列表。
 - `hasCatalog()` 用三表存在性查询判断本地是否有记录，不用筛选后的 LLM 数量代替；`readCatalog()` 在单个事务中读取三表完整 Entity，供目录比较，不改变 Schema v1。`CatalogSnapshot.hasSameModelIdsAs()` 仅比较规范模型 `id` 集合，决定是否需要确认增删，不比较内容或服务商／模型服务。`hasSameContentAs()` 仍按主键比较全部内容、忽略 `fetchedAtEpochMillis` 与字典顺序，其他已映射字段与缺失值语义均保留，供静默同步和主动刷新判断是否写库。待应用快照仅在仓库内存暂存，不增加持久化表或迁移；相同内容不重复写库。
 - 收藏、筛选状态、最低价等业务数据不混入目录实体；当前不建设多数据源框架。
 - 报价投影 `observeOfferingPriceRows()` 只取显式关联到规范模型且 `pricing` 非空的服务，按 `(canonicalModelId, providerId, id)` 排序；规范模型元数据仍由 `observeModelRows()` 单独提供，两条 Flow 在仓库层合并，互不覆盖。
@@ -66,11 +74,11 @@
 
 ## 独立评测成绩
 
-- `benchmark_scores` 以 `id` 为主键，包含非空 `modelId`、`benchmarkId`、`score`，以及可空的 `cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。成绩与 cost 为 SQLite REAL / Kotlin Double；cost 缺失为 null，明确的零保留，币种及总费用／平均费用口径尚未确定，不用于计算或详情展示。布尔值保留未知状态，日期和类型保留来源原文；不推断分数单位、方向或不同配置的可比性。
-- 分别索引模型和 benchmark ID；不同 ID 的成绩可以共享模型与 benchmark。`benchmarkId` 直接作为显示名称；成绩 ID 由快照维护方提供，模型 ID 必须与目录规范 ID 精确对应，不按名称匹配。暂不建设 benchmark 定义表。成绩不参与目录快照、目录存在性判断或三表统计，也没有模型外键。
-- `benchmark_version` 单行记录已提交版本，和成绩增删在同一事务。首次初始化时如已有独立成绩则保留并记版本 0，不以空表作为初始化标记；有效空快照也会记录版本。新版本完整替换成绩（包括 Debug 手动更改），失败或旧版本不修改。目录刷新和模型移除不删除成绩。
+- `benchmark_scores` 以 `id` 为主键，包含非空 `modelId`、`benchmarkId`，原始数值 `score` 或文本 `scoreText`，以及可空的 `name`、`version`、`variant`、`cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。数值成绩与 cost 为 SQLite REAL / Kotlin Double；cost 缺失为 null，明确的零保留，费用口径尚未确定，不用于计算或详情展示。文本成绩不提取数值；布尔值保留未知状态，日期和类型保留来源原文，不推断不同配置的可比性。
+- 分别索引模型和 benchmark ID；不同 ID 的成绩可以共享模型与 benchmark。新来源标题取原始 `name`（历史行回退 benchmarkId）；ID 按模型路径和成绩数组位置生成。唯一精确匹配时关联 `benchmark_definitions`，未匹配身份以 `unmapped:` 隔离、不借用定义。模型 ID 必须与目录规范 ID 精确对应，不按名称匹配。正式发布成绩参与整包事务，但不参与目录存在性或三表统计，也不设模型外键。有效空发布可替换所有成绩，不删除收藏。
+- `catalog_release` 保存新发布内容哈希并与目录／成绩／定义同事务提交；哈希不能排序。旧 `benchmark_version` 的递增版本和首次保留手动成绩规则仅保留在兼容 DAO／测试中，不被生产同步调用。无 release 的旧三表替换不触碰成绩；正式新发布完整替换，包括 Debug 手动修改。
 - 开发基线已移除 `models.benchmarks` 列，不迁移旧内嵌成绩。新增的版本表直接纳入 Schema v1；不提供旧开发安装迁移，也不启用破坏性重建。
-- 详情合并当前模型和成绩 Flow，本地快照提交后更新；来源与快照契约见[数据源说明](data-source.md#独立评测快照)。
+- 详情以事务 Relation 读取模型、服务、成绩及定义，避免拼接不同版本的独立 Flow；来源与快照契约见 [ModelAtlas Data 接入](atlas-data.md)。
 
 ## 列与本地 JSON
 

@@ -9,6 +9,27 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelListQueryTest {
+    @Test fun restoresMimeFiltersAsUniqueCategoriesWithoutDiscardingOtherConditions() {
+        val query = restoreModelListQuery("""{"search":"atlas","labs":["alpha"],"weights":"OPEN",
+            "inputModalities":["image/png","image/jpeg","application/pdf","custom"],
+            "outputModalities":["audio/mp3","audio/wav"]}""")
+        assertEquals(ModelListQuery(search = "atlas", labs = setOf("alpha"), weights = WeightFilter.OPEN,
+            inputModalities = setOf("image", "pdf", "custom"), outputModalities = setOf("audio")), query)
+        assertEquals(6, query.filterCount)
+        assertEquals(query, restoreModelListQuery(ModelListQueryJson.encodeToString(query)))
+    }
+
+    @Test fun mimeAndCategoryFiltersMatchInEitherFormWithoutCrossingDirections() {
+        val mime = open.copy(inputModalities = listOf("text", "image/png", "image/jpeg", "application/pdf"),
+            outputModalities = listOf("audio/mp3"))
+        val data = listOf(mime, open)
+        assertEquals(listOf(mime), filterModels(data, ModelListQuery(inputModalities = setOf("image", "pdf"))))
+        assertEquals(data, filterModels(data, ModelListQuery(inputModalities = setOf("image/jpeg", "image/png"))))
+        assertEquals(listOf(mime), filterModels(data, ModelListQuery(outputModalities = setOf("audio/wav"))))
+        assertTrue(filterModels(data, ModelListQuery(inputModalities = setOf("audio"))).isEmpty())
+        assertEquals(1, ModelListQuery(inputModalities = setOf("image/jpeg", "image/png", "image")).filterCount)
+    }
+
     private val open = ModelSummary(
         id = "alpha/vision", name = "Atlas Vision", openWeights = true,
         inputModalities = listOf("text", "image", "custom"), outputModalities = listOf("text"),

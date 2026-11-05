@@ -1,18 +1,20 @@
 # 数据源说明
 
-## 当前状态
+## 当前状态（ModelAtlas Data 迁移后）
 
-- [`DefaultModelRepository`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/DefaultModelRepository.kt) 已通过 Retrofit / OkHttp 请求两个真实端点，后台映射后事务写入 Room3，列表由数据库 Flow 驱动，不再使用运行时示例。
-- 独立 Kotlinx Serialization DTO、纯字符串入口 [`ModelsDevParser`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/remote/ModelsDevParser.kt) 与 Retrofit 共用 `ModelsDevJson`，未知字段忽略、已知字段类型严格。
+- [`DefaultModelRepository`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/DefaultModelRepository.kt) 通过受限 HTTPS 读取 ModelAtlas Data 发布包，价格／服务商仍由 Retrofit 读取 Models.dev `api.json?type=all`，全部成功后事务写入 Room3。**新接口、v2 字段与清单、评测匹配、中文回退及离线初始化契约统一见 [ModelAtlas Data 接入](atlas-data.md)**。
+- 新 DTO、加载器在 `data/remote/atlas/`；保留 `ModelsDevParser` 供服务商结构及历史格式回归，生产不再调用旧模型端点，也不使用旧的独立评测整数版本同步。
 - 已实现 DTO → Entity、生产数据库、DAO、完整报价存储与本地优先读取／后台检查／主动刷新策略，标识与存储契约见[本地目录数据](local-data.md)。
 - 独立 `ModelSummary` 用于规范模型名称、LAB、发布时间、上下文长度、最大输出、输入／输出模态、开放权重和列表报价，不能与 DTO 或 Entity 混用，详见[架构说明](architecture.md)。
 - 独立 `ModelDetail` 用于本地模型详情、全部显式关联服务与完整报价；规范模型与各服务的能力／限制分开，不复用列表只保留单条报价的投影。详情界面只展示所选核心字段，不再展示记录级来源与获取时间；底层仍保留完整数据，不新增网络请求。
 - 双模型对比复用规范模型详情和列表默认报价，不新增请求或修改数据库。对比页标明默认报价的服务商与所选服务 ID，基础价格与精确档位分别展示；摘要保留档位中全部七类价格，不混用不同服务或独立模式。参数／能力只取规范模型，不从所选服务补齐，价格不作为质量或实际成本排名。
-- 详情“评测”读取独立本地成绩表；随包 v2 来自相邻 ModelAtlas Data 项目中维护者明确批准的五条 DeepSeek 官方自报成绩（MMLU-Pro EM、MATH-500 pass@1，三个模型）。Models.dev 旧评测字段仍可解析，但不再映射入库或展示。已配置 Pages 地址，工作流已准备但未部署；不把本地验收当作真实在线更新完成。不推断可比性，不进行排名。
+- 详情“评测”从模型档案的 `benchmarks[]` 导入独立成绩表，并按唯一明确匹配关联定义；保留版本、variant、effort 与来源。模型、成绩、定义、中文同事务替换，详情同事务读取。随包为新 Pages 格式，不再是五条 DeepSeek 旧快照；不推断可比性、不排名。来源页保留必要历史归属声明。
 
-## 独立评测快照
+## 历史独立评测快照（仅兼容回归，不再用于生产同步）
 
-- 随包 [`benchmarks.json`](../app/src/main/assets/benchmarks.json) 使用 `schemaVersion: 1`、递增正整数 `version` 和 `scores` 数组；每条需唯一非空 `id`、目录规范 `modelId`、非空 `benchmarkId` 和有限数值 `score`，可选字段与 `BenchmarkScore` 同名。`benchmarkId` 当前直接作为标题；`sourceType: "test"` 仍用于合成测试并在详情显式提示虚构，真实随包不包含此类型。当前 v2 直接导出自数据仓库生产构建，`benchmark-manifest.json` 保存原字节摘要供溯源及跨仓库契约测试，不是运行时联网地址。
+以下为旧协议及历史验证依据，不是当前在线接口；同名 `benchmarks.json` 在新站点已变为定义字典，不能交给旧 `BenchmarkSyncRunner`。旧样本仅用于回归，Application 不再启动此同步器。
+
+- 旧 [`benchmarks.json`](../app/src/androidTest/assets/benchmark-contract-v2/benchmarks.json)（已移至测试资产）使用 `schemaVersion: 1`、递增正整数 `version` 和 `scores` 数组；每条需唯一非空 `id`、目录规范 `modelId`、非空 `benchmarkId` 和有限数值 `score`，可选字段与 `BenchmarkScore` 同名。`benchmarkId` 在旧协议直接作为标题；`sourceType: "test"` 仍用于合成测试并在详情显式提示虚构，真实旧 v2 不包含此类型。v2 直接导出自旧数据仓库构建，`benchmark-manifest.json` 保存原字节摘要供兼容契约测试，不是当前运行时地址。
 - 可选 `cost` 接受有限数值或 null，缺失不视为零；暂不约定币种、计算口径或单位，也不用于计算或详情展示。使用真实费用数据前需另行确定其含义及来源。
 - 进程启动时在 IO 协程首次导入，随后检查远程版本；已有数据由 Room 立即提供，不等待网络。已有独立成绩时初始化保留原数据并记版本 0；已初始化的空表不会重复导入。更新是全量替换，包括合法空快照；调试修改可能被新版本覆盖。
 - 远程地址由 `app/src/main/res/values/strings.xml` 的 `benchmark_manifest_url` 配置为 `https://chenlongapps.github.io/model-atlas-data/manifest.json`。托管方提供 `schemaVersion`、`version`、绝对 HTTPS `url`、`sha256` 清单，快照格式与随包文件相同、版本必须一致且高于本地。旧虚构随包 v1 可更新到 v2；新随包 v2 仅应用 v3 及以上。先发布快照，再发布清单或完整站点原子部署；校验通过后版本与成绩事务提交。SHA-256 检测文件一致性，不是独立签名或来源认证。当前未执行线上部署，404 等错误按离线失败处理，不影响已有成绩。
@@ -22,7 +24,9 @@
 - `benchmark-attributions.json` 和 `third_party/deepseek-r1/MIT.txt` 随同导出，设置 →“数据来源与许可”显示出处、归属、修改说明及 MIT 全文。**远程 v1 只更新成绩，不下载归属旁车**；未来增加其他来源前必须复核现有客户端许可展示要求，必要时扩展协议。文档许可不等于模型权重或 Benchmark 数据集许可。
 - 首次完全离线安装只保证评测资产入库；模型目录仍按既有 Models.dev 首次加载，未新增离线目录。
 
-## 已核实的端点与结构
+## 历史 Models.dev 端点与结构
+
+当前只继续请求下表的 `api.json?type=all`；模型改用 [新发布包](atlas-data.md)。
 
 2026-10-19 直接读取以下 [Models.dev](https://models.dev/) 地址，均返回 HTTP 200 和 JSON 对象；本节结构依据实际响应，不将模型数量作为固定契约。
 
@@ -176,11 +180,11 @@ DTO 位于 [`data/remote/dto/`](../app/src/main/java/io/github/chenlongapps/mode
 
 ## 测试与后续接入
 
-- 解析测试使用 [`app/src/test/resources/modelsdev/`](../app/src/test/resources/modelsdev/) 中的合成样本及测试内的边界 JSON，无需联网。样本说明记录了结构依据与核实日期，不将合成数值当作真实报价。
+- Models.dev 历史解析／服务商测试使用 [`app/src/test/resources/modelsdev/`](../app/src/test/resources/modelsdev/) 合成样本，不将合成数值当作真实报价。新发布包测试另直接解析 `assets/atlas/` 原字节，并覆盖文本分数、严格已知类型、定义匹配与中文回退，见[分级验证](testing.md)。
 - 已覆盖两类完整嵌套结构、跨服务商重复模型 ID、缺失与显式空值、未知字段、动态模式、整数与小数价格、超出 Int 的限制值、`interleaved` 双向序列化和异常响应。
 - 已添加普通 `INTERNET` 权限、客户端、Hilt 配置、后台映射、异步加载与失败重试。客户端设置连接 15 秒、读取 30 秒、整次调用 60 秒超时，不自动重试或轮询。HTTP 429 / 503 尊重 `Retry-After` 秒数或 HTTP 日期；缺失或无效时冷却 60 秒，冷却期间用户重试不会再次请求服务器。
-- 仅在两个端点均成功获取、解析和映射后形成完整快照；本地获取时间按各响应成功后的时钟记录，同一响应记录保持一致。网络失败、非法响应或取消不写入部分目录。新的列表 ViewModel 优先读取并观察本地目录；有任一目录记录时后台检查，规范模型 ID 集合有增删才提示并暂存完整快照供确认，ID 集合不变时静默同步内容且不显示成功提示；没有记录时自动获取并提交。下拉刷新主动获取并提交，检查期间下拉复用该请求，已静默同步的内容不重复写库。后台检查失败不打扰本地浏览，主动刷新失败显示非阻断提示，不清空本地目录。
-- 是否提示只比较 `models.json` 字典键对应的完整规范模型 ID 集合，不受 LLM 收录、搜索或筛选影响；模型参数／名称／类型／许可、服务商和模型服务的增删改、报价变化均不单独提示。是否写库仍比较两端点映射后的完整内容，以稳定主键匹配，忽略本地获取时间与字典顺序；仅抓取时间改变不会提示更新或重复写库。待应用快照仅存内存，进程重启后重新检查，不持久化另一份目录。有效空快照仍可经主动刷新／确认清空旧模型目录；规范模型原本为空而仅服务商／服务变化时仍遵循静默同步规则。
+- 仅在 Atlas 整包校验、解析和 Models.dev 服务响应均成功后形成完整快照；本地获取时间按各响应成功后的时钟记录，同一响应记录保持一致。网络失败、非法响应或取消不写入部分目录。首次无目录且无发布标记时先导入真实随包模型／评测／翻译（没有价格）；新的列表 ViewModel 优先读取并观察本地目录，后台检查时规范模型 ID 集合有增删才提示并暂存完整快照供确认，ID 集合不变时静默同步内容且不显示成功提示。下拉刷新主动获取并提交，检查期间下拉复用该请求。后台检查失败不打扰本地浏览，主动刷新失败显示非阻断提示。
+- 是否提示只比较 `models.json` 字典键对应的完整规范模型 ID 集合，不受 LLM 收录、搜索或筛选影响；模型参数／名称／类型／许可、服务商和模型服务的增删改、报价、成绩及翻译变化均不单独提示。是否写库比较完整内容及发布内容哈希，以稳定主键匹配，忽略本地获取时间与字典顺序；仅抓取时间改变不会提示更新或重复写库。待应用快照仅存内存，进程重启后重新检查，不持久化另一份目录。有效空发布仍可经主动刷新／确认清空旧模型目录与成绩，但不删除收藏。
 - 网络路径与解析由 MockWebServer 测试覆盖，仓库和 ViewModel 异步行为使用 fake 与测试调度器；实际 SQLite 事务与列表状态交互由 `androidTest` 验证。
 - 展示时遵循上文已核实的口径；具体服务商的档位边界、缓存条件、模式组合及调用权限等未完整表达的信息，仍需按官方说明核实，不补造默认值。数据来源、独立第三方与 MIT 许可说明集中在设置说明页。
 - 已补充本地优先、更新检查与提交分离、主动刷新、失败保留数据及并发操作测试；记录级来源与获取时间仍存储但不再在详情显示，目录页统一更新时间尚未实现。接入和缓存任务的完成状态只在 [TODO.md](../TODO.md) 维护。

@@ -68,7 +68,7 @@ class CatalogDatabaseTest {
         dao.replaceCatalog(CatalogSnapshot(emptyList(), emptyList(), emptyList()))
         assertEquals(listOf(first, second), scores.observeForModel("model").first())
         scores.upsert(first.copy(score = -1.25, higherIsBetter = null))
-        assertEquals(-1.25, scores.observeForModel("model").first().first().score, 0.0)
+        assertEquals(-1.25, requireNotNull(scores.observeForModel("model").first().first().score), 0.0)
         scores.delete("score-1")
         assertEquals(listOf(second), scores.observeForModel("model").first())
     }

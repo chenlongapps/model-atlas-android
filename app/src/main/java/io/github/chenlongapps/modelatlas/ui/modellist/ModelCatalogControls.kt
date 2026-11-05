@@ -63,6 +63,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.data.model.toModalityCategory
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 @Composable
@@ -185,11 +186,12 @@ private fun activeFilters(query: ModelListQuery, labModelCounts: Map<String, Int
     if (query.weights != WeightFilter.ALL) {
         add("weights", stringResource(R.string.model_filter_active_weights, weightLabel(query.weights)), query.copy(weights = WeightFilter.ALL))
     }
-    query.inputModalities.sorted().forEach { modality ->
-        add("input:$modality", stringResource(R.string.model_filter_active_input, formatModality(modality)), query.copy(inputModalities = query.inputModalities - modality))
+    val normalized = query.withModalityCategories()
+    normalized.inputModalities.sorted().forEach { modality ->
+        add("input:$modality", stringResource(R.string.model_filter_active_input, formatModality(modality)), normalized.copy(inputModalities = normalized.inputModalities - modality))
     }
-    query.outputModalities.sorted().forEach { modality ->
-        add("output:$modality", stringResource(R.string.model_filter_active_output, formatModality(modality)), query.copy(outputModalities = query.outputModalities - modality))
+    normalized.outputModalities.sorted().forEach { modality ->
+        add("output:$modality", stringResource(R.string.model_filter_active_output, formatModality(modality)), normalized.copy(outputModalities = normalized.outputModalities - modality))
     }
     return result
 }
@@ -209,7 +211,7 @@ internal fun ModelFilterSheet(
 ) {
     // 在页面的保存状态域中持有草稿，不依赖弹层窗口自己的保存注册表。
     // 整个 Sheet 关闭后这些状态离开组合，下次打开仍从已应用条件重新建立草稿。
-    var draft by rememberSaveable(stateSaver = FilterDraftSaver) { mutableStateOf(query) }
+    var draft by rememberSaveable(stateSaver = FilterDraftSaver) { mutableStateOf(query.withModalityCategories()) }
     var labsExpanded by rememberSaveable { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -253,10 +255,10 @@ private fun ModelFilterSheetContent(
         selected + labs.filterNot { it in draft.labs }.take((8 - selected.size).coerceAtLeast(0))
     }
     val inputs = remember(models, draft.inputModalities) {
-        (models.flatMap { it.inputModalities.orEmpty() } + draft.inputModalities).distinct().sorted()
+        (models.flatMap { it.inputModalities.orEmpty() } + draft.inputModalities).map { it.toModalityCategory() }.distinct().sorted()
     }
     val outputs = remember(models, draft.outputModalities) {
-        (models.flatMap { it.outputModalities.orEmpty() } + draft.outputModalities).distinct().sorted()
+        (models.flatMap { it.outputModalities.orEmpty() } + draft.outputModalities).map { it.toModalityCategory() }.distinct().sorted()
     }
     val matchCount = remember(models, previewQuery) { filterModels(models, previewQuery).size }
     Column(

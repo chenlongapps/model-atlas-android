@@ -136,12 +136,32 @@ class DebugDatabaseScreenTest {
         field("id", "score-1")
         field("modelId", "model-1")
         field("benchmarkId", "benchmark-1")
+        useValue("score")
         field("score", "0.003")
         compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-save"))
         compose.onNodeWithTag("database-save").performClick()
         await { it.destination == DatabaseDestination.DETAIL && it.row != null && !it.loading }
         assertEquals("0.003", vm.state.value.row!!.values["score"])
         assertEquals("benchmark-1", vm.state.value.row!!.values["benchmarkId"])
+    }
+
+    @Test fun benchmarkTextScorePreservesConfidenceIntervalWithoutNumericPlaceholder() {
+        show()
+        openDatabase()
+        compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-table-benchmark_scores"))
+        compose.onNodeWithTag("database-table-benchmark_scores").performClick()
+        await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        compose.onNodeWithTag("database-add").performClick()
+        field("id", "text-score")
+        field("modelId", "model-1")
+        field("benchmarkId", "benchmark-1")
+        useValue("scoreText")
+        field("scoreText", "899 ± 18")
+        compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-save"))
+        compose.onNodeWithTag("database-save").performClick()
+        await { it.destination == DatabaseDestination.DETAIL && it.row != null && !it.loading }
+        assertNull(vm.state.value.row!!.values["score"])
+        assertEquals("899 ± 18", vm.state.value.row!!.values["scoreText"])
     }
 
     @Test fun databaseSubpageAndDraftSurviveStateRestoration() {
@@ -247,6 +267,12 @@ class DebugDatabaseScreenTest {
     private fun field(name: String, value: String) {
         compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-field-$name"))
         compose.onNodeWithTag("database-field-$name").performTextInput(value)
+    }
+
+    private fun useValue(name: String) {
+        val description = "$name: ${context.getString(R.string.debug_database_value_enabled)}"
+        compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasContentDescription(description))
+        compose.onNodeWithContentDescription(description).performClick()
     }
 
     private fun await(predicate: (DatabaseUiState) -> Boolean) {

@@ -87,7 +87,13 @@ class DebugDatabaseStoreTest {
         val edited = store.read(table, saved.key)!!
         assertEquals("-4.5", edited.values["score"])
         assertEquals("0.003", edited.values["cost"])
-        assertEquals(DatabaseWriteResult.Success, store.delete(store.deleteImpact(edited)!!))
+        assertEquals(DatabaseWriteResult.Success, store.save(table,
+            edited.values + mapOf("score" to null, "scoreText" to "899 ± 18", "version" to "2.1", "variant" to "no tools"), edited))
+        val textScore = store.read(table, saved.key)!!
+        assertNull(textScore.values["score"])
+        assertEquals("899 ± 18", textScore.values["scoreText"])
+        assertEquals("2.1", textScore.values["version"])
+        assertEquals(DatabaseWriteResult.Success, store.delete(store.deleteImpact(textScore)!!))
         assertNull(store.read(table, saved.key))
     }
 

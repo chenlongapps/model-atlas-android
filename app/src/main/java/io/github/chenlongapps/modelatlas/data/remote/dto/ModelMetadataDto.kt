@@ -41,4 +41,5 @@ data class ModelBenchmarkDto(
     val variant: String? = null,
     val dataset: String? = null,
     val harness: String? = null,
+    val effort: String? = null,
 )

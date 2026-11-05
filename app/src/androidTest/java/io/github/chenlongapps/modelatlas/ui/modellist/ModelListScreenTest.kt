@@ -37,9 +37,12 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.testing.realAtlasModalityFixture
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -50,6 +53,20 @@ import org.junit.Test
 
 class ModelListScreenTest {
     @get:Rule val compose = createComposeRule()
+    private val appName get() = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.app_name)
+
+    @Test fun actualAtlasMimeFormatsUseOneExistingIconPerCategory() {
+        val fixture = realAtlasModalityFixture()
+        assertEquals(29, fixture.rawInputs.size)
+        show(ModelListUiState(models = listOf(fixture.summary), isLoading = false))
+        listOf("文本", "图片", "视频", "音频", "PDF").forEach { assertModalityIcon("input-modalities", it) }
+        assertModalityIcon("output-modalities", "文本")
+        assertEquals(listOf(R.drawable.ic_text, R.drawable.ic_image, R.drawable.ic_audio, R.drawable.ic_video, R.drawable.ic_document),
+            fixture.summary.inputModalities!!.map(::modalityIcon))
+        fixture.rawInputs.filter { '/' in it }.forEach {
+            compose.onNodeWithContentDescription(it, useUnmergedTree = true).assertDoesNotExist()
+        }
+    }
 
     @Test fun updatePromptKeepsCachedListAndHasExplicitApplyAction() {
         var applies = 0
@@ -173,7 +190,7 @@ class ModelListScreenTest {
             models = List(40) { ModelSummary("lab/model-$it", "模型 $it") },
             isLoading = false,
         ))
-        val title = compose.onNodeWithText("Model Atlas")
+        val title = compose.onNodeWithText(appName)
         val initialTitleTop = title.fetchSemanticsNode().boundsInRoot.top
         val header = compose.onNodeWithTag("catalog-header")
         val firstModel = compose.onNodeWithTag("model:lab/model-0")
@@ -202,20 +219,20 @@ class ModelListScreenTest {
             models = List(40) { ModelSummary("lab/model-$it", "模型 $it") },
             isLoading = false,
         ))
-        compose.onNodeWithText("Model Atlas").assertIsDisplayed()
+        compose.onNodeWithText(appName).assertIsDisplayed()
         compose.onNodeWithTag("model-list")
             .performScrollToNode(hasTestTag("model:lab/model-20"))
             .performTouchInput { swipeUp() }
-        compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
+        compose.onNodeWithText(appName).assertIsNotDisplayed()
         compose.onNodeWithContentDescription("数据来源与许可").assertDoesNotExist()
 
         compose.onNodeWithTag("model-list").performTouchInput { swipeDown() }
-        compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
+        compose.onNodeWithText(appName).assertIsNotDisplayed()
         compose.onNodeWithContentDescription("数据来源与许可").assertDoesNotExist()
         compose.onNodeWithTag("model:lab/model-0").assertDoesNotExist()
 
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
-        compose.onNodeWithText("Model Atlas").assertIsDisplayed()
+        compose.onNodeWithText(appName).assertIsDisplayed()
         compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
     }
 
@@ -665,7 +682,7 @@ class ModelListScreenTest {
         compose.onNodeWithContentDescription("最大输出：131,072 tokens").assertIsDisplayed()
         assertModalityIcon("input-modalities", "future-modality")
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
-        compose.onNodeWithText("Model Atlas").assertIsDisplayed()
+        compose.onNodeWithText(appName).assertIsDisplayed()
     }
 
     private fun assertPriceChevronPointsDown(pointsDown: Boolean) {
@@ -749,7 +766,7 @@ class ModelListScreenTest {
             }
         }
         listOf(
-            compose.onNodeWithText("Model Atlas"),
+            compose.onNodeWithText(appName),
             compose.onNodeWithText("模型目录 · 40 个模型"),
             compose.onNodeWithTag("model:lab/model-0"),
         ).forEach { node ->
@@ -759,7 +776,7 @@ class ModelListScreenTest {
         compose.onNodeWithTag("model-list")
             .performScrollToNode(hasTestTag("model:lab/model-20"))
             .performTouchInput { swipeUp() }
-        compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
+        compose.onNodeWithText(appName).assertIsNotDisplayed()
         val after = compose.onRoot().captureToImage().toPixelMap()
         // 不仅检查列表的布局边界：验证滚动后，安全区内的像素确实来自滚动内容，
         // 而不是仍被 TopAppBar 的实色背景遮挡。避开最顶部渐变最浓的部分。
@@ -768,9 +785,9 @@ class ModelListScreenTest {
         })
 
         compose.onNodeWithTag("model-list").performTouchInput { swipeDown() }
-        compose.onNodeWithText("Model Atlas").assertIsNotDisplayed()
+        compose.onNodeWithText(appName).assertIsNotDisplayed()
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
-        compose.onNodeWithText("Model Atlas").assertIsDisplayed()
+        compose.onNodeWithText(appName).assertIsDisplayed()
         compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
         compose.onNodeWithTag("model-list")
             .performScrollToNode(hasTestTag("model:lab/model-39"))

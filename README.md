@@ -2,7 +2,7 @@
 
 基于 Kotlin 和 Jetpack Compose 的 Android 应用，用于发现、了解和对比 AI 模型。
 
-> 🚧 项目处于早期开发阶段，已接入 Models.dev 真实目录，支持本地优先浏览 LLM、搜索与组合筛选、模型详情和全部显式关联的服务商报价，以及双模型参数、能力与默认报价对比。
+> 🚧 项目处于早期开发阶段，模型、评测与中文描述接入 ModelAtlas Data，服务商及价格保留 Models.dev；支持本地优先浏览 LLM、搜索与组合筛选、详情及双模型对比。
 
 ## 已实现
 
@@ -38,13 +38,13 @@ Kotlin · Jetpack Compose · Material 3 · MVVM · Hilt · Retrofit / OkHttp · 
 
 ## 数据来源
 
-通过 [Models.dev](https://models.dev/) 的公开 API 获取数据：[models.json?type=all](https://models.dev/models.json?type=all) 提供规范模型，[api.json?type=all](https://models.dev/api.json?type=all) 提供服务商与模型服务。两个响应均成功后原子更新本地目录，列表只收录符合规则的 LLM；未显式关联的服务不猜测匹配。上游定价统一为 USD / 百万 tokens，报价已存储并在列表展示，选取规则与计价语义见[数据源说明](docs/data-source.md)。
+通过 [ModelAtlas Data Pages](https://chenlongapps.github.io/model-atlas-data/) 的 `models.json`、`benchmarks.json`、`i18n/zh-CN.json` 及 `manifest.json` 获取规范模型、内嵌成绩、评测定义和中文描述；价格及服务继续使用 [Models.dev api.json?type=all](https://models.dev/api.json?type=all)。整包长度／摘要校验及价格响应都成功后事务更新，列表只收录符合规则的 LLM；未显式关联的服务不猜测匹配。中文缺失回退原文。上游定价仍为 USD / 百万 tokens，详见[数据源说明](docs/data-source.md)及[新发布协议](docs/atlas-data.md)。
 
-进入列表时优先读取本地目录，并在后台检查最新目录；仅规范模型 ID 集合发生增删时提示“立即更新”，用户确认后应用完整快照。ID 集合不变时，参数、价格及服务商等内容变化静默同步，不显示更新提醒；内容一致不重复写库。下拉刷新会主动获取并应用最新目录；后台检查中下拉则复用该请求。网络失败仍可浏览已有本地列表与详情，首次无数据时提供加载与失败重试，不使用示例数据。不轮询，也不在退出应用后定时检查；目录页的统一更新时间尚未实现。Models.dev 上游 MIT 许可全文随应用打包，可通过设置 →“数据来源与许可”查看。
+进入列表时优先读取本地目录，首次无目录时先导入真实随包模型／评测／翻译（不含价格），再在后台检查最新目录；仅规范模型 ID 集合发生增删时提示“立即更新”，用户确认后应用完整快照。ID 集合不变时，参数、价格、成绩及翻译等内容变化静默同步，不显示更新提醒；内容一致不重复写库。下拉刷新会主动获取并应用最新目录；后台检查中下拉则复用该请求。网络失败仍可浏览已有本地列表与详情，不使用示例数据。不轮询，也不在退出应用后定时检查；目录页的统一更新时间尚未实现。Models.dev 上游 MIT 许可全文随应用打包，可通过设置 →“数据来源与许可”查看。
 
 本项目为独立第三方应用，与 Models.dev 及各 AI 模型提供商无官方隶属关系。
 
-Benchmark 由独立 [ModelAtlas Data](https://github.com/chenlongapps/model-atlas-data) 项目维护和静态分发。首批真实随包 v2 含三个模型、两项 Benchmark 的五条 DeepSeek 官方自报成绩，经维护者批准，保留执行条件、未知值与 MIT 文档归属。首次导入 assets，此后立即读 Room，进程启动后台检查清单；仅高版本完整下载并通过校验后事务替换，网络失败保留本地。Pages 地址已配置，但本轮未部署；后续数据更新不需升级 APK。新增其他来源仍须复核已安装客户端能否满足归属／许可要求。
+Benchmark 由独立 [ModelAtlas Data](https://github.com/chenlongapps/model-atlas-data) 项目维护和静态分发，成绩取模型档案，定义单独读取；保留原始版本、指标、推理档位、条件及出处，不排名、不选择最高分。首次无本地目录时导入同格式真实随包数据，之后从 Room 读取，按目录检查／刷新流程更新；网络失败保留已有数据，不再启动旧的整数版本成绩同步。新包以内容哈希判断版本，模型、成绩、定义及翻译同事务提交。新增其他来源仍须复核归属／许可要求。
 
 ## 参与贡献
 

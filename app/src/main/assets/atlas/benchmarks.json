@@ -1,0 +1,142 @@
+{
+  "artificial-analysis-intelligence-index-v5": {
+    "category": "composite",
+    "compatible_versions": [
+      "5.0"
+    ],
+    "description": "A composite evaluation of language model performance across knowledge work, coding, science, and general knowledge, aggregating nine evaluations into a single score.",
+    "higher_is_better": true,
+    "max_score": 100,
+    "methodology": "https://artificialanalysis.ai/methodology/intelligence-benchmarking",
+    "metric": "index score",
+    "min_score": 0,
+    "name": "Artificial Analysis Intelligence Index",
+    "organization": "Artificial Analysis",
+    "unit": "points",
+    "url": "https://artificialanalysis.ai/evaluations/artificial-analysis-intelligence-index",
+    "version": "5.0.1"
+  },
+  "automationbench-v1.0.6": {
+    "category": "agent",
+    "description": "Evaluates agents' ability to complete cross-application workflows in simulated business applications, using the percentage of tasks for which all assertions pass as the primary metric. The official leaderboard uses a separate, held-out private task set; results on the public task set should not be treated as equivalent.",
+    "higher_is_better": true,
+    "methodology": "https://github.com/zapier/AutomationBench",
+    "metric": "task_completed_correctly",
+    "name": "AutomationBench",
+    "organization": "Zapier",
+    "unit": "percent",
+    "url": "https://zapier.com/benchmarks",
+    "version": "1.0.6"
+  },
+  "chartography": {
+    "category": "multimodal",
+    "description": "Evaluates visual reading, domain interpretation, and multi-step chart reasoning using charts from specialized fields and expert-written questions. Official materials describe 100 tasks but do not specify a semantic version; tool-use conditions and multiple-sampling metrics must be recorded separately.",
+    "higher_is_better": true,
+    "methodology": "https://github.com/surge-ai/chartography",
+    "metric": "accuracy (mean; Pass@1)",
+    "name": "Chartography",
+    "organization": "Surge AI",
+    "unit": "percent",
+    "url": "https://surgehq.ai/benchmarks/chartography",
+    "version": "unspecified"
+  },
+  "deepswe-v1.1": {
+    "category": "coding",
+    "description": "Evaluates coding agents on 113 long-horizon software engineering tasks; v1.1 validates agent-submitted patches in isolated environments.",
+    "higher_is_better": true,
+    "methodology": "https://deepswe.datacurve.ai/blog/deepswe-v1-1",
+    "metric": "pass@1",
+    "name": "DeepSWE",
+    "organization": "Datacurve",
+    "unit": "percent",
+    "url": "https://deepswe.datacurve.ai/",
+    "version": "1.1"
+  },
+  "gdpval-aa-v2.1": {
+    "category": "professional-work",
+    "description": "An independent Artificial Analysis evaluation of OpenAI's public GDPval dataset, using 220 tasks across 44 occupations. Models produce professional work outputs in an agentic setting; blinded pairwise comparisons judged by LLMs sampled from a judge panel are aggregated into an Elo rating.",
+    "higher_is_better": true,
+    "methodology": "https://artificialanalysis.ai/methodology/intelligence-benchmarking#gdpval-aa",
+    "metric": "Elo rating",
+    "name": "GDPval-AA",
+    "organization": "Artificial Analysis",
+    "unit": "Elo points",
+    "url": "https://artificialanalysis.ai/evaluations/gdpval-aa",
+    "version": "2.1"
+  },
+  "humanitys-last-exam": {
+    "category": "reasoning",
+    "description": "A multimodal academic question-answering benchmark covering more than 100 disciplines. This definition refers to the original 2,500-question set officially finalized on 2025-04-03; the official materials do not assign it a semantic version, and it excludes HLE-Rolling and HLE-Diamond.",
+    "higher_is_better": true,
+    "methodology": "https://arxiv.org/abs/2501.14249",
+    "metric": "accuracy",
+    "name": "Humanity's Last Exam",
+    "organization": "Center for AI Safety / Scale AI",
+    "unit": "percent",
+    "url": "https://lastexam.ai/",
+    "version": "unspecified"
+  },
+  "osworld-v2.1": {
+    "category": "computer-use",
+    "description": "Evaluates agents' ability to complete long-horizon computer-use workflows in real desktop environments and applications. This definition uses binary task completion rate; partial credit is a different scoring measure and must not be conflated with completion rate.",
+    "higher_is_better": true,
+    "methodology": "https://arxiv.org/abs/2606.29537",
+    "metric": "binary task completion rate",
+    "name": "OSWorld",
+    "organization": "XLANG Lab",
+    "unit": "percent",
+    "url": "https://github.com/xlang-ai/OSWorld-V2",
+    "version": "osworld-v2.1"
+  },
+  "swe-bench-pro-v2": {
+    "category": "coding",
+    "description": "Evaluates agents' ability to solve long-horizon software engineering tasks in real-world codebases using hidden tests. The V2 default configuration contains 642 tasks; the HARD subset and the original 731-task V1 configuration are different datasets and should not be combined with the default configuration.",
+    "higher_is_better": true,
+    "methodology": "https://github.com/scaleapi/SWE-bench_Pro-os",
+    "metric": "task resolution rate",
+    "name": "SWE-bench Pro",
+    "organization": "Scale AI",
+    "unit": "percent",
+    "url": "https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro",
+    "version": "2.0.0"
+  },
+  "terminal-bench-science-v0.1": {
+    "category": "science",
+    "description": "Evaluates agents on 70 expert-curated, terminal-based research workflows across the life, physical, Earth, mathematical, and engineering sciences. Task-specific tests verify outputs such as scientific data analyses, simulations, optimizations, proofs, and model fits.",
+    "higher_is_better": true,
+    "methodology": "https://github.com/harbor-framework/terminal-bench-science",
+    "metric": "task resolution rate",
+    "name": "Terminal-Bench-Science",
+    "organization": "Terminal-Bench-Science / Stanford University",
+    "unit": "percent",
+    "url": "https://www.tbench.ai/news/terminal-bench-science-0-1",
+    "version": "0.1.0"
+  },
+  "terminal-bench-v4": {
+    "category": "coding",
+    "compatible_versions": [
+      "4.0"
+    ],
+    "description": "Evaluates agents' ability to perform tasks such as software development, scientific computing, security, and system administration in a sandboxed terminal; this version changes the task set, environments, and resource configurations.",
+    "higher_is_better": true,
+    "methodology": "https://www.tbench.ai/news/terminal-bench-4-0",
+    "metric": "task resolution rate",
+    "name": "Terminal-Bench",
+    "organization": "Terminal-Bench / Harbor",
+    "unit": "percent",
+    "url": "https://www.tbench.ai/",
+    "version": "4.0.0"
+  },
+  "vals-index-v2.2": {
+    "category": "composite",
+    "description": "Aggregates agent performance on finance, coding, legal, and tax tasks using weights proportional to each sector's share of U.S. GDP, with the information sector used as a proxy for coding.",
+    "higher_is_better": true,
+    "methodology": "https://www.vals.ai/benchmarks/vals_index",
+    "metric": "performance score",
+    "name": "Vals Index",
+    "organization": "Vals AI",
+    "unit": "percent",
+    "url": "https://www.vals.ai/benchmarks/vals_index",
+    "version": "2.2"
+  }
+}

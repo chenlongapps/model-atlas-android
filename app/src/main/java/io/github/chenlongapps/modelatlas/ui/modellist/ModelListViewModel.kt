@@ -54,10 +54,11 @@ class ModelListViewModel @Inject constructor(
     }
 
     fun setQuery(query: ModelListQuery) {
-        if (_uiState.value.query == query) return
+        val normalized = query.withModalityCategories()
+        if (_uiState.value.query == normalized) return
         // 仅保存小型查询条件，不保存目录或派生结果。
-        savedStateHandle[QUERY_KEY] = ModelListQueryJson.encodeToString(query)
-        _uiState.update { it.copy(query = query) }
+        savedStateHandle[QUERY_KEY] = ModelListQueryJson.encodeToString(normalized)
+        _uiState.update { it.copy(query = normalized) }
     }
 
     private fun restoreQuery(): ModelListQuery = savedStateHandle.get<String>(QUERY_KEY)
