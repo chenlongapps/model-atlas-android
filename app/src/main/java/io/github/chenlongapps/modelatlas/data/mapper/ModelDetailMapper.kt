@@ -15,6 +15,8 @@ import io.github.chenlongapps.modelatlas.data.model.ModelInterleaved
 import io.github.chenlongapps.modelatlas.data.model.ModelReasoningOption
 import io.github.chenlongapps.modelatlas.data.model.ModelWeight
 import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
+import io.github.chenlongapps.modelatlas.data.model.ModelParameters
+import io.github.chenlongapps.modelatlas.data.model.ModelParameterComponent
 import io.github.chenlongapps.modelatlas.data.model.PriceProviderPolicy
 import io.github.chenlongapps.modelatlas.data.model.toModalityCategories
 
@@ -93,6 +95,10 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
         license = m.license.nonBlank(),
         weights = m.weights?.map { ModelWeight(it.url, it.label, it.quantization, it.format) },
         links = m.links?.map { ModelLink(it.url, it.label, it.type) },
+        parameters = m.parameters?.let { p ->
+            ModelParameters(p.totalBillion, p.activeBillion, p.sources, p.notes,
+                p.components?.map { ModelParameterComponent(it.name, it.totalBillion, it.activeBillion, it.sources, it.notes) })
+        },
         source = m.source, fetchedAtEpochMillis = m.fetchedAtEpochMillis, providers = providers,
         benchmarks = scores.sortedBy { it.score.id }.map { record ->
             val s = record.score

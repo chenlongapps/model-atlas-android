@@ -5,7 +5,7 @@ import io.github.chenlongapps.modelatlas.R
 
 /** 仅允许操作已知业务表；列顺序、主键和类型与 Room Schema v1 一致。 */
 internal enum class DatabaseFieldType {
-    TEXT, INTEGER, REAL, BOOLEAN, STRING_LIST, WEIGHTS, LINKS,
+    TEXT, INTEGER, REAL, BOOLEAN, STRING_LIST, WEIGHTS, LINKS, PARAMETERS,
     REASONING_OPTIONS, INTERLEAVED, PRICING, PROVIDER_OVERRIDE, EXPERIMENTAL_MODES,
 }
 
@@ -46,6 +46,7 @@ internal enum class DatabaseTable(val tableName: String, val titleResource: Int,
     ) + metadataColumns() + listOf(
         text("license"), json("weights", DatabaseFieldType.WEIGHTS), json("links", DatabaseFieldType.LINKS),
         text("descriptionZhCn"),
+        json("parameters", DatabaseFieldType.PARAMETERS),
     )),
     PROVIDERS("providers", R.string.debug_database_table_providers, listOf(
         text("id", true, true), text("remoteId", true), text("name", true), number("fetchedAtEpochMillis", true),
@@ -119,6 +120,7 @@ internal fun validateDatabaseRow(
                     DatabaseFieldType.STRING_LIST -> converters.jsonToStringList(value)
                     DatabaseFieldType.WEIGHTS -> converters.jsonToWeights(value)
                     DatabaseFieldType.LINKS -> converters.jsonToLinks(value)
+                    DatabaseFieldType.PARAMETERS -> converters.jsonToParameters(value)
                     DatabaseFieldType.REASONING_OPTIONS -> converters.jsonToReasoningOptions(value)
                     DatabaseFieldType.INTERLEAVED -> converters.jsonToInterleaved(value)
                     DatabaseFieldType.PRICING -> converters.jsonToPricing(value)

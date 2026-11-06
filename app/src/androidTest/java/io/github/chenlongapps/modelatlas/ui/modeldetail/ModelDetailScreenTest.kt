@@ -114,7 +114,7 @@ class ModelDetailScreenTest {
         compose.onNodeWithText("Complete model license longer than sixteen characters").assertIsDisplayed()
         scrollTo("参数量")
         compose.onAllNodes(hasText("参数量")).assertCountEquals(1)
-        compose.onNode(hasText("参数量") and hasText("暂无数据") and
+        compose.onNode(hasText("参数量") and hasText("总参数量：暂无数据\n激活量：暂无数据") and
             hasAnyAncestor(hasTestTag("overview-section:parameters"))).assertIsDisplayed()
         compose.onNode(hasText("参数量") and
             hasAnyAncestor(hasTestTag("overview-section:weights"))).assertDoesNotExist()

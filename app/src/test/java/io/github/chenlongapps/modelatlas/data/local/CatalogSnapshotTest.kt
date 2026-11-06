@@ -4,6 +4,7 @@ import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -72,5 +73,18 @@ class CatalogSnapshotTest {
         assertTrue(CatalogSnapshot(emptyList(), emptyList(), emptyList()).isEmpty)
         assertFalse(snapshot.copy(models = emptyList(), offerings = emptyList()).isEmpty)
         assertFalse(snapshot.copy(models = emptyList()).isEmpty)
+    }
+
+    @Test fun parameterProvenanceIsContentButNeverAModelIdChange() {
+        val parameters = ModelParametersLocal("8.2".toBigDecimal(), sources = listOf("https://example.org/model"))
+        val withParameters = snapshot.copy(models = snapshot.models.map { it.copy(parameters = parameters) })
+        assertTrue(snapshot.hasSameModelIdsAs(withParameters))
+        assertFalse(snapshot.hasSameContentAs(withParameters))
+        for (changed in listOf(parameters.copy(totalBillion = "8.3".toBigDecimal()),
+            parameters.copy(notes = "Hub weight count"), parameters.copy(sources = listOf("https://example.org/other")))) {
+            val candidate = withParameters.copy(models = withParameters.models.map { it.copy(parameters = changed) })
+            assertTrue(withParameters.hasSameModelIdsAs(candidate))
+            assertFalse(withParameters.hasSameContentAs(candidate))
+        }
     }
 }

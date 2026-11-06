@@ -34,7 +34,9 @@ import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
+import io.github.chenlongapps.modelatlas.data.model.ModelParameters
 import io.github.chenlongapps.modelatlas.ui.model.ModelInfoBadge
+import io.github.chenlongapps.modelatlas.ui.model.formatBillionParameters
 import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
@@ -43,7 +45,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
 internal fun LazyListScope.overviewItems(model: ModelDetail) {
     item(key = "parameters") {
         OverviewSection(stringResource(R.string.detail_parameters), R.drawable.ic_nav_models_outline, "parameters") {
-            OverviewMetrics(model.metadata)
+            OverviewMetrics(model.metadata, model.parameters)
             OverviewDivider()
             OverviewDates(model.metadata)
         }
@@ -85,6 +87,15 @@ internal fun LazyListScope.overviewItems(model: ModelDetail) {
 }
 
 @Composable
+private fun parameterCountSummary(parameters: ModelParameters?): String {
+    val noData = stringResource(R.string.no_data)
+    return stringResource(R.string.parameter_total) + "：" +
+        (parameters?.totalBillion?.let(::formatBillionParameters) ?: noData) + "\n" +
+        stringResource(R.string.parameter_active) + "：" +
+        (parameters?.activeBillion?.let(::formatBillionParameters) ?: noData)
+}
+
+@Composable
 private fun OverviewSection(title: String, @DrawableRes icon: Int, tag: String, content: @Composable ColumnScope.() -> Unit) {
     Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("overview-section:$tag"), shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface) {
@@ -107,7 +118,7 @@ private data class OverviewField(
 )
 
 @Composable
-private fun OverviewMetrics(metadata: ModelDetailMetadata) {
+private fun OverviewMetrics(metadata: ModelDetailMetadata, parameters: ModelParameters?) {
     val noData = stringResource(R.string.no_data)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         OverviewFields(listOf(
@@ -122,8 +133,8 @@ private fun OverviewMetrics(metadata: ModelDetailMetadata) {
             OverviewField("input", stringResource(R.string.detail_input_limit),
                 metadata.inputLimitTokens?.let(::formatTokenCount) ?: noData,
                 hasTokens = metadata.inputLimitTokens != null, missing = metadata.inputLimitTokens == null),
-            // 当前来源没有参数量，不从模型名称推断或新增数据来源。
-            OverviewField("parameters", stringResource(R.string.detail_parameter_count), noData, missing = true),
+            OverviewField("parameters", stringResource(R.string.detail_parameter_count), parameterCountSummary(parameters),
+                missing = parameters?.totalBillion == null && parameters?.activeBillion == null),
         ))
     }
 }

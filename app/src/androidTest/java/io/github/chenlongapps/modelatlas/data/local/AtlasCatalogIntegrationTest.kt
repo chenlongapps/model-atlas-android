@@ -74,15 +74,21 @@ class AtlasCatalogIntegrationTest {
             val repo = repository(db, client)
             assertTrue(repo.hasLocalCatalog())
             val stored = db.catalogDao().readCatalog()
-            assertEquals(852, stored.models.size)
+            assertEquals(855, stored.models.size)
             assertEquals(11, stored.definitions!!.size)
-            assertEquals(1837, stored.scores!!.size)
-            assertEquals(42, stored.scores.count { it.score == null && it.scoreText != null })
+            assertEquals(1887, stored.scores!!.size)
+            assertEquals(31, stored.scores.count { it.score == null && it.scoreText != null })
             assertEquals(0, requests)
             val detail = repo.observeModelDetail(modelId).first()!!
             assertEquals(stored.models.first { it.id == modelId }.descriptionZhCn, detail.metadata.description)
             assertTrue(detail.benchmarks!!.isNotEmpty())
             assertTrue(detail.providers.isEmpty())
+            assertEquals("671".toBigDecimal(), detail.parameters!!.totalBillion)
+            assertEquals("37".toBigDecimal(), detail.parameters.activeBillion)
+            assertNull(repo.observeModelDetail("deepseek/deepseek-v4.1-flash").first()!!.parameters!!.totalBillion)
+            val componentsOnly = repo.observeModelDetail("mistral/pixtral-12b").first()!!.parameters!!
+            assertNull(componentsOnly.totalBillion)
+            assertEquals(listOf("Multimodal Decoder", "Vision Encoder"), componentsOnly.components!!.map { it.name })
             db.benchmarkScoreDao().upsert(BenchmarkScoreEntity("manual", modelId, "manual", 0.0))
             repo.hasLocalCatalog()
             assertTrue(repo.observeModelDetail(modelId).first()!!.benchmarks!!.any { it.name == "manual" })
@@ -124,6 +130,7 @@ class AtlasCatalogIntegrationTest {
             assertEquals(0.003, detail.providers.single().offerings.single().price!!.output)
             assertEquals(100L, detail.providers.single().offerings.single().metadata.contextLimitTokens)
             assertNotEquals(100L, detail.metadata.contextLimitTokens)
+            assertEquals("671".toBigDecimal(), detail.parameters!!.totalBillion)
             assertEquals(123L, db.favoriteDao().observeFavorite(modelId).first()!!.favoritedAtEpochMillis)
             assertEquals(5, atlasRequests)
             assertEquals(1, providerRequests)
@@ -146,7 +153,7 @@ class AtlasCatalogIntegrationTest {
             val duplicate = before.scores!!.first()
             try {
                 dao.replaceCatalog(snapshot.copy(
-                    models = snapshot.models.map { it.copy(name = "Changed") },
+                    models = snapshot.models.map { it.copy(name = "Changed", parameters = it.parameters?.copy(notes = "Changed scope")) },
                     scores = listOf(duplicate, duplicate),
                     definitions = emptyList(), release = snapshot.release!!.copy(dataVersion = "bad"),
                 ))
@@ -165,7 +172,9 @@ class AtlasCatalogIntegrationTest {
             dao.replaceCatalog(initial)
             val matched = initial.scores!!.first { s -> initial.definitions!!.any { it.id == s.benchmarkId } }
             val changed = initial.copy(
-                models = initial.models.map { it.copy(descriptionZhCn = "new-model") },
+                models = initial.models.map { it.copy(descriptionZhCn = "new-model", parameters =
+                    io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal(activeBillion = "16".toBigDecimal(),
+                        sources = listOf("https://example.org/card"), notes = "Decode only")) },
                 definitions = initial.definitions!!.map { it.copy(descriptionZhCn = "new-definition") },
                 scores = initial.scores.map { it.copy(score = 123.456, scoreText = null) },
                 release = initial.release!!.copy(dataVersion = "sha256:new"),
@@ -179,6 +188,9 @@ class AtlasCatalogIntegrationTest {
             val result = observed.await()!!.toModelDetail()!!
             assertTrue(result.benchmarks!!.all { it.score == 123.456 })
             assertTrue(result.benchmarks.filter { it.description != null }.all { it.description == "new-definition" })
+            assertNull(result.parameters!!.totalBillion)
+            assertEquals("16".toBigDecimal(), result.parameters.activeBillion)
+            assertEquals("Decode only", result.parameters.notes)
         } finally { db.close() }
     }
 

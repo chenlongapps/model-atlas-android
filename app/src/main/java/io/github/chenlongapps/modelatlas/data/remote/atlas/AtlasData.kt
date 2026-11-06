@@ -29,6 +29,7 @@ data class AtlasModelDto(
     val weights: List<ModelWeightDto>? = null,
     val links: List<ModelLinkDto>? = null,
     val benchmarks: List<AtlasBenchmarkScoreDto>? = null,
+    val metadata: AtlasMetadataDto? = null,
 )
 
 /** 来源允许置信区间、百分号等文本；不解析其中的数字或丢弃限定条件。 */

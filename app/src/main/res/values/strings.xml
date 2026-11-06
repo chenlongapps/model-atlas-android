@@ -166,6 +166,8 @@
     <string name="detail_weights">权重与许可</string>
     <string name="detail_license">模型许可</string>
     <string name="detail_parameter_count">参数量</string>
+    <string name="parameter_total">总参数量</string>
+    <string name="parameter_active">激活量</string>
     <string name="detail_offering_provider">服务商</string>
     <string name="detail_offering_id">模型服务 ID</string>
     <string name="detail_offering_context">上下文长度</string>

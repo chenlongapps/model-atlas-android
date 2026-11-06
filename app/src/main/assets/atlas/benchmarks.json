@@ -1,9 +1,6 @@
 {
   "artificial-analysis-intelligence-index-v5": {
     "category": "composite",
-    "compatible_versions": [
-      "5.0"
-    ],
     "description": "A composite evaluation of language model performance across knowledge work, coding, science, and general knowledge, aggregating nine evaluations into a single score.",
     "higher_is_better": true,
     "max_score": 100,

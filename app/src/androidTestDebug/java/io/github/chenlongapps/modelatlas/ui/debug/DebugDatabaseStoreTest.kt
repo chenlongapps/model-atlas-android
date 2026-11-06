@@ -44,7 +44,8 @@ class DebugDatabaseStoreTest {
         assertEquals(1L, store.overview().version)
         val provider = insert(DatabaseTable.PROVIDERS, "id" to "p", "name" to "Provider")
         val model = insert(DatabaseTable.MODELS, "id" to "lab/model", "name" to "Model", "type" to "llm",
-            "inputModalities" to "[ \"text\" ]", "attachment" to "0")
+            "inputModalities" to "[ \"text\" ]", "attachment" to "0",
+            "parameters" to """{"totalBillion":70.553706496123456789,"sources":["https://example.org/card"],"future":true}""")
         val offering = insert(DatabaseTable.OFFERINGS, "providerId" to "p", "id" to "service", "canonicalModelId" to "lab/model",
             "pricing" to """{"input":0,"future":"preserve"}""")
         val favorite = insert(DatabaseTable.FAVORITES, "modelId" to "lab/model", "name" to "Model", "lab" to "lab")
@@ -57,6 +58,8 @@ class DebugDatabaseStoreTest {
         assertEquals("", actual.values["description"])
         assertEquals("1", actual.values["attachment"])
         assertEquals("[ \"text\" ]", actual.values["inputModalities"])
+        assertEquals(model.values["parameters"], actual.values["parameters"])
+        assertEquals("70.553706496123456789".toBigDecimal(), database.catalogDao().readCatalog().models.single().parameters!!.totalBillion)
         assertEquals(DatabaseWriteResult.Success, store.save(DatabaseTable.OFFERINGS, offering.values + ("name" to "Edited service"), offering))
         assertEquals("""{"input":0,"future":"preserve"}""", store.read(DatabaseTable.OFFERINGS, offering.key)!!.values["pricing"])
 

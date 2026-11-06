@@ -11,12 +11,12 @@ class AtlasReleaseLoaderTest {
     @Test fun actualPublishedBytesParseWithPythonManifestAndNoInnerModelIds() = runTest {
         val root = File("src/main/assets/atlas")
         val release = AtlasReleaseLoader { path, limit -> root.resolve(path).readBytes().also { assertTrue(it.size <= limit) } }.load()
-        assertEquals("6d7c10c2e98d9537f03412bf010e63d14ad0a960", release.manifest.gitCommit)
-        assertEquals(852, release.models.size)
+        assertEquals("27479e48258332fe988c2d06233c86d96bef4c83", release.manifest.gitCommit)
+        assertEquals(855, release.models.size)
         assertEquals(11, release.benchmarks.size)
-        assertEquals(1837, release.models.values.sumOf { it.benchmarks.orEmpty().size })
-        assertEquals(42, release.models.values.sumOf { m -> m.benchmarks.orEmpty().count { it.score.isString } })
-        assertEquals(849, release.translations.model.descriptions.size)
+        assertEquals(1887, release.models.values.sumOf { it.benchmarks.orEmpty().size })
+        assertEquals(31, release.models.values.sumOf { m -> m.benchmarks.orEmpty().count { it.score.isString } })
+        assertEquals(852, release.translations.model.descriptions.size)
         assertTrue(release.models.values.all { it.schema == 2 })
     }
 

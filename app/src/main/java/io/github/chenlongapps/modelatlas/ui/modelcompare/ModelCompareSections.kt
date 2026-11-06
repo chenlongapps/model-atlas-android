@@ -39,6 +39,7 @@ import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.ui.model.ModelInfoBadge
+import io.github.chenlongapps.modelatlas.ui.model.formatBillionParameters
 import io.github.chenlongapps.modelatlas.ui.modellist.formatCompactTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
@@ -70,6 +71,12 @@ internal fun LazyListScope.comparisonItems(
             TokenRow(R.string.model_list_output_limit_label, models.map { it.metadata.outputLimitTokens }, models)
             ModalityRow(R.string.model_filter_input, models.map { it.metadata.inputModalities }, models)
             ModalityRow(R.string.model_filter_output, models.map { it.metadata.outputModalities }, models)
+        }
+    }
+    item("parameters") {
+        CompareSection(stringResource(R.string.detail_parameter_count), R.drawable.ic_nav_models_outline, models) {
+            TextRow(R.string.parameter_total, models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }, models)
+            TextRow(R.string.parameter_active, models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }, models)
         }
     }
     item("prices") {

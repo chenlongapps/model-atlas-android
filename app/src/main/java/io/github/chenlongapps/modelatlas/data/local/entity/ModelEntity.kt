@@ -6,6 +6,7 @@ import androidx.room3.PrimaryKey
 import io.github.chenlongapps.modelatlas.data.local.converter.CatalogTypeConverters
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
 
 /**
  * 规范模型的本地目录记录，不包含特定服务商的报价或生命周期。
@@ -43,4 +44,5 @@ data class ModelEntity(
     val weights: List<ModelWeightLocal>? = null,
     val links: List<ModelLinkLocal>? = null,
     val descriptionZhCn: String? = null,
+    val parameters: ModelParametersLocal? = null,
 )

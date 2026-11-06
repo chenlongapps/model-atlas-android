@@ -5,6 +5,7 @@ import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ProviderOverrideLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ReasoningOptionLocal
@@ -36,6 +37,12 @@ class CatalogTypeConverters {
 
     @ColumnTypeConverter
     fun jsonToLinks(value: String?): List<ModelLinkLocal>? = decode(value)
+
+    @ColumnTypeConverter
+    fun parametersToJson(value: ModelParametersLocal?): String? = encode(value)
+
+    @ColumnTypeConverter
+    fun jsonToParameters(value: String?): ModelParametersLocal? = decode(value)
 
     @ColumnTypeConverter
     fun reasoningOptionsToJson(value: List<ReasoningOptionLocal>?): String? = encode(value)

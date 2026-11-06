@@ -8,6 +8,8 @@
 
 成绩 `score` 改为可空 REAL，新增 `scoreText` 保存来源中的文本分数（百分号、置信区间等）；导入时二选一，文本不解析或填造数值。Debug 允许修复原值，但至少填写一种成绩。下文历史“非空数值 score”仅描述旧协议。
 
+规范模型新增可空 `parameters` JSON TEXT 列，保存 ModelAtlas 参数扩展的总量、每 token 激活量、来源、说明及组件。`ModelParametersLocal` 与远端 DTO、详情应用模型独立，数值为 B 单位 `BigDecimal`，通过专用数字序列化器保留十进制精度；不扩展模型服务、列表投影或收藏身份。参数变化参与实体内容比较及目录事务，详情／对比读取同一规范模型数据；协议及缺失边界见[参数量接入](atlas-data.md#模型参数量)。继续沿用 Schema v1 开发基线，旧开发库不会自动迁移或清除。
+
 下文涉及旧整数版本独立成绩初始化的说明仅适用于历史兼容 DAO／测试，不是当前生产同步。Debug 仍只开放原五表，定义与发布状态不提供编辑入口；原统计仍仅计算三张目录表。
 
 已定义并接通三张 Room3 目录实体、独立收藏表、本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成目录存储，支持本地优先读取、后台检查与主动更新。收藏由 `FavoriteDao` 与 `RoomFavoriteRepository` 独立管理，不进入远端快照。
@@ -88,7 +90,7 @@
 
 | 实体 | JSON 字段 |
 | --- | --- |
-| `ModelEntity` | `inputModalities`、`outputModalities`、`weights`、`links` |
+| `ModelEntity` | `inputModalities`、`outputModalities`、`weights`、`links`、`parameters` |
 | `ProviderEntity` | `environmentVariables`（仅变量名称，不是用户密钥） |
 | `ModelOfferingEntity` | `inputModalities`、`outputModalities`、`reasoningOptions`、`interleaved`、`pricing`、`providerOverride`、`experimentalModes` |
 
@@ -117,4 +119,4 @@ JSON 字段目前不承担复杂 SQL 筛选或排序。未来明确需要按单�
 - `CatalogEntitiesTest` 覆盖可选字段默认未知、独立标识、显式获取时间、服务自身的能力 / 限制，以及超出 Int 的 token 数和不完整日期。
 - `CatalogSchemaTestDatabase` 通过 `app/build.gradle.kts` 中的 `kspTest` 显式启用 Room 处理器，让测试编译阶段校验五实体的字段类型、复合主键、外键、索引和转换器声明；这不等同于数据库读写或级联删除测试。
 
-`androidTest` 的 `CatalogDatabaseTest` 验证实际 SQLite 读写、跨服务商重复服务 ID、显式与缺失关联、快照替换、外键失败时整笔回滚和文件数据库重开，并验证完整快照读取、目录存在性查询、报价投影只取显式关联且有报价的服务、未匹配报价行不会变成模型、无报价时不生成报价行；详情查询另覆盖所有显式关联服务（含无报价）、服务商嵌套读取、无关联模型和模型移除。生产 Schema v1 导出到 `app/schemas/`，本次无需升级。目录比较、模型增删待确认且不写库、内容静默同步、应用快照、离线展示和刷新失败保留数据由仓库／ViewModel 单元测试覆盖。详情字段精简不删除底层记录级时间、完整报价或其他元数据；参数量无可靠来源，不新增列。目录页统一更新时间仍未实现。任务进度只在 [TODO.md](../TODO.md) 维护。
+`androidTest` 的 `CatalogDatabaseTest` 验证实际 SQLite 读写、跨服务商重复服务 ID、显式与缺失关联、快照替换、外键失败时整笔回滚和文件数据库重开，并验证完整快照读取、目录存在性查询、报价投影只取显式关联且有报价的服务、未匹配报价行不会变成模型、无报价时不生成报价行；详情查询另覆盖所有显式关联服务（含无报价）、服务商嵌套读取、无关联模型和模型移除。生产 Schema v1 导出到 `app/schemas/`，未增加版本号。目录比较、模型增删待确认且不写库、内容静默同步、应用快照、离线展示和刷新失败保留数据由仓库／ViewModel 单元测试覆盖。详情字段精简不删除底层记录级时间、完整报价或其他元数据；参数量现从 Atlas 扩展进入独立 JSON 列。目录页统一更新时间仍未实现。任务进度只在 [TODO.md](../TODO.md) 维护。

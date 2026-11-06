@@ -4,6 +4,8 @@ import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParameterComponentLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPriceTierLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
 import io.github.chenlongapps.modelatlas.data.local.model.PriceTierConditionLocal
@@ -29,6 +31,8 @@ class CatalogTypeConvertersTest {
         assertNull(converters.jsonToWeights(null))
         assertNull(converters.linksToJson(null))
         assertNull(converters.jsonToLinks(null))
+        assertNull(converters.parametersToJson(null))
+        assertNull(converters.jsonToParameters(null))
         assertNull(converters.reasoningOptionsToJson(null))
         assertNull(converters.jsonToReasoningOptions(null))
         assertNull(converters.interleavedToJson(null))
@@ -80,6 +84,33 @@ class CatalogTypeConvertersTest {
 
         assertEquals(links, converters.jsonToLinks(converters.linksToJson(links)))
         assertEquals(emptyList<ModelLinkLocal>(), converters.jsonToLinks("[]"))
+    }
+
+    @Test fun parametersRoundTripExactDecimalsProvenanceAndComponentOrder() {
+        val source = listOf("https://example.org/model")
+        val values = listOf(
+            ModelParametersLocal("70.553706496123456789".toBigDecimal(), sources = source),
+            ModelParametersLocal(activeBillion = "16".toBigDecimal(), sources = source, notes = "Decode only"),
+            ModelParametersLocal(components = listOf(
+                ModelParameterComponentLocal("Decoder", "12".toBigDecimal(), sources = source),
+                ModelParameterComponentLocal("Encoder", "0.4".toBigDecimal(), sources = source, notes = "Separate component"),
+            )),
+        )
+        values.forEach { assertEquals(it, converters.jsonToParameters(converters.parametersToJson(it))) }
+        assertEquals("70.553706496123456789".toBigDecimal(),
+            converters.jsonToParameters(converters.parametersToJson(values[0]))!!.totalBillion)
+        assertNull(converters.jsonToParameters(converters.parametersToJson(values[1]))!!.totalBillion)
+        assertNull(converters.jsonToParameters(converters.parametersToJson(values[2]))!!.sources)
+        assertNull(converters.jsonToParameters("null"))
+    }
+
+    @Test fun invalidParameterJsonNeverBecomesUnknownOrZero() {
+        for (json in listOf("{}", "[]", """{"totalBillion":0,"sources":["https://example.org"]}""",
+            """{"totalBillion":"7","sources":["https://example.org"]}""",
+            """{"totalBillion":7,"activeBillion":8,"sources":["https://example.org"]}""",
+            """{"totalBillion":7}""", """{"components":[{"name":"Decoder","sources":[]}]}""")) {
+            assertThrows(Exception::class.java) { converters.jsonToParameters(json) }
+        }
     }
 
     @Test

@@ -4,6 +4,8 @@ import io.github.chenlongapps.modelatlas.data.local.CatalogSnapshot
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.CatalogReleaseEntity
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParameterComponentLocal
 import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasRelease
 import io.github.chenlongapps.modelatlas.data.remote.atlas.sha256
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelDto
@@ -55,7 +57,16 @@ fun CatalogMapper.mapAtlas(
         }
     }
     return catalog.copy(
-        models = catalog.models.map { it.copy(source = "model-atlas-data", descriptionZhCn = release.translations.model.descriptions[it.id]) },
+        models = catalog.models.map { model ->
+            val parameters = release.models.getValue(model.id).metadata?.modelatlas?.parameters
+            model.copy(
+                source = "model-atlas-data", descriptionZhCn = release.translations.model.descriptions[model.id],
+                parameters = parameters?.let { p ->
+                    ModelParametersLocal(p.totalBillion, p.activeBillion, p.sources, p.notes,
+                        p.components?.map { ModelParameterComponentLocal(it.name, it.totalBillion, it.activeBillion, it.sources, it.notes) })
+                },
+            )
+        },
         scores = scores,
         definitions = definitions,
         release = CatalogReleaseEntity(dataVersion = release.manifest.dataVersion,

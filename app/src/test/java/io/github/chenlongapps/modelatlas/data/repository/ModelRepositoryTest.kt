@@ -379,6 +379,43 @@ class ModelRepositoryTest {
         }
     }
 
+    @Test fun parameterValueNotesAndRemovalCommitSilentlyWithoutChangingIdsOrQuotes() = runTest {
+        var remote = release()
+        val source = object : AtlasDataSource { override suspend fun fetch() = remote }
+        val repository = repository(StandardTestDispatcher(testScheduler), source)
+        repository.refresh()
+        val originalOfferings = store.snapshot!!.offerings
+        val parameters = AtlasParametersDto("671".toBigDecimal(), "37".toBigDecimal(), listOf("https://example.org/card"))
+        for (value in listOf(parameters, parameters.copy(notes = "Official architecture count"), null)) {
+            remote = remote.copy(models = remote.models.mapValues { (_, m) ->
+                m.copy(metadata = AtlasMetadataDto(AtlasModelAtlasMetadataDto(value)))
+            })
+            assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+            assertEquals(value?.totalBillion, store.snapshot!!.models.single().parameters?.totalBillion)
+            assertEquals(value?.notes, store.snapshot!!.models.single().parameters?.notes)
+            assertEquals(originalOfferings, store.snapshot!!.offerings)
+            assertEquals(false, repository.applyPendingUpdate())
+            assertEquals(CatalogUpdateCheckResult.UNCHANGED, repository.checkForUpdates())
+        }
+        assertEquals(4, store.writes)
+    }
+
+    @Test fun invalidParameterReleasePreservesEntireLocalSnapshot() = runTest {
+        var json = """{"lab/model":{"schema":2,"name":"Model","type":"llm","metadata":{"modelatlas":{"parameters":{"total_billion":7,"sources":["https://example.org/card"]}}}}}"""
+        val source = object : AtlasDataSource {
+            override suspend fun fetch() = atlasRelease(atlasFiles(models = json, definitions = "{}", translations = "{}"))
+        }
+        val repository = repository(StandardTestDispatcher(testScheduler), source)
+        repository.refresh()
+        val previous = store.snapshot
+        json = json.replace("\"total_billion\":7", "\"total_billion\":0")
+        try { repository.refresh(); error("Expected invalid parameters") }
+        catch (_: kotlinx.serialization.SerializationException) {
+            assertEquals(previous, store.snapshot)
+            assertEquals(1, store.writes)
+        }
+    }
+
     private fun repository(dispatcher: kotlinx.coroutines.CoroutineDispatcher, source: AtlasDataSource = object : AtlasDataSource {
             override suspend fun fetch() = release()
         }) = DefaultModelRepository(api, store, CatalogMapper(), clock, dispatcher, source)

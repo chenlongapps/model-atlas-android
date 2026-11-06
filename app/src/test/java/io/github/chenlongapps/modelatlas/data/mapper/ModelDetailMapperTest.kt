@@ -9,6 +9,7 @@ import io.github.chenlongapps.modelatlas.data.local.model.ExperimentalModeLocal
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelLinkLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelWeightLocal
+import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPriceTierLocal
 import io.github.chenlongapps.modelatlas.data.local.model.OfferingPricingLocal
 import io.github.chenlongapps.modelatlas.data.local.model.PriceTierConditionLocal
@@ -51,6 +52,19 @@ class ModelDetailMapperTest {
         assertEquals(false, offering.metadata.openWeights)
         assertNull(offering.price)
         assertEquals(200L, offering.fetchedAtEpochMillis)
+    }
+
+    @Test fun parametersBelongOnlyToCanonicalModelAndAreNotGuessedFromNameOrDescription() {
+        val record = ModelDetailRecord(model.copy(name = "Model 99B", description = "16B active"), listOf(service("openai", "s")))
+        assertNull(record.toModelDetail()!!.parameters)
+        val parameters = ModelParametersLocal(activeBillion = "16".toBigDecimal(),
+            sources = listOf("https://example.org/card"), notes = "Decode only")
+        val detail = record.copy(model = record.model.copy(parameters = parameters)).toModelDetail()!!
+        assertNull(detail.parameters!!.totalBillion)
+        assertEquals(parameters.activeBillion, detail.parameters.activeBillion)
+        assertEquals(parameters.sources, detail.parameters.sources)
+        assertEquals("Decode only", detail.parameters.notes)
+        assertNull(detail.providers.single().offerings.single().metadata.contextLimitTokens)
     }
 
     @Test fun keepsEveryServiceIncludingMissingPricesAndUsesStableProviderOrder() {

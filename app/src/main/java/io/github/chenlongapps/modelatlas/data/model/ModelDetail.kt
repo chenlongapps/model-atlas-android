@@ -12,6 +12,7 @@ data class ModelDetail(
     val fetchedAtEpochMillis: Long,
     val providers: List<ModelDetailProvider> = emptyList(),
     val benchmarks: List<ModelBenchmark>? = null,
+    val parameters: ModelParameters? = null,
 ) {
     val lab: String?
         get() = id.substringBefore('/', missingDelimiterValue = "").takeIf(String::isNotBlank)

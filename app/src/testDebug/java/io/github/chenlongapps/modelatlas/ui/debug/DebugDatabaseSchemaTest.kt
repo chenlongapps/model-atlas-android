@@ -68,4 +68,18 @@ class DebugDatabaseSchemaTest {
             assertEquals(R.string.debug_database_invalid_real, validateDatabaseRow(table, score + ("cost" to invalid))?.messageResource)
         }
     }
+
+    @Test fun parameterColumnIsCanonicalOnlyAndValidatesLocalStructureWithoutRewritingOldJson() {
+        assertTrue(DatabaseTable.MODELS.columns.any { it.name == "parameters" && it.type == DatabaseFieldType.PARAMETERS })
+        assertFalse(DatabaseTable.OFFERINGS.columns.any { it.name == "parameters" })
+        val base = values(DatabaseTable.MODELS)
+        val raw = """{"activeBillion":16,"sources":["https://example.org"],"notes":"Decode only","future":true}"""
+        assertNull(validateDatabaseRow(DatabaseTable.MODELS, base + ("parameters" to raw)))
+        for (invalid in listOf("{}", """{"total_billion":7,"sources":["https://example.org"]}""",
+            """{"totalBillion":0,"sources":["https://example.org"]}""")) {
+            assertEquals("parameters", validateDatabaseRow(DatabaseTable.MODELS, base + ("parameters" to invalid))?.field)
+        }
+        val original = DatabaseRow(DatabaseTable.MODELS, base + ("parameters" to "broken"))
+        assertNull(validateDatabaseRow(DatabaseTable.MODELS, original.values + ("name" to "Changed"), original))
+    }
 }
