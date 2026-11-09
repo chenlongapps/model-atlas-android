@@ -59,6 +59,7 @@ data class ModelBenchmark(
     val sourceType: String? = null,
     val description: String? = null,
     val scoreText: String? = null,
+    val benchmarkId: String? = null,
 )
 
 data class ModelDetailProvider(

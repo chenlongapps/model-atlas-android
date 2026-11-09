@@ -20,6 +20,7 @@
 | [数据源说明](data-source.md) | Models.dev 端点、请求与解析、LLM 收录与聚合、计价及许可约定 | 修改 API、映射字段、展示价格或设计缓存前 |
 | [ModelAtlas Data 接入](atlas-data.md) | 新模型／评测／中文发布协议、整包校验、原子存储及旧协议边界 | 修改模型、Benchmark 或中文数据接入前 |
 | [大模型 Benchmark 清单](benchmarks.md) | 待核实的综合指数与各领域评测清单、结果使用边界 | 了解或调研模型评测、规划评测数据时 |
+| [评测 Logo 素材](benchmark-logos.md) | 随包评测图标、明确 ID 映射、原始来源与摘要、字标及兜底规则 | 修改评测 Logo 或新增对应版本时 |
 | [本地目录数据](local-data.md) | Room3 实体、主键与关联、本地 JSON、快照事务、目录查询与独立收藏存储 | 修改实体、DTO 映射、数据库、收藏存储或缓存前 |
 | [Debug / Release 双版本共存](debug-release-coexistence.md) | 构建类型后缀、应用名称覆盖、Debug 专属顶层调试页、签名与数据隔离边界、分级验收 | 构建、安装或验证 Debug 与 Release 共存、调试入口隔离时 |
 | [分级测试与定向回归](testing.md) | 按改动选测、功能关联范围、模拟器批量执行、失败定向复跑与结果核对 | 选择验证范围、执行或精简模拟器测试流程时 |

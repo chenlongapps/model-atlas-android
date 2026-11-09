@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -74,7 +73,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
-import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.ui.model.LocalModelSharedTransition
@@ -378,60 +376,6 @@ private fun LazyListScope.providerItems(model: ModelDetail) {
                     Modifier.testTag("model-service:${provider.id.length}:${provider.id}${offering.id}"))
             }
         }
-    }
-}
-
-private fun LazyListScope.benchmarkItems(model: ModelDetail) {
-    item(key = "benchmark-notice") {
-        DetailSection(stringResource(R.string.detail_tab_benchmarks)) {
-            Text(stringResource(R.string.detail_benchmarks_notice), style = MaterialTheme.typography.bodySmall)
-            if (model.benchmarks?.any { it.sourceType == "test" } == true) {
-                Text(stringResource(R.string.detail_benchmark_test_notice), style = MaterialTheme.typography.bodySmall)
-            }
-            if (model.benchmarks == null) Text(stringResource(R.string.detail_benchmarks_missing))
-            else if (model.benchmarks.isEmpty()) Text(stringResource(R.string.detail_benchmarks_empty))
-        }
-    }
-    // 评测没有稳定 ID，保留来源顺序及同名、不同配置的所有记录。
-    model.benchmarks?.forEachIndexed { index, benchmark ->
-        item(key = "benchmark:$index") { BenchmarkSection(benchmark) }
-    }
-}
-
-@Composable
-private fun BenchmarkSection(benchmark: ModelBenchmark) {
-    DetailSection(benchmark.name.takeIf(String::isNotBlank) ?: stringResource(R.string.no_data)) {
-        benchmark.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        DetailField(stringResource(R.string.detail_benchmark_score), benchmark.scoreText ?: benchmark.score?.toString())
-        DetailField(stringResource(R.string.detail_benchmark_metric), benchmark.metric)
-        benchmark.unit?.let { DetailField(stringResource(R.string.detail_benchmark_unit), it) }
-        benchmark.higherIsBetter?.let {
-            DetailField(stringResource(R.string.detail_benchmark_direction), stringResource(if (it) R.string.detail_benchmark_higher else R.string.detail_benchmark_lower))
-        }
-        benchmark.reasoningEffort?.let { DetailField(stringResource(R.string.detail_benchmark_reasoning), it) }
-        benchmark.toolsEnabled?.let {
-            DetailField(stringResource(R.string.detail_benchmark_tools), stringResource(if (it) R.string.detail_benchmark_tools_enabled else R.string.detail_benchmark_tools_disabled))
-        }
-        val source = benchmark.source?.takeIf(String::isNotBlank)
-        // source 也可能是出处名称而非网址；普通文字保留原文，不伪造地址。
-        if (source != null && isSafeDetailUrl(source)) {
-            DetailLink(stringResource(R.string.detail_benchmark_source), source)
-        } else {
-            DetailField(stringResource(R.string.detail_benchmark_source), source)
-        }
-        DetailField(stringResource(R.string.detail_benchmark_date), benchmark.date)
-        DetailField(stringResource(R.string.detail_benchmark_version), benchmark.version)
-        DetailField(stringResource(R.string.detail_benchmark_variant), benchmark.variant)
-        DetailField(stringResource(R.string.detail_benchmark_dataset), benchmark.dataset)
-        DetailField(stringResource(R.string.detail_benchmark_harness), benchmark.harness)
-    }
-}
-
-@Composable
-private fun DetailField(label: String, value: String?) {
-    Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value?.takeIf(String::isNotBlank) ?: stringResource(R.string.no_data), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

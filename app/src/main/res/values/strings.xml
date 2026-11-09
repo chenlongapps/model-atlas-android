@@ -136,7 +136,7 @@
     <string name="detail_benchmark_tools_disabled">未启用</string>
     <string name="detail_benchmarks_missing">暂无评测数据。</string>
     <string name="detail_benchmarks_empty">来源未列出评测记录。</string>
-    <string name="detail_benchmark_score">分数（来源原值）</string>
+    <string name="detail_benchmark_score">分数</string>
     <string name="detail_benchmark_metric">评测指标</string>
     <string name="detail_benchmark_source">评测来源</string>
     <string name="detail_benchmark_date">评测日期</string>

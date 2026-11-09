@@ -12,6 +12,7 @@
 | 搜索／筛选 | `ModelListQueryTest`、`ModelListViewModelTest` 中相关用例；UI 变化加 `ModelCatalogControlsTest` | 卡片／列表状态变化加 `ModelListScreenTest`；切页恢复变化加外壳相关用例 |
 | 模态格式兼容 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、Query／ViewModel；保留 null／空／未知、方向、旧 MIME 条件恢复 | 真实随包格式经过生产映射后覆盖列表图标、详情头部／概览、对比、筛选；`AtlasCatalogIntegrationTest` 验证已有缓存与收藏无需联网或改写原值 |
 | 详情字段／布局 | `ModelDetailMapperTest`、`ModelDetailViewModelTest` 中相关用例及 `ModelDetailScreenTest` | 入口／返回／恢复加 `ModelDetailNavigationTest`；共享身份或容器布局变化加 `ModelSharedTransitionTest` 相关用例 |
+| 详情评测轻量卡／Logo | `BenchmarkPresentationTest`、`BenchmarkLogoTest`、`ModelDetailMapperTest`、`AtlasCatalogMapperTest`；一位小数舍入／整数零分／文本原样、字母顺序／同名原始数值降序／平分稳定／文本与缺失置后、定义 ID 透传、未知／新版本兜底、底层字段不丢失 | `ModelBenchmarkCardTest` 验证全资源加载、深浅原色白底、一位小数视觉／读屏、明示单位／复合文本／条件语义／缺失及窄屏双倍字号 RTL；`ModelDetailScreenTest` 和详情返回链路覆盖字母顺序／同名配置分数降序、标签、滚动及移除字段 |
 | 对比 | `ModelCompareQueryTest`、`ModelCompareViewModelTest`、`ModelCompareScreenTest` 中相关用例 | 默认报价规则变化再覆盖价格映射及列表展示 |
 | 收藏 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`FavoritesScreenTest` 中相关用例 | 存储变化加 `FavoriteDatabaseTest`；返回动画变化加共享转场及零动画用例 |
 | 外观／设置 | `AppearanceViewModelTest`、`AppearanceColorTest`、`SettingsRepositoryTest` 及对应界面用例 | 全局主题变化覆盖 `ModelAtlasThemeTest` 和主要页面浅深色；持久化／备份变化补对应测试 |

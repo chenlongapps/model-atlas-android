@@ -736,21 +736,21 @@ class ModelDetailScreenTest {
         assertFalse(imageDiffers(expanded, header.captureToImage()))
     }
 
-    @Test fun benchmarkTabShowsRawScoresMetadataAndSafeSourceWithoutInventingUnits() {
+    @Test fun benchmarkTabShowsOnlyCoreScoresAndConditionsWithoutInventingUnits() {
         show(detail().copy(benchmarks = listOf(
-            ModelBenchmark("Example evaluation", 0.003, "accuracy", "https://example.org/eval",
+            ModelBenchmark("Example evaluation", 84.126, "accuracy", "https://example.org/eval",
                 "2026-10", "v2", "no tools", "public", "test-harness"),
             ModelBenchmark("Zero evaluation", 0.0, source = "javascript:alert(1)"),
         )))
         selectTab("BENCHMARKS")
-        scrollTo("打开：评测来源（外部链接）")
-        compose.onNodeWithText("打开：评测来源（外部链接）").assertIsDisplayed()
-        listOf("Example evaluation", "0.003", "accuracy", "https://example.org/eval", "2026-10", "v2",
-            "no tools", "public", "test-harness", "Zero evaluation", "0.0", "javascript:alert(1)").forEach {
+        listOf("Example evaluation", "84.1", "v2", "no tools", "Zero evaluation", "0.0").forEach {
             scrollTo(it)
             compose.onNodeWithText(it).assertIsDisplayed()
         }
-        compose.onNode(hasText("javascript:alert(1)") and hasClickAction()).assertDoesNotExist()
+        listOf("评测指标", "分数方向", "评测来源", "评测日期", "数据集", "评测框架／执行配置",
+            "accuracy", "https://example.org/eval", "2026-10", "public", "test-harness", "javascript:alert(1)", "percent").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
     }
 
     @Test fun atlasBenchmarkDescriptionEffortAndCompositeScoreAreDisplayedVerbatim() {
@@ -763,6 +763,28 @@ class ModelDetailScreenTest {
             scrollTo(it)
             compose.onNodeWithText(it).assertIsDisplayed()
         }
+    }
+
+    @Test fun benchmarksSortAlphabeticallyAndSameNameScoresSortDescendingWithoutLosingConfigurations() {
+        show(detail().copy(benchmarks = listOf(
+            ModelBenchmark("Zulu", 3.0),
+            ModelBenchmark("alpha", 1.51, variant = "first"),
+            ModelBenchmark("Beta", 2.0),
+            ModelBenchmark("Alpha", 1.54, variant = "second"),
+        )))
+        selectTab("BENCHMARKS")
+        listOf("Alpha", "alpha", "Beta", "Zulu").forEach {
+            scrollTo(it)
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
+        scrollTo("Alpha")
+        val firstTop = compose.onNodeWithText("alpha").fetchSemanticsNode().boundsInRoot.top
+        val secondTop = compose.onNodeWithText("Alpha").fetchSemanticsNode().boundsInRoot.top
+        val betaTop = compose.onNodeWithText("Beta").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(secondTop < firstTop && firstTop < betaTop)
+        compose.onNodeWithTag("model-benchmark:1").assertIsDisplayed()
+        compose.onNodeWithTag("model-benchmark:3").assertIsDisplayed()
+        listOf("first", "second").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
     }
 
     @Test fun benchmarkTestDataIsExplicitlyLabeled() {
@@ -949,14 +971,15 @@ class ModelDetailScreenTest {
         assertEquals(headerBounds, compose.onNodeWithTag("model-detail-header").fetchSemanticsNode().boundsInRoot)
     }
 
-    @Test fun darkNarrowLargeFontBenchmarkLabelsAndLongMetadataDoNotClip() {
+    @Test fun darkNarrowLargeFontBenchmarkLabelsAndCoreInformationDoNotClip() {
         val name = "Long evaluation name with complete version and configuration"
-        val harness = "Long evaluation framework identifier without truncation"
+        val description = "Long evaluation description without truncation"
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                 ModelAtlasTheme(darkTheme = true, dynamicColor = false) {
                     Box(Modifier.width(320.dp)) { ModelDetailScreen(content(detail().copy(
-                        benchmarks = listOf(ModelBenchmark(name, 95.12345, harness = harness)),
+                        benchmarks = listOf(ModelBenchmark(name, 95.12345, description = description,
+                            benchmarkId = "swe-bench-pro-v2", variant = "without tools")),
                     )), {}) }
                 }
             }
@@ -967,7 +990,7 @@ class ModelDetailScreenTest {
             assertTextNotClipped(label)
         }
         selectTab("BENCHMARKS")
-        listOf(name, "95.12345", harness).forEach {
+        listOf(name, "95.1", description, "without tools").forEach {
             scrollTo(it)
             compose.onNodeWithText(it).assertIsDisplayed()
             assertTextNotClipped(it)

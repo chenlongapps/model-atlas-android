@@ -108,7 +108,7 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
                 dataset = s.subset, harness = s.harness, unit = s.unit, higherIsBetter = s.higherIsBetter,
                 reasoningEffort = s.reasoningEffort, toolsEnabled = s.toolsEnabled, sourceType = s.sourceType,
                 description = record.definition?.descriptionZhCn.nonBlank() ?: record.definition?.description.nonBlank(),
-                scoreText = s.scoreText,
+                scoreText = s.scoreText, benchmarkId = s.benchmarkId,
             )
         },
     )

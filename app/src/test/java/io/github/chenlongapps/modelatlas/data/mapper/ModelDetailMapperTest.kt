@@ -2,6 +2,8 @@ package io.github.chenlongapps.modelatlas.data.mapper
 
 import io.github.chenlongapps.modelatlas.data.local.ModelDetailOfferingRecord
 import io.github.chenlongapps.modelatlas.data.local.ModelDetailRecord
+import io.github.chenlongapps.modelatlas.data.local.ModelBenchmarkRecord
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
@@ -151,6 +153,30 @@ class ModelDetailMapperTest {
 
     @Test fun detailWithoutPersistedScoresHasNoInventedBenchmarks() {
         assertTrue(ModelDetailRecord(model, emptyList()).toModelDetail()!!.benchmarks!!.isEmpty())
+    }
+
+    @Test fun benchmarkIdentityAndAllRawFieldsSurviveUiSimplification() {
+        val score = BenchmarkScoreEntity("s", model.id, "gdpval-aa-v2.1", null, metric = "Elo rating",
+            sourceUrl = "https://example.org/eval", evaluatedAt = "2026-10", subset = "public", harness = "harness",
+            reasoningEffort = "Adaptive/Max", toolsEnabled = false, unit = "Elo points", higherIsBetter = true,
+            name = "GDPval-AA", version = "2.1", variant = "without tools", scoreText = "899 ± 18")
+        val benchmark = ModelDetailRecord(model, emptyList(), listOf(ModelBenchmarkRecord(score, null)))
+            .toModelDetail()!!.benchmarks!!.single()
+        assertEquals(score.benchmarkId, benchmark.benchmarkId)
+        assertEquals(score.name, benchmark.name)
+        assertEquals(score.scoreText, benchmark.scoreText)
+        assertNull(benchmark.score)
+        assertEquals(score.metric, benchmark.metric)
+        assertEquals(score.sourceUrl, benchmark.source)
+        assertEquals(score.evaluatedAt, benchmark.date)
+        assertEquals(score.subset, benchmark.dataset)
+        assertEquals(score.harness, benchmark.harness)
+        assertEquals(score.reasoningEffort, benchmark.reasoningEffort)
+        assertEquals(score.toolsEnabled, benchmark.toolsEnabled)
+        assertEquals(score.version, benchmark.version)
+        assertEquals(score.variant, benchmark.variant)
+        assertEquals(score.unit, benchmark.unit)
+        assertEquals(score.higherIsBetter, benchmark.higherIsBetter)
     }
 
     private fun service(provider: String, id: String) = ModelDetailOfferingRecord(
