@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
@@ -81,7 +82,7 @@ class ModelAtlasAppTest {
 
     @Test fun tabSwitchPreservesListScrollPosition() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("nav-models").performClick()
@@ -93,7 +94,7 @@ class ModelAtlasAppTest {
         var refreshes = 0
         show(onRefresh = { refreshes++ })
         val initialTop = compose.onNodeWithTag("catalog-header").fetchSemanticsNode().boundsInRoot.top
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         compose.onNodeWithTag("catalog-header").assertIsNotDisplayed()
         compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
         compose.onNodeWithTag("catalog-header").assertIsDisplayed()
@@ -147,7 +148,7 @@ class ModelAtlasAppTest {
 
     @Test fun singleClickAndSlowRepeatedClicksKeepCatalogPosition() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-models").performTouchInput { click() }
         assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
@@ -163,7 +164,7 @@ class ModelAtlasAppTest {
 
     @Test fun doubleClickModelsFromSettingsSelectsModelsAndScrollsToTop() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
@@ -174,7 +175,7 @@ class ModelAtlasAppTest {
 
     @Test fun doubleClickSettingsDoesNotResetCatalogPosition() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-settings").performTouchInput { doubleClick() }
         compose.onNodeWithTag("nav-settings").assertIsSelected()
@@ -184,7 +185,7 @@ class ModelAtlasAppTest {
 
     @Test fun settingsTapInterruptsConsecutiveModelTaps() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-models").performTouchInput { click() }
         compose.onNodeWithTag("nav-settings").performTouchInput {
@@ -215,7 +216,7 @@ class ModelAtlasAppTest {
                 }
             }
         }
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         restoration.emulateSavedInstanceStateRestore()
         assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
@@ -225,7 +226,7 @@ class ModelAtlasAppTest {
 
     @Test fun navigationDragAndFollowingTapDoNotTriggerScrollToTop() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         dragNavigationToSettings(duration = 100)
         compose.onNodeWithTag("nav-settings").assertIsSelected()
@@ -238,7 +239,7 @@ class ModelAtlasAppTest {
     @Test fun doubleClickPreservesExpandedPriceDetails() {
         show(models = listOf(tieredModel) + List(20) { ModelSummary("lab/model-$it", "测试模型 $it") })
         compose.onNodeWithText("API 价格").performClick()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
         compose.onNodeWithText("上下文 ≥ 100 tokens：输入 $0.20 · 输出 $0.30").assertIsDisplayed()
     }
@@ -246,7 +247,7 @@ class ModelAtlasAppTest {
     @OptIn(ExperimentalTestApi::class)
     @Test fun scrollToTopIsAvailableAsAccessibilityAction() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("nav-models").performCustomAccessibilityActionWithLabel("回到模型列表顶部")
         compose.onNodeWithTag("nav-models").assertIsSelected()
@@ -255,7 +256,7 @@ class ModelAtlasAppTest {
 
     @Test fun doubleClickModelsSupportsDarkThemeLargeFontAndRtl() {
         show(darkTheme = true, fontScale = 2f, direction = LayoutDirection.Rtl)
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
         compose.onNodeWithTag("catalog-header").assertIsDisplayed()
@@ -288,11 +289,11 @@ class ModelAtlasAppTest {
 
     @Test fun lastModelCanScrollFullyAboveFloatingNavigation() {
         show()
+        val navigationTop = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/model-29"))
         compose.onNodeWithTag("model-list").performTouchInput { swipeUp() }
         val lastModel = compose.onNodeWithTag("model:lab/model-29").fetchSemanticsNode().boundsInRoot
-        val navigation = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
-        assertTrue("Last model must remain readable above navigation", lastModel.bottom <= navigation.top)
+        assertTrue("Last model must remain readable above navigation's shown position", lastModel.bottom <= navigationTop)
     }
 
     @Test fun settingsOpensStandaloneSourcePageWithPricesAndBundledLicense() {
@@ -324,7 +325,7 @@ class ModelAtlasAppTest {
 
     @Test fun sourcePageSystemBackPreservesSelectedTabAndCatalogPosition() {
         show()
-        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        scrollCatalogToModel12()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithText("数据来源与许可").performClick()
@@ -447,6 +448,13 @@ class ModelAtlasAppTest {
         compose.onNodeWithTag("nav-settings").performClick().assertIsSelected()
         assertIndicatorMatches("nav-settings")
         compose.onNodeWithText("数据来源与许可").assertIsDisplayed()
+    }
+
+    private fun scrollCatalogToModel12() {
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        // ScrollToNode 经语义 ScrollBy 模拟用户滚动，会隐藏底栏；先像用户一样反向轻滑再操作导航。
+        compose.onNodeWithTag("model-list").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
     }
 
     private fun dragNavigationToSettings(duration: Long) {

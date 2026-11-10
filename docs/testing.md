@@ -20,7 +20,7 @@
 | 独立 Benchmark | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`；实际生成的随包字节由 Kotlin 解析并核摘要 | `BenchmarkIntegrationTest` 覆盖隔离 Room、离线重开、Python v3 原字节经生产 HTTPS source（注入响应）更新 v2 及失败保留；来源许可修改加 `ModelAtlasAppTest` 对应来源页用例 |
 | ModelAtlas Data 新发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest`；原字节 manifest、严格类型、文本／数字成绩、定义匹配、中文回退、候选确认及失败保留 | `AtlasCatalogIntegrationTest` 覆盖 HTTPS source → Room、离线重开、整包事务回滚、收藏隔离与事务详情；共享存储再覆盖 Catalog／Favorite／Debug 数据库，界面覆盖评测、来源说明与返回。旧 Benchmark 用例仅回归历史协议 |
 | 模型参数量 | `AtlasParametersTest`、参数格式化、详情映射、JSON 转换器、快照、仓库及 Debug Schema；高精度数字无损往返、仅总量／激活／组件、缺失、非法值、来源和内容静默同步 | `ModelParametersScreenTest` 覆盖真实随包详情／对比仅显示总量与激活量、缺失不推算、隐藏说明／来源／组件、切标签／异步恢复及窄屏双倍字号 RTL；共享列覆盖 Atlas／Catalog／Favorite／Debug 数据库，以及详情／对比类和返回链路 |
-| 全局导航／共享转场 | `ModelAtlasAppTest`、`ModelDetailNavigationTest`、`ModelSharedTransitionTest` 中相关用例 | 按影响补收藏来源、预测性返回、零动画、RTL／状态恢复；大范围修改扩大回归 |
+| 全局导航／共享转场 | `NavigationScrollBehaviorTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest` 验证滚动阈值／显隐／短内容／弹层隔离／触摸探索／零动画；`ModelAtlasAppTest`、`ModelDetailNavigationTest`、`ModelSharedTransitionTest` 中相关用例 | 按影响补收藏来源、预测性返回、零动画、RTL／状态恢复；大范围修改扩大回归 |
 
 这是选测起点，不是固定打包执行的套件。小改可定位到方法，功能完成应覆盖相关类及受影响的跨页面链路；影响不明确时扩大范围，不因表中未列出而跳过受影响测试。
 

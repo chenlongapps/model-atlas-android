@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -61,6 +64,9 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationBar
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
+import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollConnection
+import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollState
+import io.github.chenlongapps.modelatlas.ui.navigation.rememberTouchExplorationEnabled
 import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
 import io.github.chenlongapps.modelatlas.ui.settings.SettingsScreen
 import io.github.chenlongapps.modelatlas.ui.settings.AppearanceScreen
@@ -118,6 +124,7 @@ internal fun ModelAtlasScaffold(
     appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
     },
+    touchExplorationEnabled: Boolean = rememberTouchExplorationEnabled(),
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
@@ -132,6 +139,19 @@ internal fun ModelAtlasScaffold(
         drawContent()
     }
     val density = LocalDensity.current
+    val scrollThreshold = with(density) { 12.dp.toPx() }
+    val navigationScroll = remember(scrollThreshold) { NavigationScrollState(scrollThreshold) }
+    val autoHideEnabled = !touchExplorationEnabled
+    val navigationHidden = autoHideEnabled && navigationScroll.isHidden
+    val navigationHideProgress = animateFloatAsState(
+        if (navigationHidden) 1f else 0f, tween(200), label = "Navigation scroll visibility",
+    )
+    LaunchedEffect(pagerState, navigationScroll, autoHideEnabled) {
+        snapshotFlow { pagerState.currentPage to (pagerState.currentPageOffsetFraction != 0f) }.collect {
+            // 只响应真实横移：纵向列表松手也可能让 Pager 短暂进入零位移 fling。
+            navigationScroll.show()
+        }
+    }
     // 恢复首帧沿用已测得的高度，避免默认底部留白把接近列表末尾的保存位置夹回。
     var navigationHeight by rememberSaveable { mutableStateOf(64f) }
     val bottomOverlayPadding = navigationHeight.dp + 32.dp
@@ -155,6 +175,7 @@ internal fun ModelAtlasScaffold(
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
     val subpageVisible = showDataSource || showAppearance || showDatabase || retainedModelId != null
+    LaunchedEffect(subpageVisible, navigationScroll) { navigationScroll.resetTracking() }
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition) {
         snapshotFlow { backState.transitionState }.collect { state ->
@@ -201,42 +222,53 @@ internal fun ModelAtlasScaffold(
                 key = { navigationItems[it].tag },
             ) { page ->
                 val sourceTag = navigationItems[page].tag
-                // 离屏页仍保留组合，但只有真实来源注册共享元素，避免同 ID 的两张卡竞争匹配。
-                CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
-                    sharedScope, mainVisibility,
-                    enabled = placeMain && if (retainedModelId != null) sourceTag == detailSourceTag else page == pagerState.currentPage,
-                    expansionProgress = expansion,
-                    captureIdentity = { if (retainedModelId == null) initialIdentity = it },
-                )) {
-                    val openModel: (String) -> Unit = { id ->
-                        // 同一帧挂载详情目标，源页面一直保留到共享过渡完成。
-                        if (retainedModelId == null) {
-                            detailSourceTag = sourceTag
-                            retainedModelId = id
-                            selectedModelId = id
-                            detailTransition.enter()
-                        }
+                val scrollConnection = remember(page, navigationScroll, autoHideEnabled, subpageVisible) {
+                    NavigationScrollConnection(navigationScroll) {
+                        autoHideEnabled && !subpageVisible && !pagerState.isScrollInProgress && pagerState.settledPage == page
                     }
-                    when (navigationItems[page]) {
-                        GlassNavigationItem.Models -> CompositionLocalProvider(
-                            LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == page),
-                            LocalFavoriteRemovalTransition provides favoriteRemoval,
-                        ) {
-                            modelContent(bottomOverlayPadding, modelListState, openModel)
+                }
+                Box(Modifier.fillMaxSize().nestedScroll(scrollConnection)) {
+                    // 离屏页仍保留组合，但只有真实来源注册共享元素，避免同 ID 的两张卡竞争匹配。
+                    CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
+                        sharedScope, mainVisibility,
+                        enabled = placeMain && if (retainedModelId != null) sourceTag == detailSourceTag else page == pagerState.currentPage,
+                        expansionProgress = expansion,
+                        captureIdentity = { if (retainedModelId == null) initialIdentity = it },
+                    )) {
+                        val openModel: (String) -> Unit = { id ->
+                            // 同一帧挂载详情目标，源页面一直保留到共享过渡完成。
+                            if (retainedModelId == null) {
+                                detailSourceTag = sourceTag
+                                retainedModelId = id
+                                selectedModelId = id
+                                detailTransition.enter()
+                            }
                         }
-                        GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
-                        GlassNavigationItem.Settings -> SettingsScreen(
-                            bottomOverlayPadding = bottomOverlayPadding,
-                            onShowDataSource = { showDataSource = true },
-                            onShowAppearance = { showAppearance = true },
-                        )
-                        else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
+                        when (navigationItems[page]) {
+                            GlassNavigationItem.Models -> CompositionLocalProvider(
+                                LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == page),
+                                LocalFavoriteRemovalTransition provides favoriteRemoval,
+                            ) {
+                                modelContent(bottomOverlayPadding, modelListState, openModel)
+                            }
+                            GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
+                            GlassNavigationItem.Settings -> SettingsScreen(
+                                bottomOverlayPadding = bottomOverlayPadding,
+                                onShowDataSource = { showDataSource = true },
+                                onShowAppearance = { showAppearance = true },
+                            )
+                            else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
+                        }
                     }
                 }
             }
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    // 整个外壳（含底部安全区）滑出，列表留白与测量高度保持不变。
+                    .graphicsLayer { translationY = size.height * navigationHideProgress.value }
+                    .testTag("glass-navigation-motion")
+                    .then(if (navigationHidden) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
                     .windowInsetsPadding(
                         WindowInsets.navigationBars.union(WindowInsets.displayCutout)
                             .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
@@ -257,6 +289,7 @@ internal fun ModelAtlasScaffold(
                             modelListState.animateScrollToItem(0, 0)
                         }
                     },
+                    enabled = !navigationHidden,
                     modifier = Modifier.fillMaxWidth().onSizeChanged {
                         navigationHeight = with(density) { it.height.toDp().value }
                     },

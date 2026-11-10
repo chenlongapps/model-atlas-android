@@ -85,6 +85,7 @@ internal fun GlassNavigationBar(
     onModelsDoubleClick: () -> Unit,
     items: List<GlassNavigationItem>,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
     val colors = MaterialTheme.colorScheme
@@ -161,10 +162,12 @@ internal fun GlassNavigationBar(
             }
             Row(
                 modifier = Modifier.selectableGroup()
-                    .pointerInput(layoutDirection, items.size) {
+                    .pointerInput(layoutDirection, items.size, enabled) {
+                        if (!enabled) return@pointerInput
                         detectModelsDoubleClicks(isRtl, itemCount = items.size, spacing = 4.dp.toPx()) { modelsDoubleClick() }
                     }
-                    .pointerInput(pagerState, layoutDirection) {
+                    .pointerInput(pagerState, layoutDirection, enabled) {
+                        if (!enabled) return@pointerInput
                         var lastTarget = pagerState.currentPage
                         detectHorizontalDragGestures(
                             onDragStart = { lastTarget = pagerState.currentPage },
@@ -197,7 +200,7 @@ internal fun GlassNavigationBar(
                             .clip(CircleShape)
                             .testTag(item.tag)
                             .semantics {
-                                if (item == GlassNavigationItem.Models) {
+                                if (enabled && item == GlassNavigationItem.Models) {
                                     customActions = listOf(CustomAccessibilityAction(scrollToTopLabel) {
                                         onModelsDoubleClick()
                                         true
@@ -205,6 +208,7 @@ internal fun GlassNavigationBar(
                                 }
                             }
                             .selectable(
+                                enabled = enabled,
                                 selected = selected,
                                 role = Role.Tab,
                                 interactionSource = remember { MutableInteractionSource() },
