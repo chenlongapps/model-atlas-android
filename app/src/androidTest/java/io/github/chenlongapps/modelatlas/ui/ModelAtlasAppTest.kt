@@ -65,6 +65,9 @@ class ModelAtlasAppTest {
     @Test fun pageSwipeAndNavigationDragKeepSelectionAndIndicatorInSync() {
         show()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("nav-benchmarks").assertIsSelected()
+        assertIndicatorMatches("nav-benchmarks")
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("nav-compare").assertIsSelected()
         assertIndicatorMatches("nav-compare")
         compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
@@ -72,6 +75,8 @@ class ModelAtlasAppTest {
         assertIndicatorMatches("nav-settings")
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-compare").assertIsSelected()
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("nav-benchmarks").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         assertIndicatorMatches("nav-models")
@@ -422,7 +427,7 @@ class ModelAtlasAppTest {
     @Test fun largeFontAndRtlKeepLabelsAndIndicatorUsable() {
         show(fontScale = 2f, direction = LayoutDirection.Rtl)
         assertIndicatorMatches("nav-models")
-        for ((tag, label) in listOf("nav-models" to "模型", "nav-settings" to "设置")) {
+        for ((tag, label) in listOf("nav-models" to "模型", "nav-benchmarks" to "评测", "nav-compare" to "对比", "nav-settings" to "设置", "nav-debug" to "调试")) {
             val results = mutableListOf<TextLayoutResult>()
             compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
@@ -468,7 +473,7 @@ class ModelAtlasAppTest {
         val indicator = compose.onNodeWithTag("nav-indicator").fetchSemanticsNode().boundsInRoot
         val tab = compose.onNodeWithTag(tabTag).fetchSemanticsNode().boundsInRoot
         assertEquals(tab.center.x, indicator.center.x, 1f)
-        // 三栏 weight 分配整像素时可相差 1px，另留极小浮点变换误差。
+        // weight 分配整像素时可相差 1px，另留极小浮点变换误差。
         assertEquals(tab.width, indicator.width, 1.01f)
     }
 

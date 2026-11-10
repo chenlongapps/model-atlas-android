@@ -1,0 +1,35 @@
+<resources>
+    <string name="nav_benchmarks">评测</string>
+    <string name="benchmark_page_title">评测</string>
+    <string name="benchmark_overview_notice">各模型最高成绩 · 配置可能不同 · 柱条使用局部刻度</string>
+    <string name="benchmark_name_version">%1$s · %2$s</string>
+    <string name="benchmark_ranking_notice">各模型最高成绩 · 配置可能不同</string>
+    <string name="benchmark_browsing_notice">仅浏览成绩，不生成最高分排名</string>
+    <string name="benchmark_leaderboard_title">完整排行榜</string>
+    <string name="benchmark_open">查看完整排行榜</string>
+    <string name="benchmark_show_description">查看评测说明</string>
+    <string name="benchmark_close_description">关闭</string>
+    <string name="benchmark_local_scale">局部刻度 · 非零起点</string>
+    <string name="benchmark_zero_scale">局部刻度</string>
+    <string name="benchmark_scale_accessibility">图表范围 %1$s 至 %2$s；柱长按局部刻度绘制，不代表绝对比例</string>
+    <string name="benchmark_rank_accessibility">第 %1$d 名，%2$s，分数 %3$s</string>
+    <string name="benchmark_score_accessibility">%1$s，分数 %2$s</string>
+    <string name="benchmark_loading">正在读取评测…</string>
+    <string name="benchmark_read_error">无法读取本地评测</string>
+    <string name="benchmark_retry">重试</string>
+    <string name="benchmark_empty">暂无已匹配的评测数据，可在模型页更新目录后查看。</string>
+    <string name="benchmark_removed">该评测或版本已不在当前目录中。</string>
+    <string name="benchmark_no_numeric">暂无可排名的数值成绩</string>
+    <string name="benchmark_version">版本：%1$s</string>
+    <string name="benchmark_metric">指标：%1$s</string>
+    <string name="benchmark_condition_effort">推理档位：%1$s</string>
+    <string name="benchmark_category_composite">综合</string>
+    <string name="benchmark_category_agent">智能体</string>
+    <string name="benchmark_category_coding">编程</string>
+    <string name="benchmark_category_reasoning">推理</string>
+    <string name="benchmark_category_multimodal">多模态</string>
+    <string name="benchmark_category_professional">专业任务</string>
+    <string name="benchmark_category_computer">计算机操作</string>
+    <string name="benchmark_category_science">科学</string>
+    <string name="benchmark_category_other">评测</string>
+</resources>

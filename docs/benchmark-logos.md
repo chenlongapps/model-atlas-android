@@ -6,6 +6,8 @@
 
 11 个明确的评测定义 ID 对应 10 份品牌矢量及 1 份独立中性兜底图。Intelligence Index 与 GDPval-AA 的原 SVG 完全相同，显式共用资源；Terminal-Bench-Science 采用官网图标，不收录备用超宽完整字标。白色圆角底、原色、完整画布与宽高比保留，长字标使用较宽底座，不裁成正方形。
 
+总览 `BenchmarkCatalogLogo` 与详情／完整榜单 `BenchmarkLogo` 共用资源映射、各自使用适合页面的底座；尺寸与留白只在[设计规范](Design.md#评测榜单)维护，不改变原始素材或宽字标分类。
+
 | 评测定义 ID | 资源后缀（`ic_benchmark_`） | 官方素材来源 | 原 SVG SHA-256 |
 | --- | --- | --- | --- |
 | `artificial-analysis-intelligence-index-v5`、`gdpval-aa-v2.1` | `artificial_analysis` | [Artificial Analysis 主办方图标](https://artificialanalysis.ai/img/logo-icon.svg) | `132ad19b4ea8ac29a754e86f37c9b3451ca3a2f4a999c5969d4ef47e32c778aa` |
@@ -19,7 +21,7 @@
 | `terminal-bench-v4` | `terminal_bench` | [Terminal-Bench 官网 PNG favicon，本地描摹](https://www.tbench.ai/fav.png) | `ef9da853ea56a78eaf1e01c9c99fa0d25c87890eb781bafb58a15b4dbcb10c19` |
 | `vals-index-v2.2` | `vals_index` | [Vals AI 主办方字标](https://www.vals.ai/Logos/vals-full.svg) | `8fec037b8b2336bc54b0ad80a42adcdf2777fa900f39ec51c9518708c9790bf1` |
 
-OSWorld、Terminal-Bench 的 SVG 是源目录用 VTracer 0.6.15 从官方 PNG 描摹的近似轮廓，并非官方直接发布的矢量；本次只做 Android 格式转换。各标识版权归原权利方，不将品牌素材推定为 Models.dev MIT 授权，也不表示主办方背书或成绩已经核验。发布前仍需复核素材使用条款。
+OSWorld、Terminal-Bench 的 SVG 是源目录用 VTracer 0.6.15 从官方 PNG 描摹的近似轮廓，并非官方直接发布的矢量；客户端仅做 Android 格式转换。各标识版权归原权利方，不将品牌素材推定为 Models.dev MIT 授权，也不表示主办方背书或成绩已经核验。素材使用条款待复核，进度见 [TODO](../TODO.md#待验收与发布)。
 
 ## 匹配与维护
 

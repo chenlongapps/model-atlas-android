@@ -70,6 +70,7 @@ internal data class GlassNavigationItem(
 ) {
     companion object {
         val Models = GlassNavigationItem(R.string.nav_models, R.drawable.ic_nav_models_outline, R.drawable.ic_nav_models, "nav-models")
+        val Benchmarks = GlassNavigationItem(R.string.nav_benchmarks, R.drawable.ic_nav_benchmarks_outline, R.drawable.ic_nav_benchmarks, "nav-benchmarks")
         val Favorites = GlassNavigationItem(R.string.nav_favorites, R.drawable.ic_favorite, R.drawable.ic_favorite_filled, "nav-favorites")
         val Compare = GlassNavigationItem(R.string.nav_compare, R.drawable.ic_compare, R.drawable.ic_compare_filled, "nav-compare")
         val Settings = GlassNavigationItem(R.string.nav_settings, R.drawable.ic_settings, R.drawable.ic_settings_filled, "nav-settings")

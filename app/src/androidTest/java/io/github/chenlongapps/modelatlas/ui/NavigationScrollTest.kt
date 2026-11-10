@@ -99,7 +99,7 @@ class NavigationScrollTest {
         assertHidden()
         val position = position()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeLeft() }
-        compose.onNodeWithTag("nav-compare").assertIsSelected()
+        compose.onNodeWithTag("nav-benchmarks").assertIsSelected()
         assertShown()
         compose.onNodeWithTag("nav-models").performClick()
         compose.runOnIdle { assertEquals(position, position()) }

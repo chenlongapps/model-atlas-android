@@ -1,122 +1,91 @@
 # 本地目录数据
 
-## 当前实现与边界
+本文维护 `catalog.db` 的存储契约；远程 DTO 与发布校验见 [Atlas](atlas-data.md)／[Models.dev](data-source.md)，观察与 UI 状态见[架构](architecture.md)。
 
-**ModelAtlas Data 迁移后补充**：当前远程协议见 [接入契约](atlas-data.md)。`CatalogSnapshot` 在原三表之外可携带 `scores`、`definitions` 和 `release`；正式新发布必须一起存在，一次事务同时提交。无 release 的旧本地三表操作仍只替换三表，供 Debug／兼容测试使用，不启动旧在线成绩同步。
+## 表与开发基线
 
-新增 `benchmark_definitions`（定义稳定 ID、名称／版本／指标、原文／中文描述、显式兼容版本、单位／方向及原始定义元数据）、`catalog_release`（单行内容哈希／提交／发布时间）。模型新增 `descriptionZhCn`，原文不覆盖；成绩新增 `name`、`version`、`variant`。新模型 `source = model-atlas-data`，无内嵌 ID，`remoteId` 使用明确的路径 ID；服务商／服务来源仍为 `models.dev`。详情 Relation 在同一事务内读取成绩和定义。仍为未发布的 Schema v1 基线，不清库、不自动迁移旧开发安装。
+`CatalogDatabase` 使用 Room3／`AndroidSQLiteDriver`，由 Hilt 提供同一连接。仍是未发布的 **Schema v1 开发基线**，导出到 `app/schemas/`；新增列／表直接更新基线，不自动迁移旧开发库、不启用破坏性重建或清数据。旧安装可能无法打开，需开发者自行处理，不能据此自动删除收藏。
 
-成绩 `score` 改为可空 REAL，新增 `scoreText` 保存来源中的文本分数（百分号、置信区间等）；导入时二选一，文本不解析或填造数值。Debug 允许修复原值，但至少填写一种成绩。下文历史“非空数值 score”仅描述旧协议。
+源码相对于 [`data/local/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/)：
 
-规范模型新增可空 `parameters` JSON TEXT 列，保存 ModelAtlas 参数扩展的总量、每 token 激活量、来源、说明及组件。`ModelParametersLocal` 与远端 DTO、详情应用模型独立，数值为 B 单位 `BigDecimal`，通过专用数字序列化器保留十进制精度；不扩展模型服务、列表投影或收藏身份。参数变化参与实体内容比较及目录事务，详情／对比读取同一规范模型数据；协议及缺失边界见[参数量接入](atlas-data.md#模型参数量)。继续沿用 Schema v1 开发基线，旧开发库不会自动迁移或清除。
+| 表（Entity） | 主键 | 职责 |
+| --- | --- | --- |
+| `models`（`ModelEntity`） | `id` | 规范模型元数据／能力／限制／参数量／双语描述／权重，不含服务报价或内嵌成绩 |
+| `providers`（`ProviderEntity`） | `id` | 服务商身份、文档／SDK／环境变量名称，不嵌套服务列表 |
+| `model_offerings`（`ModelOfferingEntity`） | `(providerId, id)` | 服务侧能力／限制／状态、完整报价／模式／请求覆盖 |
+| `favorites`（`FavoriteEntity`） | `modelId` | 本地用户收藏、时间与最后可用身份，独立于远端快照 |
+| `benchmark_scores`（`BenchmarkScoreEntity`） | `id` | 每条模型评测配置的数值或文本原分数与元数据 |
+| `benchmark_definitions`（`BenchmarkDefinitionEntity`） | `id` | 名称／版本／指标、双语说明、兼容版本、单位／方向／边界等定义 |
+| `catalog_release`（`CatalogReleaseEntity`） | `id = 1` | 内容哈希、git 提交、发布时间，不可排序的发布身份 |
+| `benchmark_version`（`BenchmarkVersionEntity`） | `id = 1` | 旧整数版本兼容测试，不参与生产更新判断 |
 
-下文涉及旧整数版本独立成绩初始化的说明仅适用于历史兼容 DAO／测试，不是当前生产同步。Debug 仍只开放原五表，定义与发布状态不提供编辑入口；原统计仍仅计算三张目录表。
-
-已定义并接通三张 Room3 目录实体、独立收藏表、本地值对象和 JSON 列转换器；`CatalogDatabase`、`CatalogDao` 与 `RoomCatalogStore` 构成目录存储，支持本地优先读取、后台检查与主动更新。收藏由 `FavoriteDao` 与 `RoomFavoriteRepository` 独立管理，不进入远端快照。
-
-- `CatalogMapper` 实现 DTO → Entity，保留整个目录与完整复杂字段；数据库名为 `catalog.db`，由 Hilt 配置 `AndroidSQLiteDriver`。
-- Repository 并行获取 Atlas 发布包和 Models.dev 服务响应，均成功后形成完整快照；后台检查发现规范模型 ID 增删时暂存完整快照，待用户确认；ID 集合不变、仅内容变化时静默以全量快照事务更新目录、成绩、定义和发布状态，不显示更新提醒。主动下拉刷新直接同步完整变化。规范模型与服务商左连接 Flow 驱动真实 LLM 列表。
-- `hasCatalog()` 用三表存在性查询判断本地是否有记录，不用筛选后的 LLM 数量代替；`readCatalog()` 在单个事务中读取三表完整 Entity，供目录比较，不改变 Schema v1。`CatalogSnapshot.hasSameModelIdsAs()` 仅比较规范模型 `id` 集合，决定是否需要确认增删，不比较内容或服务商／模型服务。`hasSameContentAs()` 仍按主键比较全部内容、忽略 `fetchedAtEpochMillis` 与字典顺序，其他已映射字段与缺失值语义均保留，供静默同步和主动刷新判断是否写库。待应用快照仅在仓库内存暂存，不增加持久化表或迁移；相同内容不重复写库。
-- 收藏、筛选状态、最低价等业务数据不混入目录实体；当前不建设多数据源框架。
-- 报价投影 `observeOfferingPriceRows()` 只取显式关联到规范模型且 `pricing` 非空的服务，按 `(canonicalModelId, providerId, id)` 排序；规范模型元数据仍由 `observeModelRows()` 单独提供，两条 Flow 在仓库层合并，互不覆盖。
-- 详情使用 `observeModelDetail(id)`：按稳定 ID 查询规范模型，通过 Room3 `@Relation(parentColumns / entityColumns)` 读取所有显式关联的服务和服务商，整个嵌套读取在 `@Transaction` 内完成，避免目录替换时混入不同快照。无报价服务不排除，无关联模型返回空服务列表，不存在模型返回 null；只新增查询与投影，不修改 Schema v1。
-- 测试目录中的 `CatalogSchemaTestDatabase` 仅用于 Room KSP 编译校验，不创建运行时数据库。
-- Debug 顶层调试页通过既有 `CatalogStore.readCatalog()` 在 IO dispatcher 读取一致的完整快照，仅保留三张表的数量；切入且分页停稳、手动重读及刷新结束后读取，离屏预组合不读库，不做 LLM 筛选或持续观察。手动刷新仍走正式仓库的原子提交。独立数据库管理子页另支持五表逐条编辑，见下文；两处统计口径不同。
-
-## Debug 数据库管理
-
-- 仅 Debug 的调试页提供“数据库管理”独立子页；概览显示 `catalog.db`、Schema 版本、数据库／WAL／SHM 文件读取时的近似大小和五张业务表各自的全量行数，不包含 DataStore 或 Room 内部表。按主键稳定排序，每页 50 条，可按主键或名称查询，成绩表按主键或 benchmark ID 查询，不轮询或主动联网。
-- 五表均支持逐条新增、查看、编辑、删除；所有列可查看及编辑，新增时填写主键，已有记录的主键不可修改。可空列显式区分 SQL NULL、空字符串及空 JSON 集合；可空布尔值为 NULL／0／1，整数校验 64 位范围，成绩只接受有限浮点数。JSON 按 `CatalogTypeConverters` 的本地类型校验，不接受远端 DTO 格式；仅更新更改的列，未改 JSON 保留原始内容及未知字段。已有损坏 JSON 可读取并修复，未改时不强制重写。
-- `DebugDatabaseStore` 只接受五表及列的固定白名单，校验实际表结构与主键后，通过同一 `CatalogDatabase` 的 Room3 读／写连接及事务执行参数化语句；Schema 不一致禁用操作。写入和删除在事务内比对原始整行，避免覆盖已经变化的记录；删除服务商前展示将级联删除的模型服务数量，并在事务中复核。所有删除需确认，收藏删除不可撤销；不提供任意 SQL、批量清空或恢复。
-- 这是数据库行操作，不调用收藏业务的新增校验，也不额外同步收藏身份：可构造不可用收藏。删除规范模型不删除服务或收藏；删除服务商按外键级联服务。目录刷新仍按既有事务更新可用收藏身份，不删除收藏。目录自动检查、待应用更新或手动刷新可在编辑前后覆盖目录手动修改；没有暂停同步，也没有为调试改动新增持久覆盖层。
-- Room 变更通知驱动现有页面；提交后 `onCatalogMutatedExternally()` 只读取本地并按需恢复模型观察，保留待应用更新和查询，不发起联网。管理页可查看／编辑的 `providerOverride` 与 `experimentalModes` 可能含请求 body／headers，默认隐藏、主动展开；不加入复制诊断信息或日志。草稿仅保留在 ViewModel 内存，不写入 SavedState、数据库或剪贴板；进程结束后丢失。
-- `DebugDatabaseSchemaTest`／`DebugDatabaseViewModelTest` 覆盖字段、JSON、冲突反馈、返回及防重复；`DebugDatabaseStoreTest` 在独立测试数据库覆盖 CRUD、分页、SQLite 外键、级联、过期记录冲突、Room Flow、结构不匹配和文件重开；`DebugDatabaseScreenTest` 覆盖操作、恢复、系统返回及敏感字段隐藏。具体执行结果见 [TODO.md](../TODO.md)。
-
-## 三张表的职责
-
-下表仅列出远端目录；用户收藏与评测成绩是独立表，见下文。
-
-源码路径相对于 [`data/local/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/)。
-
-| 实体 | 表名 | 主键 | 内容 |
-| --- | --- | --- | --- |
-| [`ModelEntity`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/entity/ModelEntity.kt) | `models` | `id` | 规范模型的元数据、能力、token 限制、权重和链接，不包含服务商报价或评测 |
-| [`ProviderEntity`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/entity/ProviderEntity.kt) | `providers` | `id` | API 服务商名称、地址、文档、SDK 包与环境变量名称，不嵌套模型服务列表 |
-| [`ModelOfferingEntity`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/entity/ModelOfferingEntity.kt) | `model_offerings` | `(providerId, id)` | 某服务商的模型服务，独立保存能力、token 限制、生命周期、报价、推理选项和模式 |
-
-模型与服务商不是同一种实体；当前远程 DTO 没有独立的开发商字段，不根据 API 服务商或 ID 前缀认定开发商。列表 LAB 仅按界面约定展示稳定 ID 的前缀标签，不改变存储或关联规则。
+“三表”指目录模型／服务商／服务，“五表”指 Debug 开放编辑的原业务表，不代表数据库总表数。
 
 ## 标识、关联与来源
 
-以下约定由 `CatalogMapper` 显式实现；DTO 本身仍只描述远程结构，不定义本地主键。
+- 模型 `id` 为 Atlas `models.json` 路径键，无内嵌 ID；其 `remoteId` 明确取路径键。服务商 ID 为 `api.json` 顶层键，服务 ID 为该服务商模型字典键，`remoteId` 另留 DTO 条目内 ID，不假定两者相同。
+- 服务复合主键只在服务商内唯一，不使用自增或拼接；`providerId` 外键级联服务，复合索引已以前缀覆盖，不再建重复单列索引。
+- `canonicalModelId` 仅保留显式关联、可空、普通索引但无模型外键：来源暂不同步或模型缺失仍可保存服务，不以模糊匹配修正。
+- 当前模型 `source = model-atlas-data`，服务商／服务为 `models.dev`；来源字段不代表支持任意多来源共用 ID。
+- `fetchedAtEpochMillis` 必须由调用方显式给 Unix 毫秒，同一响应保持一致；`sourceLastUpdated` 保留原字符串，不等同抓取时间或价格生效时间。
+- 能力 Boolean?，限制 Long?，日期／类型／状态／模态保留开放字符串；缺失、false、零、空集合各自保存。LAB 是 UI 的 ID 前缀标签，不新增已核实开发商关联。
 
-- `ModelEntity.id` 使用 `models.json` 的顶层字典键。
-- `ProviderEntity.id` 使用 `api.json` 的顶层字典键。
-- `ModelOfferingEntity.id` 使用该服务商 `models` 字典的键；它只在该服务商内唯一，因此与 `providerId` 构成复合主键，不使用自增或字符串拼接 ID。
-- 三种记录均以 `remoteId` 独立保留 DTO 条目内的 `id`，不把字典键与条目 ID 当成必然相同的字段。发现不一致时不能通过名称、前缀或模糊匹配修正关联。
-- `providerId` 是指向 `providers.id` 的外键，删除服务商时级联删除其服务。复合主键以 `providerId` 开头，不再建立重复的单列索引。
-- `canonicalModelId` 只保留上游显式的 `canonical_model_id`，可空并建立普通索引，**不设数据库外键**。两个端点不同步、规范模型未收录或记录暂缺时，仍可保存服务及其原始关联。后续查询采用可选关联，不丢弃未匹配的服务。
-- `source` 当前默认为 `models.dev`；数据库只面向当前单一目录来源，不因存在该字段就假定支持多个来源共用 ID。
-- `fetchedAtEpochMillis` 是调用方必须显式传入的本地获取时间（Unix 毫秒）；同一响应中的记录应使用一致的获取时间，不在实体构造时读取系统时钟。
-- `sourceLastUpdated` 保留模型或服务的上游 `last_updated` 字符串，不代表本地刷新时间或价格生效时间。日期和知识截止时间不强制转换成完整日期。
+## 快照事务与查询
 
-服务自身的字段使用其 DTO 的信息，不用规范模型覆盖缺失的服务能力或限制。`replaceCatalog()` 在同一事务中删除旧服务与模型、upsert 服务商、插入新模型与服务，再删除本次快照不存在的服务商。不使用服务商 `REPLACE`，避免意外级联；任一步失败时三表一起回滚。有效空快照会清空目录。
+- `CatalogSnapshot` 包含三目录表，正式 Atlas 发布须同时含 `scores`／`definitions`／`release`。`readCatalog()` 同事务读取；有 release 才携带新发布附属数据，无 release 的旧三表快照供 Debug／兼容测试，不启动旧同步。
+- `replaceCatalog()` 事务顺序为删旧服务／模型、upsert 服务商、写新模型／服务、删不在新快照的服务商；不对服务商用 REPLACE，防意外级联。正式发布还替换成绩／定义／发布状态，并更新仍可用的收藏身份，任一步失败整体回滚。
+- 合法空发布可清目录／成绩，不删除收藏；无 release 的兼容三表替换不碰成绩。Debug 改目录／成绩可能被正式更新覆盖，不加持久覆盖层。
+- `hasCatalog()` 判断三表任一记录存在，不以 LLM 筛选结果替代；首次导入还检查发布标记，已提交空包不重复初始化。
+- `hasSameModelIdsAs()` 只决定模型增删确认；`hasSameContentAs()` 按稳定主键比全部映射内容及发布身份，忽略抓取时间／字典顺序。候选仅在仓库内存，内容相同不写库，更新流程见[架构](architecture.md#数据与状态流转)。
 
-`observeModelRows()` 通过 `canonicalModelId` 左连接，按规范模型名称与 ID、服务商名称与 ID 排序并去重；没有关联的模型保留空服务商，未匹配的服务仍保存在表中但不生成伪规范模型。投影包含规范模型的发布时间、上下文／输出 token 限制、输入／输出模态、开放权重与许可，不取服务覆盖值。`observeOfferingPriceRows()` 是另一条投影，只返回 `canonicalModelId`、服务商 ID 与名称、服务内键和 `pricing`，不重复规范模型字段，也不在 SQL 内选择档位或报价。列表映射层按规范模型 ID 去重、执行 LLM 收录规则并按报价投影分组挑选展示报价，不再将服务商与描述传递给列表界面；最终列表顺序由映射层按发布时间倒序决定（最新在前，缺失或空白发布时间排在最后，相同时间按名称和稳定 ID 稳定排序），DAO 的名称排序仅作为去重前的稳定输入；来源规则见[数据源说明](data-source.md)。
+| 查询 | 读取边界 |
+| --- | --- |
+| `observeModelRows()` | 模型左连接服务商，保留无关联模型，不把未匹配服务变成模型；只取规范字段、不含价格 |
+| `observeOfferingPriceRows()` | `canonicalModelId` 与 `pricing` 非空的服务，按模型／服务商／服务键稳定返回；不在 SQL 挑价格／档位 |
+| `observeModelDetail(id)` | 单事务嵌套 Relation：模型、全部关联服务／服务商、成绩及可选定义；无价不排除，无服务合法，不存在返回 null |
+| `observeBenchmarkRankings()` | 单事务批量定义／成绩／当前模型最小身份，避免逐模型读取或不同发布 Flow 拼接 |
+
+列表两条投影由仓库组合后去重、收录、选报价、按发布时间排序；DAO 的名称顺序只是稳定输入，不是最终浏览排序。
 
 ## 本地收藏
 
-- `favorites` 以规范模型 ID（`modelId`）为主键，保存 `favoritedAtEpochMillis`、最后可用的 `name` 和 `lab`。不保存历史参数、报价、完整详情或服务商选择，不按同名迁移 ID。
-- 不设指向 `models` 的外键：目录全量替换、下架或空快照都不删除收藏。目录比较、`hasCatalog()` 和调试顶层的目录统计仍只计算三张目录表；数据库管理概览单独显示收藏表。
-- `FavoriteDao.add()` 在事务内读取并校验当前模型及 LLM 收录规则，再以 IGNORE 插入；重复添加不改变时间。删除幂等；重新收藏使用新的时间。收藏投影按收藏时间倒序，同时间按规范 ID 稳定排序；模型目录对可用收藏使用目录发布时间顺序。
-- `CatalogDao.replaceCatalog()` 在原有事务内，仅为本次仍可用的已收藏模型更新名称与 LAB；不改变收藏时间，不可用时保留最后身份，失败时与目录一起回滚。
-- `observeFavorites()` 通过嵌套 Relation 在单个事务内读取收藏、可选规范模型及关联服务／服务商；仓库复用 LLM 收录和默认报价映射，避免独立 Flow 在刷新时短暂拼接出失效模型或旧价格。不存在或不再收录时只返回收藏身份，同 ID 恢复后重新显示当前卡片。
-- 项目尚未发布，继续使用 Schema **v1** 开发基线，直接更新导出的 `1.json`，不提供旧开发 Schema 的迁移，也不启用破坏性重建兜底。已有旧 Schema 的开发安装可能无法打开，需由开发者自行处理；应用不会自动删除收藏或其他数据。本地持久化不承诺卸载重装或跨设备恢复。
-- `FavoriteDatabaseTest` 覆盖排序／重复／重新收藏、最后可用身份、下架与重新出现、零价与报价消失、失败回滚、刷新并发、不可用收藏文件重开。ViewModel 与界面另覆盖本地重试、保存失败不返回、防重复提交及来源返回。
+- `favorites` 无目录外键，不参与远端替换；只存时间、最后可用 `name`／`lab`，不留历史参数／价格／完整详情，不按同名迁移 ID。
+- `FavoriteDao.add()` 事务校验当前模型及 LLM 收录，以 IGNORE 插入；重复不改时间，删除幂等，重新收藏记新时间。
+- 目录事务只更新仍可用收藏身份、保留收藏时间；下架、空包不删收藏。投影按收藏时间倒序、同时间规范 ID 兜底，模型目录对可用收藏改用目录发布时间顺序。
+- `observeFavorites()` 同事务 Relation 读收藏、可选模型及服务，复用收录／报价映射；不存在或不收录只返历史身份，同 ID 恢复后显示当前卡片。
+- 这里只保证本地持久化，不承诺卸载重装／跨设备恢复；操作／转场边界见[收藏状态](architecture.md#收藏的数据与状态)。
 
 ## 独立评测成绩
 
-- `benchmark_scores` 以 `id` 为主键，包含非空 `modelId`、`benchmarkId`，原始数值 `score` 或文本 `scoreText`，以及可空的 `name`、`version`、`variant`、`cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。数值成绩与 cost 为 SQLite REAL / Kotlin Double；cost 缺失为 null，明确的零保留，费用口径尚未确定，不用于计算或详情展示。文本成绩不提取数值；布尔值保留未知状态，日期和类型保留来源原文，不推断不同配置的可比性。
-- 分别索引模型和 benchmark ID；不同 ID 的成绩可以共享模型与 benchmark。新来源标题取原始 `name`（历史行回退 benchmarkId）；ID 按模型路径和成绩数组位置生成。唯一精确匹配时关联 `benchmark_definitions`，未匹配身份以 `unmapped:` 隔离、不借用定义。模型 ID 必须与目录规范 ID 精确对应，不按名称匹配。正式发布成绩参与整包事务，但不参与目录存在性或三表统计，也不设模型外键。有效空发布可替换所有成绩，不删除收藏。
-- `catalog_release` 保存新发布内容哈希并与目录／成绩／定义同事务提交；哈希不能排序。旧 `benchmark_version` 的递增版本和首次保留手动成绩规则仅保留在兼容 DAO／测试中，不被生产同步调用。无 release 的旧三表替换不触碰成绩；正式新发布完整替换，包括 Debug 手动修改。
-- 开发基线已移除 `models.benchmarks` 列，不迁移旧内嵌成绩。新增的版本表直接纳入 Schema v1；不提供旧开发安装迁移，也不启用破坏性重建。
-- 详情以事务 Relation 读取模型、服务、成绩及定义，避免拼接不同版本的独立 Flow；来源与快照契约见 [ModelAtlas Data 接入](atlas-data.md)。
+- `benchmark_scores` 的 `modelId`／`benchmarkId` 非空，无模型外键，分别建索引；一个模型／评测允许多个配置，ID 按模型路径＋来源数组下标生成，保留原身份。
+- 原数值 `score` 为可空 REAL／Double，文本 `scoreText` 原样保存、导入二选一；不提取文本中心值或补零。Debug 至少填写一种，有限数值才合法。
+- 可空元数据：`name`、`version`、`variant`、`cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。cost 为 REAL／Double、口径与币种未定，不计算或显示；未知布尔／日期保留，不推断可比性。
+- 新成绩名称取 name、旧记录回退 benchmarkId；唯一精确匹配才关联定义，否则 `unmapped:` 隔离，不套单位／方向／中文。匹配规则见[接入契约](atlas-data.md#成绩及本地化)。
+- 成绩／定义／release 正式同事务替换，详情同事务关联；旧 `models.benchmarks` 已移除，旧版本表仅兼容回归，不复用其递增版本逻辑。
 
 ## 列与本地 JSON
 
-名称、描述、系列、类型、日期、能力、token 限制以及服务的状态均为普通列；能力使用 `Boolean?`，token 数使用 `Long?`。类型、状态和模态保持开放字符串，不使用封闭枚举。
+值对象位于 `local/model/`，与 DTO／应用模型独立；`CatalogTypeConverters` 使用 Room3 `@ColumnTypeConverter`／`@ColumnTypeConverters`。本地为驼峰 JSON，不直接存远端 DTO。
 
-以下字段通过 [`CatalogTypeConverters`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/converter/CatalogTypeConverters.kt) 存为 JSON TEXT：
-
-| 实体 | JSON 字段 |
+| Entity | JSON TEXT 字段 |
 | --- | --- |
 | `ModelEntity` | `inputModalities`、`outputModalities`、`weights`、`links`、`parameters` |
-| `ProviderEntity` | `environmentVariables`（仅变量名称，不是用户密钥） |
+| `ProviderEntity` | `environmentVariables`（名称，不是用户密钥） |
 | `ModelOfferingEntity` | `inputModalities`、`outputModalities`、`reasoningOptions`、`interleaved`、`pricing`、`providerOverride`、`experimentalModes` |
+| `BenchmarkDefinitionEntity` | `compatibleVersions` |
 
-- 值对象位于 [`local/model/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/local/model/)，不引用远程 DTO；本地 JSON 使用自己的驼峰字段名，不能直接把远程 JSON 写入列中。
-- Room3 使用 `@ColumnTypeConverter` 和 `@ColumnTypeConverters`，转换器已注册到各实体。
-- `null` 写为 SQL NULL，与空列表 `[]`、空字典 `{}`、存在但所有价格缺失的报价对象区分。
-- 未知对象字段允许忽略；非法 JSON、已知字段的错误类型和未知的本地密封变体抛出序列化异常，不静默变成空列表、零价或不支持。
-- `InterleavedLocal` 使用稳定的本地变体标记：`{"type":"toggle","enabled":false}` 或 `{"type":"field","field":"reasoning_content"}`；不复用远程的布尔值 / 对象格式。
-- `reasoningOptions.values` 保留列表中的 `null`；模式名称保持字典键；覆盖参数的 `body` 保留任意 JSON 对象，headers 保留字符串字典，仅存储、不执行。
+- null 写 SQL NULL，区分 `[]`、`{}`、全字段缺失的价格对象；未知对象字段可忽略，非法 JSON／已知类型错误／未知密封变体抛错，不伪造成默认值。
+- `InterleavedLocal` 用 `{"type":"toggle","enabled":false}` 或 `{"type":"field","field":"reasoning_content"}`，不是远端布尔／对象格式；推理选项保留 null，模式保持字典键，body／headers 仅存储。
+- `ModelParametersLocal` 只在规范模型，可空 TEXT；总量／激活量 BigDecimal、B 单位，专用数字序列化器不经过 Double。来源／说明／组件原顺序保留，不扩服务／收藏／列表投影。数值与来源校验见[参数契约](atlas-data.md#模型参数量)。
+- `OfferingPricingLocal` 分开保存七类单价、完整 tiers、旧兼容字段及模式价，不落库“选中报价”或自动最低价；计价解释见[价格语义](data-source.md#报价范围与适用条件)。
+- JSON 当前不承担复杂 SQL 筛选／排序；将来明确需要再评估列化，不假定设备具备 SQLite JSON 扩展。
 
-JSON 字段目前不承担复杂 SQL 筛选或排序。未来明确需要按单价、模态等执行数据库查询时，再评估列化或拆表，不依赖设备一定具备特定 SQLite JSON 扩展。
+## Debug 数据库管理
 
-## 报价与缺失值
-
-`OfferingPricingLocal` 保存输入、输出、缓存读写、音频输入输出、推理单价，以及完整的 `tiers` 条件和旧版 `contextOver200k`。模式报价与基础报价分别保存，不计算统一最低价，不自动合并或选择档位。
-
-- 目录报价使用 `Double?`，不是财务结算类型。
-- 缺失价格与明确的 `0`、缺失能力与明确的 `false`、缺失集合与空集合均分别保存。
-- LLM 报价按 USD / 百万 tokens 理解；不能据此为非 LLM 推导可比较的 token 价格。
-- 精确门槛、旧字段兼容、缓存条件、推理计费与展示约束以[数据源说明](data-source.md)为准，本地存储不增加计价解释。
-- 展示报价由映射层按规范模型 ID 分组后选取，不在数据库或 DAO 内决定展示哪一家服务商，也不落库“选中报价”之类的派生状态。
-
-## 已有验证与后续测试
-
-- `CatalogTypeConvertersTest` 覆盖全部转换器的空值和往返转换、空集合 / 对象、零价、精确档位与旧字段、可空推理选项、交错推理变体、动态模式、自由 JSON、未知字段和非法数据。
-- `CatalogEntitiesTest` 覆盖可选字段默认未知、独立标识、显式获取时间、服务自身的能力 / 限制，以及超出 Int 的 token 数和不完整日期。
-- `CatalogSchemaTestDatabase` 通过 `app/build.gradle.kts` 中的 `kspTest` 显式启用 Room 处理器，让测试编译阶段校验五实体的字段类型、复合主键、外键、索引和转换器声明；这不等同于数据库读写或级联删除测试。
-
-`androidTest` 的 `CatalogDatabaseTest` 验证实际 SQLite 读写、跨服务商重复服务 ID、显式与缺失关联、快照替换、外键失败时整笔回滚和文件数据库重开，并验证完整快照读取、目录存在性查询、报价投影只取显式关联且有报价的服务、未匹配报价行不会变成模型、无报价时不生成报价行；详情查询另覆盖所有显式关联服务（含无报价）、服务商嵌套读取、无关联模型和模型移除。生产 Schema v1 导出到 `app/schemas/`，未增加版本号。目录比较、模型增删待确认且不写库、内容静默同步、应用快照、离线展示和刷新失败保留数据由仓库／ViewModel 单元测试覆盖。详情字段精简不删除底层记录级时间、完整报价或其他元数据；参数量现从 Atlas 扩展进入独立 JSON 列。目录页统一更新时间仍未实现。任务进度只在 [TODO.md](../TODO.md) 维护。
+- 仅 Debug 开放原五表逐条 CRUD，定义／release 不开放；顶层统计只算三目录表，管理概览另算五表及库／WAL／SHM 近似大小，不含 DataStore 或 Room 内部表。
+- 按主键稳定分页、每页 50，主键／名称搜索，成绩按主键／benchmark ID；不轮询、不联网、不任意 SQL／批量清空。新增填写主键，已有主键不可改；显式 SQL NULL、空字符串／集合、可空布尔 NULL／0／1，整数校验 64 位。
+- `DebugDatabaseStore` 用同一 Room 连接、固定表／列白名单、参数化语句和事务，实际 Schema／主键不符禁操作。写删比较原始整行避免覆盖并发修改，服务商级联数量删除前显示、事务复核；所有删除确认，收藏不可撤销。
+- 仅写改变列，未改 JSON 不重写／丢未知字段；损坏 JSON 可查看修复，输入按本地类型校验，参数按相同数值／来源规则，不接受远端蛇形结构替代。
+- 行编辑不走收藏业务校验／身份同步，可构造不可用收藏；删模型不删服务／收藏，删服务商级联服务。刷新仍同步可用身份，可能覆盖调试改动，不暂停自动检查。
+- `providerOverride`／`experimentalModes` 默认隐藏可主动展开，不入诊断复制／日志；草稿只在 ViewModel 内存，配置变化可保留、进程死不恢复，不写 SavedState／库／剪贴板。
+- 提交后 `onCatalogMutatedExternally()` 仅恢复本地观察并保留待更新提示，不二次联网。测试入口集中于[分级测试](testing.md)，实际执行／遗留问题只在 [TODO](../TODO.md#待验收与发布)与历史记录维护。

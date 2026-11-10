@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -80,6 +81,11 @@ import io.github.chenlongapps.modelatlas.ui.model.ModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
 import io.github.chenlongapps.modelatlas.ui.model.rememberRetainedModelVisibility
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkRoute
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkScreen
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkLeaderboardRoute
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkLeaderboardScreen
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkUiState
 import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareRoute
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareScreen
@@ -103,6 +109,8 @@ fun ModelAtlasApp(
         debugContent = { bottomPadding, isVisible, onOpen -> DebugFeature.Content(bottomPadding, isVisible, onOpen) },
         databaseContent = { onClose -> DebugFeature.DatabaseContent(onClose) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
+        benchmarkContent = { bottomPadding, isVisible, onOpen -> BenchmarkRoute(bottomPadding, isVisible, onOpen) },
+        leaderboardContent = { id, onBack -> BenchmarkLeaderboardRoute(id, onBack) },
     ) { bottomOverlayPadding, listState, onModelClick ->
         ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
     }
@@ -115,6 +123,12 @@ internal fun ModelAtlasScaffold(
     detailContent: @Composable (modelId: String, onBack: () -> Unit) -> Unit = { id, onBack -> ModelDetailRoute(id, onBack) },
     debugContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean, onOpenDatabase: () -> Unit) -> Unit = { _, _, _ -> },
     databaseContent: @Composable (onClose: () -> Unit) -> Unit = {},
+    benchmarkContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean, onOpen: (String) -> Unit) -> Unit = { padding, _, onOpen ->
+        BenchmarkScreen(BenchmarkUiState(isLoading = false), onOpen, bottomOverlayPadding = padding)
+    },
+    leaderboardContent: @Composable (boardId: String, onBack: () -> Unit) -> Unit = { id, onBack ->
+        BenchmarkLeaderboardScreen(BenchmarkUiState(isLoading = false), id, onBack)
+    },
     compareContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean) -> Unit = { padding, visible ->
         ModelCompareScreen(ModelCompareUiState(), bottomOverlayPadding = padding, isVisible = visible)
     },
@@ -128,7 +142,7 @@ internal fun ModelAtlasScaffold(
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
-        listOf(GlassNavigationItem.Models, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
+        listOf(GlassNavigationItem.Models, GlassNavigationItem.Benchmarks, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
     }
     val pagerState = rememberPagerState(pageCount = { navigationItems.size })
     val modelListState = rememberLazyListState()
@@ -158,6 +172,8 @@ internal fun ModelAtlasScaffold(
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showDatabase by rememberSaveable { mutableStateOf(false) }
+    var selectedBenchmarkId by rememberSaveable { mutableStateOf<String?>(null) }
+    val leaderboardStates = rememberSaveableStateHolder()
     var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailSourceTag by rememberSaveable { mutableStateOf(GlassNavigationItem.Models.tag) }
     // ID 是可保存的导航状态；身份快照仅在当前进程的页面交接期间使用。
@@ -174,7 +190,7 @@ internal fun ModelAtlasScaffold(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || showAppearance || showDatabase || retainedModelId != null
+    val subpageVisible = showDataSource || showAppearance || showDatabase || selectedBenchmarkId != null || retainedModelId != null
     LaunchedEffect(subpageVisible, navigationScroll) { navigationScroll.resetTracking() }
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition) {
@@ -193,6 +209,7 @@ internal fun ModelAtlasScaffold(
             onBackCancelled = { detailTransition.cancelBack() },
             onBackCompleted = {
                 if (retainedModelId != null) detailTransition.exit()
+                else if (selectedBenchmarkId != null) selectedBenchmarkId = null
                 else if (showAppearance) showAppearance = false
                 else showDataSource = false
             },
@@ -204,7 +221,7 @@ internal fun ModelAtlasScaffold(
         val transitioning = detailTransition.active || mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
             detailVisibility.transition.currentState != detailVisibility.transition.targetState ||
             mainVisibility.transition.isRunning || detailVisibility.transition.isRunning || isTransitionActive
-        val placeMain = !showDataSource && !showAppearance && !showDatabase && (selectedModelId == null || transitioning)
+        val placeMain = !showDataSource && !showAppearance && !showDatabase && selectedBenchmarkId == null && (selectedModelId == null || transitioning)
         LaunchedEffect(selectedModelId, transitioning, detailVisibility.transition.currentState) {
             if (selectedModelId == null && !transitioning && detailVisibility.transition.currentState == EnterExitState.PostExit) {
                 // 共享覆盖层也完成交接后，才允许收藏来源卡片开始自己的退出动画。
@@ -252,6 +269,10 @@ internal fun ModelAtlasScaffold(
                                 modelContent(bottomOverlayPadding, modelListState, openModel)
                             }
                             GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
+                            GlassNavigationItem.Benchmarks -> benchmarkContent(
+                                bottomOverlayPadding,
+                                pagerState.settledPage == page && (!subpageVisible || selectedBenchmarkId != null),
+                            ) { selectedBenchmarkId = it }
                             GlassNavigationItem.Settings -> SettingsScreen(
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onShowDataSource = { showDataSource = true },
@@ -304,6 +325,11 @@ internal fun ModelAtlasScaffold(
         }
         if (showDatabase) {
             databaseContent { showDatabase = false }
+        }
+        selectedBenchmarkId?.let { id ->
+            leaderboardStates.SaveableStateProvider(id) {
+                leaderboardContent(id) { selectedBenchmarkId = null }
+            }
         }
         retainedModelId?.let { id ->
             RetainedModelPage(placed = true, interactive = selectedModelId != null && detailTransition.interactive) {

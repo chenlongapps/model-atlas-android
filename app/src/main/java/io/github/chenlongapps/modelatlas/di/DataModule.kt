@@ -21,6 +21,8 @@ import io.github.chenlongapps.modelatlas.data.remote.ModelsDevJson
 import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasDataSource
 import io.github.chenlongapps.modelatlas.data.remote.atlas.HttpAtlasDataSource
 import io.github.chenlongapps.modelatlas.data.repository.DefaultModelRepository
+import io.github.chenlongapps.modelatlas.data.repository.BenchmarkRepository
+import io.github.chenlongapps.modelatlas.data.repository.RoomBenchmarkRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.RoomFavoriteRepository
@@ -45,6 +47,9 @@ annotation class IoDispatcher
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class DataBindings {
+    @Binds
+    abstract fun benchmarks(repository: RoomBenchmarkRepository): BenchmarkRepository
+
     @Binds
     abstract fun atlas(source: HttpAtlasDataSource): AtlasDataSource
 

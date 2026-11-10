@@ -1,48 +1,56 @@
 # 分级测试与定向回归
 
-**状态：已采用分级验证规则。** 不删除现有测试、不更换框架；本次仅调整验证流程，不代表应用测试已重新通过，也未测量节省时长。环境要求、分级边界和构建规范以 [AGENTS.md](../AGENTS.md#构建与验证) 为准，既有覆盖见[架构说明](architecture.md#现有单元测试)。
+构建环境、分级要求与发布命令以 [AGENTS.md](../AGENTS.md#构建与验证) 为准；本文维护选测入口、执行方式及结果判定，不记录历史通过总数。执行状态见 [TODO](../TODO.md#待验收与发布)，以往记录见[历史](archive/development-history.md)。
 
-## 1. 先选范围，再执行
+## 先选范围
 
-每轮先列出改动影响、拟执行的类／方法及扩大范围的原因，不从全量模拟器测试开始。
+先列影响与拟执行类／方法，小改可选方法，功能完成补相关类及导航／返回链路；共享组件、全局主题／导航、存储、依赖或构建的大范围修改扩大回归。以下是起点，不是每次全跑的套件；测试源码为 `app/src/test/`、`src/testDebug/`、`src/androidTest/`。
 
-| 改动 | 优先选择 | 需要补充时 |
+| 改动 | 优先测试 | 按影响追加 |
 | --- | --- | --- |
-| 纯文档 | 链接、命令和描述一致性检查 | 不启动模拟器、不构建应用 |
-| 搜索／筛选 | `ModelListQueryTest`、`ModelListViewModelTest` 中相关用例；UI 变化加 `ModelCatalogControlsTest` | 卡片／列表状态变化加 `ModelListScreenTest`；切页恢复变化加外壳相关用例 |
-| 模态格式兼容 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、Query／ViewModel；保留 null／空／未知、方向、旧 MIME 条件恢复 | 真实随包格式经过生产映射后覆盖列表图标、详情头部／概览、对比、筛选；`AtlasCatalogIntegrationTest` 验证已有缓存与收藏无需联网或改写原值 |
-| 详情字段／布局 | `ModelDetailMapperTest`、`ModelDetailViewModelTest` 中相关用例及 `ModelDetailScreenTest` | 入口／返回／恢复加 `ModelDetailNavigationTest`；共享身份或容器布局变化加 `ModelSharedTransitionTest` 相关用例 |
-| 详情评测轻量卡／Logo | `BenchmarkPresentationTest`、`BenchmarkLogoTest`、`ModelDetailMapperTest`、`AtlasCatalogMapperTest`；一位小数舍入／整数零分／文本原样、字母顺序／同名原始数值降序／平分稳定／文本与缺失置后、定义 ID 透传、未知／新版本兜底、底层字段不丢失 | `ModelBenchmarkCardTest` 验证全资源加载、深浅原色白底、一位小数视觉／读屏、明示单位／复合文本／条件语义／缺失及窄屏双倍字号 RTL；`ModelDetailScreenTest` 和详情返回链路覆盖字母顺序／同名配置分数降序、标签、滚动及移除字段 |
-| 对比 | `ModelCompareQueryTest`、`ModelCompareViewModelTest`、`ModelCompareScreenTest` 中相关用例 | 默认报价规则变化再覆盖价格映射及列表展示 |
-| 收藏 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`FavoritesScreenTest` 中相关用例 | 存储变化加 `FavoriteDatabaseTest`；返回动画变化加共享转场及零动画用例 |
-| 外观／设置 | `AppearanceViewModelTest`、`AppearanceColorTest`、`SettingsRepositoryTest` 及对应界面用例 | 全局主题变化覆盖 `ModelAtlasThemeTest` 和主要页面浅深色；持久化／备份变化补对应测试 |
-| 数据解析／映射／仓库 | 对应 Parser、Mapper、Repository 单元测试 | Room 查询／事务变化加 `CatalogDatabaseTest`／`FavoriteDatabaseTest`；共享字段变化覆盖所有受影响消费者 |
-| 独立 Benchmark | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`；实际生成的随包字节由 Kotlin 解析并核摘要 | `BenchmarkIntegrationTest` 覆盖隔离 Room、离线重开、Python v3 原字节经生产 HTTPS source（注入响应）更新 v2 及失败保留；来源许可修改加 `ModelAtlasAppTest` 对应来源页用例 |
-| ModelAtlas Data 新发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest`；原字节 manifest、严格类型、文本／数字成绩、定义匹配、中文回退、候选确认及失败保留 | `AtlasCatalogIntegrationTest` 覆盖 HTTPS source → Room、离线重开、整包事务回滚、收藏隔离与事务详情；共享存储再覆盖 Catalog／Favorite／Debug 数据库，界面覆盖评测、来源说明与返回。旧 Benchmark 用例仅回归历史协议 |
-| 模型参数量 | `AtlasParametersTest`、参数格式化、详情映射、JSON 转换器、快照、仓库及 Debug Schema；高精度数字无损往返、仅总量／激活／组件、缺失、非法值、来源和内容静默同步 | `ModelParametersScreenTest` 覆盖真实随包详情／对比仅显示总量与激活量、缺失不推算、隐藏说明／来源／组件、切标签／异步恢复及窄屏双倍字号 RTL；共享列覆盖 Atlas／Catalog／Favorite／Debug 数据库，以及详情／对比类和返回链路 |
-| 全局导航／共享转场 | `NavigationScrollBehaviorTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest` 验证滚动阈值／显隐／短内容／弹层隔离／触摸探索／零动画；`ModelAtlasAppTest`、`ModelDetailNavigationTest`、`ModelSharedTransitionTest` 中相关用例 | 按影响补收藏来源、预测性返回、零动画、RTL／状态恢复；大范围修改扩大回归 |
+| 纯文档 | 相对链接、标题锚点、命令与当前描述 | 不构建、不启动模拟器 |
+| 搜索／筛选 | `ModelListQueryTest`、`ModelListViewModelTest`、`ModelCatalogControlsTest` | 卡片／状态加 `ModelListScreenTest`，切页恢复加 `ModelAtlasAppTest` |
+| 目录刷新／反馈／骨架 | `ModelRepositoryTest`、`CatalogSnapshotTest`、列表 ViewModel、`CatalogStatusNoticeTest` | 对应 Screen、`CatalogNoticeAnimationTest`／`CatalogNoticeReducedMotionTest`、`ModelCardSkeletonTest`／`ModelCardSkeletonReducedMotionTest` |
+| 详情字段／布局 | `ModelDetailMapperTest`、`ModelDetailViewModelTest`、`ModelDetailScreenTest` | `ModelDetailNavigationTest`，身份／容器变化再加共享转场 |
+| 详情评测／Logo | `BenchmarkPresentationTest`、`BenchmarkLogoTest`、详情／Atlas Mapper、`ModelBenchmarkCardTest` | 详情排序／标签／滚动及返回；全矢量加载、浅深原色白底、文本／明示单位、窄屏大字 RTL |
+| 对比 | `ModelCompareQueryTest`、`ModelCompareViewModelTest`、`ModelCompareScreenTest` | 报价变化加 `ModelPriceMapperTest`／`PriceProviderPolicyTest` 及列表；覆盖等高、替换重置、异步恢复 |
+| 收藏／收藏标识 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`FavoritesScreenTest`、`ModelCardFavoriteLayoutTest` | 存储加 `FavoriteDatabaseTest`；返回加共享转场／零动画。旧收藏导航用例迁移缺口见 TODO |
+| 外观／主题 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`AppearanceColorTest`、`AppearanceScreenTest`、`AppearanceNavigationTest` | 全局变化加 `ModelAtlasThemeTest` 与主要页面浅深；备份变化加 `AppearanceBackupRulesTest` |
+| Models.dev／价格 | `ModelsDevApiTest`、`ModelsDevParserTest`、`InterleavedDtoSerializerTest`、相关 Mapper／Policy／Repository | Room／事务变化加 `CatalogDatabaseTest`，共享字段覆盖所有消费者 |
+| Atlas 发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest` | `AtlasCatalogIntegrationTest`，共享存储加 Catalog／Favorite／Debug DB，来源页与返回 |
+| MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、相关 Query／ViewModel | 真实字节经生产映射覆盖列表／详情／对比／筛选；Atlas 集成验证缓存／收藏无须联网或改原值 |
+| 参数量 | `AtlasParametersTest`、`ModelParameterFormattingTest`、详情 Mapper、`CatalogTypeConvertersTest`、快照／仓库／Debug Schema | `ModelParametersScreenTest`、Atlas／Catalog／Favorite／Debug DB、详情／对比及返回 |
+| 榜单 | `BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkResultPresentationTest`、`BenchmarkViewModelTest` | `BenchmarkRankingDatabaseTest`、`BenchmarkScreenTest`；入口或底栏变化加外壳／导航／详情返回 |
+| 导航／共享转场 | `NavigationGeometryTest`、`NavigationScrollBehaviorTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest`、`ModelAtlasAppTest` | `ModelDetailNavigationTest`、`ModelSharedTransitionTest`／`ModelSharedTransitionReducedMotionTest`、`ModelSeekableTransitionTest`，按影响加收藏／RTL／恢复 |
+| Debug 数据库／双版本 | `DebugDatabaseSchemaTest`、`DebugDatabaseViewModelTest`、`DebugDatabaseStoreTest`、`DebugDatabaseScreenTest`、`DebugFeatureTest` | 外壳、真实 Room 冲突／级联／重开；构建隔离／安装变化按[双版本说明](debug-release-coexistence.md)检查 Release |
+| 旧评测协议 | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`、`BenchmarkIntegrationTest` | 仅兼容路径变动时运行，不作为当前 Atlas／榜单固定套件，见[旧契约](archive/legacy-benchmarks.md) |
 
-这是选测起点，不是固定打包执行的套件。小改可定位到方法，功能完成应覆盖相关类及受影响的跨页面链路；影响不明确时扩大范围，不因表中未列出而跳过受影响测试。
+### 关键断言（不是执行记录）
 
-例如筛选与详情字段精简：先跑查询、列表 ViewModel 和详情映射单元测试，再跑筛选及详情 Screen 测试，补详情进入／返回用例；只有影响共享身份／布局时才追加相应转场用例，不自动重跑无关收藏、对比、外观和调试页。
+- 字段／存储：null、空、false、零不混淆；规范模型／服务分开；回滚、文件重开、并发收藏、显式关联；编译 Schema fake 不能替代真实 SQLite 测试。
+- 参数量：BigDecimal 高精度往返，真实稠密／MoE／仅激活／仅组件／未披露，不推算；非法数值／来源拒绝；UI 只显示总量／激活量，切标签／替换／恢复正确。
+- 详情评测：数值一位小数与文本原样、英文 A–Z、同名按未舍入数值降序、平分稳定、文本／缺失置后、全部配置及下标身份保留；不要把 UI 舍入值当原值。
+- 榜单：同实际版本／指标／单位、每模型最高原值、同分并列、下架／非 LLM／未匹配过滤；文本／未知方向／低分更优不在榜单展示但详情原记录仍保留；局部轴边界、品牌色、pts／完整单位读屏、模型名后档位。
+- 完整榜单简介／弹窗：浅深约 64dp 简介与完整名称，信息按钮至少 48dp，说明默认不占正文、空白无入口、长说明可滚、重建／系统返回仅关弹窗、阅读不变，320dp 双倍字号 RTL，整卡进入／返回。
+- UI：真实文字边界与像素，浅深／320dp／双倍字号／RTL、键盘／安全区／末尾可达；转场中间帧、暂停／取消／交接与零动画，不只检查最终截图。
+- HTTP source 注入响应不等于线上 HTTPS 验收；语义／触摸探索状态注入不等于真实 TalkBack。模拟器不替代真机视觉、系统边缘返回、动态色、备份／迁移服务。
 
-## 2. 单元测试一次选择多个类
+## 单元测试一次选择多个类
 
-在仓库根目录执行；把类名替换为本次范围，支持 `类名.方法名` 定向选择：
+在仓库根执行，替换为本轮类／方法；单元方法用 `类名.方法名`：
 
 ```sh
 ./gradlew :app:testDebugUnitTest \
   --tests 'io.github.chenlongapps.modelatlas.ui.modellist.ModelListQueryTest' \
-  --tests 'io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModelTest' \
-  --tests 'io.github.chenlongapps.modelatlas.data.mapper.ModelDetailMapperTest'
+  --tests 'io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModelTest'
 ```
 
-## 3. 模拟器一次构建、安装，批量执行
+## 一次构建、安装，批量 instrumentation
 
-使用已经运行且满足当前 `minSdk` 的设备／模拟器。先用 `adb devices -l` 确认序列号，再显式指定，避免多设备时跑错目标。以下以两组页面测试为例，不表示必须执行这两组：
+使用已运行、满足当前 minSdk 33 的设备，先 `adb devices -l` 核对序列号。以下两类仅为命令示例：
 
 ```sh
-export ANDROID_SERIAL=emulator-5554 # 替换为实际序列号
+export ANDROID_SERIAL=emulator-5554 # 替换实际设备
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
 adb -s "$ANDROID_SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s "$ANDROID_SERIAL" install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
@@ -51,14 +59,11 @@ adb -s "$ANDROID_SERIAL" shell am instrument -w -r \
   io.github.chenlongapps.modelatlas.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-- 本轮 APK 与源码／测试一致时，后续换类或重跑只执行最后一条 runner 命令。修改源码、资源、依赖或测试后必须重新构建并安装，不能用旧 APK 验证新代码。
-- 不把 Gradle 筛选执行再加显式 runner 执行作为固定双跑；已通过 runner 核对范围就不重复执行同一批。
-- 保留原有模拟器和应用数据，不常规冷启动、卸载、清数据或执行 `clean`。出现设备离线／挂起时再针对环境排障；涉及丢弃数据必须先确认。
-- 像素、转场及零动画测试保留各自的动画设置要求，不通过全局关闭动画或删断言提速。
+- 源码／测试未变可复用本轮 APK、只换 runner 范围；改代码／资源／测试／依赖后须重建安装对应产物，不拿旧 APK 验证新代码。
+- 不固定双跑 Gradle 筛选和显式 runner。本机曾有 Gradle class 参数范围不完整问题，以 runner 实际类／数量为准，不用 Gradle 成功代替核对。
+- 不常规 clean、清数据、卸载或重建／冷启动模拟器。环境挂起再排障，涉及丢数据先确认；不通过全局关闭动画／删断言提速。构建和独立 Lint 曾遇 KSP 生成文件竞争，必要时分开执行，不以 clean 为默认解决办法。
 
-### 失败后只重跑对应方法
-
-runner 的方法筛选使用 `类名#方法名`，例如：
+失败先定向重跑，instrumentation 方法用 `类名#方法名`：
 
 ```sh
 adb -s "$ANDROID_SERIAL" shell am instrument -w -r \
@@ -66,16 +71,15 @@ adb -s "$ANDROID_SERIAL" shell am instrument -w -r \
   io.github.chenlongapps.modelatlas.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-定向复跑用于定位或验证修复，不抹去首轮失败；修复后补跑受影响类／链路。设备中断时只认定已明确完成的用例，未完成范围需补跑，不把中断整批记为通过。
+定位／修复后补受影响类／链路，不无条件重跑无关全套；设备中断只计有明确结束结果的用例，补未完成范围，不能记整批通过。
 
-## 4. 发布前与结果核对
+## 结果核对与发布
 
-发布前使用 [AGENTS.md](../AGENTS.md#构建与验证) 中的全量命令；涉及 Release 的验证按该文件规定补充，不以选测代替发布回归。真实系统返回、TalkBack、备份／迁移、跨厂商动态色等仍按 [TODO.md](../TODO.md#待验收与发布) 补真机验收，不因模拟器通过而勾选完成。
+每次记录：
+1. **范围／版本**：改动、实际类／方法、设备 API、APK 与源码是否一致。
+2. **真实结果**：类名、`numtests`、完成数量、最终 OK／失败／忽略；0 项、缺类、中断、崩溃均不是范围通过，源码文件数也不是执行类数。
+3. **证据／边界**：报告或 runner 输出、首次失败与复跑、未执行及原因；显式 adb 不更新 Gradle 报告，不能只凭退出码／历史数量判定。临时路径不保证长期可用。
 
-每次记录至少包含：
+TODO 只留未闭环项；已完成变更的日期、执行结果与证据写[历史](archive/development-history.md)，不把日志复制到架构／设计说明。
 
-- **范围与版本**：本次影响、实际执行类／方法、设备 API，以及 APK 是否对应当前源码。
-- **实际结果**：核对 runner 的实际类名、`numtests`、结束用例数量与最终 `OK`／失败／忽略信息。源码文件可能包含多个测试类；不要以文件数推断执行类数。过滤到 0 项、缺类、失败、崩溃或中断均不能记为范围通过；有预期跳过项时单独说明。
-- **证据与边界**：保留当次 Gradle 报告或 runner 输出，说明失败及复跑、未执行范围与原因，不仅凭进程退出码、Gradle 成功或历史数量认定通过。显式 `adb` 执行不会自动更新 Gradle 的测试报告，应以当次 runner 输出为准。
-
-常规 UI 小改不附带全功能手动巡检或逐页截图；只对受影响且自动断言不足的布局、交互、动画补视觉检查。需要评估后续提速收益时，分别记录构建、安装和用例执行耗时，再决定是否优化慢测试或引入其他工具。
+发布前执行全量单元、Debug Lint、全量 instrumentation 和必要真机验收；Release／签名相关范围按 AGENTS 补，不以日常选测代替。普通 UI 小改只补受影响且自动断言不足的视觉检查，不固定巡检所有页；未实际重新运行就不更新为“已验证”。

@@ -1,190 +1,110 @@
 # 数据源说明
 
-## 当前状态（ModelAtlas Data 迁移后）
+## 当前来源与边界
 
-- [`DefaultModelRepository`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/repository/DefaultModelRepository.kt) 通过受限 HTTPS 读取 ModelAtlas Data 发布包，价格／服务商仍由 Retrofit 读取 Models.dev `api.json?type=all`，全部成功后事务写入 Room3。**新接口、v2 字段与清单、评测匹配、中文回退及离线初始化契约统一见 [ModelAtlas Data 接入](atlas-data.md)**。
-- 新 DTO、加载器在 `data/remote/atlas/`；保留 `ModelsDevParser` 供服务商结构及历史格式回归，生产不再调用旧模型端点，也不使用旧的独立评测整数版本同步。
-- 已实现 DTO → Entity、生产数据库、DAO、完整报价存储与本地优先读取／后台检查／主动刷新策略，标识与存储契约见[本地目录数据](local-data.md)。
-- 独立 `ModelSummary` 用于规范模型名称、LAB、发布时间、上下文长度、最大输出、输入／输出模态、开放权重和列表报价，不能与 DTO 或 Entity 混用，详见[架构说明](architecture.md)。
-- 独立 `ModelDetail` 用于本地模型详情、全部显式关联服务与完整报价；规范模型与各服务的能力／限制分开，不复用列表只保留单条报价的投影。详情界面只展示所选核心字段，不再展示记录级来源与获取时间；底层仍保留完整数据，不新增网络请求。
-- 双模型对比复用规范模型详情和列表默认报价，不新增请求或修改数据库。对比页标明默认报价的服务商与所选服务 ID，基础价格与精确档位分别展示；摘要保留档位中全部七类价格，不混用不同服务或独立模式。参数／能力只取规范模型，不从所选服务补齐，价格不作为质量或实际成本排名。
-- 详情“评测”从模型档案的 `benchmarks[]` 导入独立成绩表，并按唯一明确匹配关联定义；保留版本、variant、effort 与来源。模型、成绩、定义、中文同事务替换，详情同事务读取。随包为新 Pages 格式，不再是五条 DeepSeek 旧快照；不推断可比性、不排名。来源页保留必要历史归属声明。
-
-## 历史独立评测快照（仅兼容回归，不再用于生产同步）
-
-以下为旧协议及历史验证依据，不是当前在线接口；同名 `benchmarks.json` 在新站点已变为定义字典，不能交给旧 `BenchmarkSyncRunner`。旧样本仅用于回归，Application 不再启动此同步器。
-
-- 旧 [`benchmarks.json`](../app/src/androidTest/assets/benchmark-contract-v2/benchmarks.json)（已移至测试资产）使用 `schemaVersion: 1`、递增正整数 `version` 和 `scores` 数组；每条需唯一非空 `id`、目录规范 `modelId`、非空 `benchmarkId` 和有限数值 `score`，可选字段与 `BenchmarkScore` 同名。`benchmarkId` 在旧协议直接作为标题；`sourceType: "test"` 仍用于合成测试并在详情显式提示虚构，真实旧 v2 不包含此类型。v2 直接导出自旧数据仓库构建，`benchmark-manifest.json` 保存原字节摘要供兼容契约测试，不是当前运行时地址。
-- 可选 `cost` 接受有限数值或 null，缺失不视为零；暂不约定币种、计算口径或单位，也不用于计算或详情展示。使用真实费用数据前需另行确定其含义及来源。
-- 进程启动时在 IO 协程首次导入，随后检查远程版本；已有数据由 Room 立即提供，不等待网络。已有独立成绩时初始化保留原数据并记版本 0；已初始化的空表不会重复导入。更新是全量替换，包括合法空快照；调试修改可能被新版本覆盖。
-- 远程地址由 `app/src/main/res/values/strings.xml` 的 `benchmark_manifest_url` 配置为 `https://chenlongapps.github.io/model-atlas-data/manifest.json`。托管方提供 `schemaVersion`、`version`、绝对 HTTPS `url`、`sha256` 清单，快照格式与随包文件相同、版本必须一致且高于本地。旧虚构随包 v1 可更新到 v2；新随包 v2 仅应用 v3 及以上。先发布快照，再发布清单或完整站点原子部署；校验通过后版本与成绩事务提交。SHA-256 检测文件一致性，不是独立签名或来源认证。当前未执行线上部署，404 等错误按离线失败处理，不影响已有成绩。
-- 清单上限 64 KiB、快照上限 16 MiB／100,000 条；只接受 HTTPS，不跟随重定向。解析、网络、校验或写入失败保留原成绩和版本，记录日志，不打扰目录浏览；下次进程启动再检查。不轮询、不在退出后执行后台任务。
-- `BenchmarkSyncRunner` 是可注入下载与存储的同一条生产同步链路，互斥串行；`BenchmarkHttpSource` 和随包读取均在流式读取时限制内存，UTF-8 解码严格。生产 `BenchmarkSync` 在 IO dispatcher 运行并记录非取消错误；详情与目录观察不等待它。
-- 首批出处为 DeepSeek-R1 README 固定修订 `0cf78561f1d51c84a21b2190626b21116d5c68bb`。已知执行设置通过 `harness` 随成绩显示为“评测框架／执行配置”，保留采样条件限定；不把建议配置当作实际记录，不填造评测日期、工具或推理等级。`mmlu-pro-em` 不与旧待审 Overall Accuracy 数据合并。
-- `benchmark-attributions.json` 和 `third_party/deepseek-r1/MIT.txt` 随同导出，设置 →“数据来源与许可”显示出处、归属、修改说明及 MIT 全文。**远程 v1 只更新成绩，不下载归属旁车**；未来增加其他来源前必须复核现有客户端许可展示要求，必要时扩展协议。文档许可不等于模型权重或 Benchmark 数据集许可。
-- 首次完全离线安装只保证评测资产入库；模型目录仍按既有 Models.dev 首次加载，未新增离线目录。
-
-## 历史 Models.dev 端点与结构
-
-当前只继续请求下表的 `api.json?type=all`；模型改用 [新发布包](atlas-data.md)。
-
-2026-10-19 直接读取以下 [Models.dev](https://models.dev/) 地址，均返回 HTTP 200 和 JSON 对象；本节结构依据实际响应，不将模型数量作为固定契约。
-
-| 地址 | 顶层类型 | 内容 |
+| 内容 | 当前来源 | 契约 |
 | --- | --- | --- |
-| [`models.json?type=all`](https://models.dev/models.json?type=all) | `Map<String, ModelDto>` | 以规范模型 ID 为键，包含模型基础信息、能力、权重、链接和评测 |
-| [`api.json?type=all`](https://models.dev/api.json?type=all) | `Map<String, ProviderDto>` | 以服务商 ID 为键；每个服务商的 `models` 为 `Map<String, ModelOfferingDto>`，包含该服务商下的模型服务、价格与限制 |
+| 规范模型、评测成绩／定义、中文 | ModelAtlas Data Pages | [Atlas 发布包](atlas-data.md) |
+| 服务商、模型服务、价格／服务限制 | Models.dev `api.json?type=all` | 本文 |
+| 首次离线模型／评测／翻译 | 同协议 `assets/atlas/` 真实包，无价格 | [Atlas 初始化](atlas-data.md#发布校验及同步) |
 
-两个接口不是同一份数据，也不是 JSON 数组。`type=all` 的响应包含非 LLM 类型，解析层不执行收录或筛选。原规划中的 `catalog.json` 不再作为候选端点。
+生产不再请求 Models.dev `models.json?type=all`，也不启动旧整数版本评测同步；旧解析器／样本只供[兼容回归](archive/legacy-benchmarks.md)。不能把当前 `benchmarks.json` 定义字典当旧成绩快照。
 
-```kotlin
-val parser = ModelsDevParser()
-val models = parser.parseModels(modelsJson)
-val providers = parser.parseProviders(apiJson)
-```
+规范模型、具体 API 服务不是同一对象，只按服务显式 `canonical_model_id` 关联，不以名称、ID 相似度或 LAB 猜测。参数／能力只取对应层，不用规范模型覆盖服务缺失值，不将服务能力取并集。存储标识见[本地数据](local-data.md)，展示字段见[页面字段](page-information.md)。
 
-这里的参数是已经获得的 JSON 字符串；解析入口不会自行下载数据。
+## 请求与解析
 
-## 字段与解析约定
+- 当前 `api.json?type=all` 顶层为 `Map<String, ProviderDto>`，服务商下 `models` 为服务字典；不是数组。读取公开目录不需 API Key，`env` 是调用模型服务的环境变量名称，不是目录鉴权。
+- `ModelsDevApi` 负责 Retrofit 请求，`ModelsDevParser.parseProviders(apiJson)` 解析已有字符串，不自行下载；`parseModels(modelsJson)` 只保留历史模型格式入口，共用 `ModelsDevJson`。
+- DTO 在 `data/remote/dto/`，必需 `id`／`name`、服务商 `models` 不可缺失或 null，空字典合法；顶层键、服务内键、条目内 ID 分开保留。
+- `@SerialName` 映射蛇形字段；可选字段默认 null，区分缺失／明确 false／零／空集合。忽略未知对象字段，类型／状态／模态／模式键保持开放字符串。
+- token 限制与预算使用 Long，日期保持来源字符串及精度；`reasoning_options.values` 保留 null。`interleaved` 只接受布尔或 `{"field":"reasoning_content"}`，拒绝字符串布尔或数值。
+- 完整保留七类价格、`tiers`、旧 `context_over_200k`、服务覆盖与 `experimental.modes`。价格 Double 仅用于解析／存储／展示，不是财务结算类型；自由请求 `body`／headers 只存储，不展示或执行。
+- 非法 JSON、顶层错误、缺必需值、已知字段类型错误抛出异常，不伪造成空目录或默认业务值。
+- 客户端连接 15s、读取 30s、整次 60s，不自动重试。429／503 尊重 `Retry-After` 秒数或 HTTP 日期，缺失／非法则冷却 60s，冷却中重试不发请求；不轮询、不增加退出后后台任务。
+- Atlas 整包及价格响应均成功才事务提交，网络／解析／取消不写半份。比较／后台确认／主动刷新策略只在[架构](architecture.md#数据与状态流转)维护。
 
-DTO 位于 [`data/remote/dto/`](../app/src/main/java/io/github/chenlongapps/modelatlas/data/remote/dto/)，仅表达远程结构，不定义应用模型或数据库主键。
+### 收录与规范模型语义
 
-| 主题 | 已实现的处理 |
-| --- | --- |
-| 标识 | 保留两份响应的顶层键、服务商模型字典键及各自的 `id`；模型服务 ID 不能假设跨服务商唯一 |
-| 关联 | 仅保留显式的可选 `canonical_model_id`，不根据服务模型 ID、名称或前缀猜测对应规范模型；缺少关联的服务仍可解析 |
-| 字段命名 | 使用 `@SerialName` 将 `tool_call`、`open_weights`、`release_date` 等字段映射为 Kotlin 驼峰属性 |
-| 必需信息 | 模型和服务商的 `id`、`name`，以及服务商的 `models` 必须存在且非空值；空字典合法 |
-| 缺失与空值 | 可选信息默认 `null`，保留缺失价格与零价、缺失能力与明确 `false`、缺失集合与空集合的区别 |
-| 扩展兼容 | 忽略未知对象字段；类型、状态、模态及推理选项类型保留为字符串，模式名称保留为字典键，不使用封闭枚举 |
-| 限制与日期 | 上下文、输入、输出和推理预算使用 `Long`；日期和知识截止时间保留字符串，兼容仅有年月的值 |
-| 推理参数 | `reasoning_options` 包含类型、预算范围和可选值；实际响应的 `values` 中存在 `null`，使用 `List<String?>?` |
-| 交错推理 | `interleaved` 使用自定义序列化器，分别映射布尔值和 `{"field":"reasoning_content"}` 对象，不接受数字或字符串布尔值 |
-| 定价 | 保留输入、输出、缓存、音频、推理价格以及 `tiers` 的条件和价格、`context_over_200k`；数值使用可空 `Double`，不在 DTO 层换算或选择价格档位 |
-| 服务覆盖参数 | 保留模型的服务商覆盖配置和 `experimental.modes`；自由结构的请求 `body` 使用 `JsonObject`，headers 使用字符串字典 |
-| 异常 | 非法 JSON、错误的顶层结构、缺少必需字段和已知字段的非法类型抛出序列化异常，不伪造空列表或默认业务值 |
-
-已接入请求、字段映射与存储。下文的计价、能力语义与使用条件已核实，**列表已展示单条报价**，规则见下文「报价选取与展示」。`Double` 仅用于目录数据解析、存储和展示格式化，不用于财务结算。
-
-### 已实现的列表收录与聚合
-
-- 一行表示 `models.json` 中一个规范模型，稳定 ID 使用字典键，不按名称合并。
-- 明确 `type = "llm"` 时收录；`type` 缺失时，仅在 `modalities.input` 与 `modalities.output` 均包含 `text` 时收录，允许额外图片、音频等模态。
-- 明确非 LLM、未知类型、类型为空字符串、类型缺失且模态不足的记录不收录。仅音频输入的转录、纯图像或视频生成等不会因为输出文字或输入提示词而自动纳入；规则不是能力认证。
-- 只通过服务的显式 `canonical_model_id` 关联 API 服务商；列表映射按规范模型 ID 去重，不再展示 API 服务商和摘要，不从服务名称或 ID 反推规范模型。
-- 缺少关联时仍保留规范模型。服务侧缺失能力与限制不由规范模型覆盖；未匹配服务仍独立存储，不作为额外规范模型展示。
-- 列表的 LAB 按界面约定取稳定 `model.id`（规范模型字典键）第一个 `/` 前的非空白部分；无有效前缀时显示“暂无数据”。这是 ID 前缀标签，不是 API 服务商或独立核实的模型开发商。该前缀同时决定列表显示的 LAB logo：随包素材取自 Models.dev 的 Logos 服务（`/logos/labs/{lab}.svg` 同图文件的本地彩色变体），只覆盖 23 个实验室，按前缀精确匹配；没有素材时显示兜底图，不借用其他实验室素材，也不把 logo 当作开发商认定。
-- 名称为空白时用该记录稳定 ID 展示；发布时间取规范模型 `release_date`，保留年月等来源精度，空白视为缺失。上下文长度与最大输出分别取规范模型 `limit.context` / `limit.output`，原值保留为 `Long`，列表使用十进制 K／M 缩写，最多一位小数并去除末尾零（如 `1M`、`384K`、`512K`、`131.1K`）；读屏仍提供字段名、带千位分隔的精确值与 tokens 单位，不聚合服务商限制。
-- 多模态能力取规范模型 `modalities.input` / `modalities.output`，分别显示输入、输出；已知类型显示中文，未知类型保留原值。缺失字段显示“暂无数据”，显式空集合显示“无”，不拼造能力描述。
-- 开放权重取规范模型 `open_weights` 三态：`true` 显示“开放权重”，`false` 显示“权重未公开”，缺失显示“开放权重：暂无数据”。仅在 `true` 且 `license` 去除首尾空白后为 1–16 个字符时，以“开放权重 · MIT”这样的中点形式附带原始许可短名；长名称不截断或推测简称，列表仅显示“开放权重”。详情单独显示完整许可原文与权重地址，不限制名称长度，也不推测许可简称。这是来源报告的权重可获取状态，不等于开源或允许商用，界面来源说明已注明，不替代核对模型许可。
-- 报价取显式关联的模型服务，按「报价选取与展示」的规则每个规范模型展示一条；同一服务商多个模型服务取输入价最低的一条。界面不显示服务商名称，只显示价格类别与数值；缺失或不可用报价显示「价格：暂无数据」，明确的 `0` 显示为 `$0.00`。
+- 每个规范 ID 一行，同名不合并，无服务仍展示；明确 `type = "llm"` 收录，类型缺失时须输入／输出均含 `text`。明确非 LLM、未知／空类型或模态不足不收录，不是能力认证。
+- LAB 仅为规范 ID 第一个 `/` 前非空前缀，无有效前缀为未知；不是 API 服务商或独立核实的开发商。品牌显示名与 Logo 不改变底层 ID、搜索或关联规则。
+- 发布日期保留来源精度，映射按日期字符串倒序，缺失最后，同日按名称（忽略大小写）和 ID 稳定排序；不补日期，也不聚合服务限制。
+- 规范能力与参数格式由 [Atlas 契约](atlas-data.md)决定，不再将旧 Models.dev 模型字段当生产来源。模态方向、未知／空集合分开，MIME 类别投影不改原存储。
 
 ## 已核实的计价约定
 
-以下语义与使用条件于 2026-10-19 对照上游文档、Schema、生成代码及服务商官方定价核实，证据链接见文末。它们是数据源约定和后续接入规则，不表示已逐一验证目录中的所有模型与报价。
+以下于 2026-10-19 对照上游及官方例子核实，是来源口径，不表示逐项验证过全部实时报价。
 
-### 币种与数量单位
+所有 `cost`（含 `tiers`／模式）统一为 **USD / 1,000,000 tokens**，不是每次请求、每千 tokens 或字符。非美元由上游换算，汇率／日期写在源 TOML 注释、不在 JSON 中；不据服务商地区推断结算币种或再次换汇。
 
-- 上游要求所有 `cost` 数值统一为 **美元（USD）/ 百万（1,000,000）tokens**，包括 `tiers` 与 `experimental.modes` 内的价格；不是每次请求、每千 tokens 或每百万字符的价格。
-- 非美元报价由上游换算为 USD，并要求在源 TOML 的文件头注释中记录汇率及日期。这些注释不包含在 JSON 中；目录币种不代表服务商实际结算币种，也不应再次按服务商所在地或名称推断汇率。
-
-| 字段 | 数量口径 |
+| 字段 | 数量口径／限制 |
 | --- | --- |
-| `cost.input` | 百万输入 tokens |
-| `cost.output` | 百万输出 tokens |
-| `cost.cache_read` | 百万缓存读取 tokens，仅适用于符合缓存命中条件的部分 |
-| `cost.cache_write` | 百万缓存写入 tokens，不表示任意缓存时长或存储费用均已包含 |
-| `cost.input_audio` / `cost.output_audio` | 单独计费时的百万音频输入 / 输出 tokens，不是音频分钟数 |
-| `cost.reasoning` | 百万推理 tokens，不能据此认定它一定是在输出费之外另收的费用 |
+| `input` / `output` | 百万输入／输出 tokens |
+| `cache_read` / `cache_write` | 百万缓存读取／写入 tokens，不承诺任意 TTL 或存储费全包含 |
+| `input_audio` / `output_audio` | 单独计费的百万音频 tokens，不是分钟数 |
+| `reasoning` | 百万推理 tokens，不保证在输出费之外另收 |
 
-该口径用于首版 LLM 报价；不能据此把非 LLM 的图片张数、视频秒数、音频时长等计费方式转换为可直接比较的 token 价格。
+非 LLM 的图片张数、视频秒数、音频时长不能按此换成可比 token 价格。
 
 ## 报价选取与展示
 
-列表每个规范模型只展示**一条**报价，因为同一规范模型在 `api.json` 中可有多个服务商的模型服务，各自报价与限制不同，不能合并成一个无条件通用价格。
+列表及对比的默认报价只取一条显式关联服务，不拼成无条件通用价。`PriceProviderPolicy` 与 `selectPriceFor` 负责选择：
 
-- 只使用通过显式 `canonical_model_id` 关联到该规范模型的模型服务，不按名称、服务商 ID 或 LAB 前缀猜测对应关系。
-- 官方优先：`PriceProviderPolicy` 内置 LAB → 第一方服务商的对应表，表中的服务商只要有可用基础报价就采用。该表于 2026-10-19 对照上游 `api.json` 核实，仅收录确有第一方服务且通过显式关联提供报价的条目；未列入的 LAB 一律没有官方报价，不把 LAB 本身当作官方认定。
-- 没有官方报价时按第三方优先级选取，顺序为 OpenRouter、Together AI、Fireworks AI、Deep Infra、SiliconFlow、Novita AI、Hugging Face、Amazon Bedrock、Google Vertex、Azure；未列入者排在其后，再按服务商 ID 稳定排序。这是应用内的展示顺序，不是质量、速度、可用性或最低价排行榜。
-- 同一服务商对同一规范模型有多个模型服务时，取输入价最低的一条（其次输出价最低，最后按服务内稳定键排序），避免把高速或预览变体当作该服务商的代表报价。
-- “可用基础报价”指输入或输出单价非空，或某个 `tiers` 档位提供了其中之一；明确的 `0` 是可用报价。`cost` 整体为 `null`、字段全为 `null` 或只有 `context_over_200k` 等兼容字段时不展示价格，界面显示“暂无数据”。
-- 卡片以「API 价格 · 美元 / 1M tokens」为小节标题，在能力区下方用一条细分隔线分区，不再嵌套独立底色或圆角价格卡片；分列展示输入、输出和存在时的缓存命中输入单价，逐行展示来源提供的缓存写入、推理、音频输入、音频输出单价。不展示服务商名称，也不标注“官方／第三方”或来源未提供的“非高峰”。`tiers` 的上下文档位默认折叠，有档位时点击标题行及其箭头展开；档位门槛始终使用完整数值并增加千位分隔，不随列表限制缩写为 K／M，以免改变计价条件。
-- 展示不选择档位、不计算总价或最低价，不把 `output` 与 `reasoning` 相加，也不把 `experimental.modes` 的模式价与基础价混用；`context_over_200k` 只是旧版兼容信息，不单独展示为档位。
-- 价格格式化至少保留两位小数（`0.6` → `$0.60`），来源更精确时保留更多位（`0.003` → `$0.003`）；`Double` 只用于展示格式化，不用于财务结算。
-- 设置 →“数据来源与许可”独立页面的“关于这些价格”小节注明：同一模型的不同服务商价格不可直接比较，缓存、档位、模式与订阅等适用条件以服务商说明为准。列表不再重复显示说明卡片。
+1. LAB→第一方对应表中有可用报价则优先；没列入不将 LAB 自身当官方认定。
+2. 否则按第三方顺序：OpenRouter、Together AI、Fireworks AI、Deep Infra、SiliconFlow、Novita AI、Hugging Face、Amazon Bedrock、Google Vertex、Azure；其余按服务商 ID。这不是质量、速度、可用性或最低价排名。
+3. 同服务商多服务按输入价最低、其次输出价、最后服务稳定键选取，不把不同服务参数拼接。
+
+“可用”是基础输入／输出或某个 `tiers` 提供其一，0 也有效；只有旧 `context_over_200k`、全空 cost 或整体 null 不展示报价。价格至少两位小数，来源更精确则保留更多（如 `$0.003`），不舍成零。
+
+| 页面 | 报价范围 |
+| --- | --- |
+| 列表 | 默认一条；基础七类单价及精确档位，不显示服务商 |
+| 对比 | 沿用列表同一条，标明服务商／服务 ID，七类单价及档位，不切服务 |
+| 详情 | 全部显式关联服务，含无价；第一方／第三方优先及 ID 兜底，同服务商按服务 ID，不筛最低；每条仅服务商、服务 ID、服务上下文／最大输出、基础输入／输出价 |
+
+详情缺失不从规范模型、别的服务、档位或独立模式补齐；完整报价仍在库／应用模型中。可见字段与折叠归[页面字段](page-information.md)，外观归设计文档。
 
 ### 报价范围与适用条件
 
-详情页与列表的报价投影不同：按规范模型稳定 ID 事务读取所有显式关联服务（含无报价服务），每个服务单独一条，仅展示服务商（服务商名称）、模型服务 ID（服务稳定 ID）、上下文长度、最大输出及价格（基础输入／输出价）。排序沿用第一方优先、第三方内置优先级及 ID 兜底，同服务商按服务稳定 ID 排序，不筛选最低价、不宣称推荐。服务限制和单价只取该服务记录，缺失显示“暂无数据”，不能用规范模型、其他服务、档位或独立模式补齐。单位仍为 USD / 百万 tokens；零价及高精度格式不变。详情不再显示缓存／推理／音频价、模式、档位、服务能力、来源时效或文档链接；数据库和应用模型仍完整保留这些信息，列表与对比的报价不变。不显示或执行请求 body／headers。保留的权重及评测外链只允许安全 HTTP(S)，打开失败提供反馈。
-
-- **价格属于具体服务商的模型服务。** `models.json` 描述规范模型，`api.json` 的模型服务描述该服务商的报价与限制；同一规范模型不能合并成一个无条件通用价格。
-- `cost` 或其中字段缺失 / 为 `null` 表示暂无数据，不等于零；明确的 `0` 只表示该报价字段为零，不能推断整个服务永久免费、无需订阅或没有配额限制。
-- `cost.tiers[].tier.type = "context"` 表示按上下文条件分档，`size` 为以 tokens 表示的档位门槛，不是模型最大上下文或单次数量价格。门槛等号归属、输入 / 缓存 tokens 的计入方式及整次请求如何适用，应以对应服务商说明为准；不能自行假设按超出部分累进收费。
-- **精确门槛以 `cost.tiers` 为准。** `context_over_200k` 是旧版输出兼容字段：上游在仅有一个上下文档位且门槛不小于 200,000 时也会生成它。核实时 OpenAI 的 `gpt-5.4` 门槛为 **272,000**，仍带有这个旧字段；不能按字段名认定为 200,000，也不能将它与 `tiers` 重复计算。只有旧字段而没有精确档位时，不猜测适用门槛。
-- `experimental.modes` 描述特定模式的价格与请求覆盖参数，例如快速模式的 `body` / headers；不能把它与基础模式价格混用，模式之间的覆盖与组合条件仍应核对服务商文档。
-- 目录未完整表达缓存 TTL、缓存存储费、地区、批处理、订阅、配额、促销有效期、工具调用附加费等条件。例如 Claude 的缓存写入价区分 5 分钟与 1 小时，Gemini 的显式缓存还可能收取存储费；不能从一个 `cache_write` 或 `cache_read` 数值推断完整费用。
-- 推理 tokens 可能已计入输出计费，缺失 `cost.reasoning` 不代表推理免费；没有明确计费说明时，不将 `output` 与 `reasoning` 简单相加。相同文本在不同模型上的 token 数也可能不同，同单位单价不等于同任务实际成本。
-
-列表展示遵循上述约定：分别注明输入 / 输出 / 缓存 / 推理 / 音频等类别、基础价与档位，并在小节标题注明 **USD / 百万 tokens**；不展示服务商名称，因此同时保留“不可直接比较”提示。展示不生成无条件最低价、总费用或账单承诺；实际费用与可用性以服务商最新说明为准。
+- 价格属于具体服务。null 是未知，明确 0 仅该字段为零，不代表永久免费、无需订阅或无额度。
+- `tiers[].tier.type = "context"` 的 `size` 是精确 token 条件门槛，不是模型上下文或单次数量价格；等号归属、输入／缓存计入方式及整次请求如何应用以服务商为准，不假设超额累进计费。
+- `context_over_200k` 只是旧兼容字段；仅有一个不小于 200,000 的档位时也可能生成。核实时 OpenAI `gpt-5.4` 精确门槛为 272,000，不能照字段名当 200,000 或与 tiers 重算；无精确档位不猜门槛。
+- 模式价／请求覆盖与基础价分开，不混模式、不推断组合条件；展示不选适用档位、不计算总价或“全网最低”。
+- 缓存 TTL／存储费、地区、批处理、订阅、额度、促销、工具附加费未完整表达；Claude 写缓存时长、Gemini 显式缓存存储费等须看官方条款。
+- 推理可能已计入输出，缺失 reasoning 不代表免费，不把 output 与 reasoning 简单相加；不同模型相同文本 token 数也不同，同单位不等于同任务成本。
+- 来源页集中注明价格适用条件与不同服务商不可直接比较，实际费用／可用性以官方最新说明为准，不作账单承诺。
 
 ## 能力与限制语义
 
-`models.json` 的能力是模型本身的元数据；`api.json` 的能力是生成时继承并允许服务商覆盖后的服务信息。详情头部只显示规范模型明确支持的能力，价格区限制仅取对应服务，不用规范模型覆盖服务商限制，也不把多个服务商能力取并集。服务能力与推理控制仍保存在底层但不在详情展示；推理控制保留类型、上下限和可选值中的 null，交错推理区分布尔支持与原始通道字段。
-
-2026-10-26 核对 Models.dev 时未发现标准参数量字段。当前改为读取 ModelAtlas Data 的 `metadata.modelatlas.parameters` 扩展，保留完整总量、每 token 激活量、组件、说明与来源；十进制 B 原值无损存储，详情和对比仅显示总参数量与激活量，列表不变。未披露仍显示“暂无数据”，不从名称／描述、服务商或组件之和补齐，不把激活量／骨干量冒充整模型总量，具体契约见[参数量接入](atlas-data.md#模型参数量)。
-
-| 字段 | 已核实含义与使用边界 |
+| 字段 | 含义与不能推断的内容 |
 | --- | --- |
-| `attachment` | 支持文件附件；不承诺接受任意文件格式，具体输入类型还需查看 `modalities.input` 与服务商文档 |
-| `modalities.input` / `modalities.output` | 支持的输入 / 输出模态，方向不可混用；接收图片不等于能生成图片 |
-| `reasoning` | 支持推理能力；不是质量评分，不保证公开完整思维链，也不表示允许开关或调节强度 |
-| `reasoning_options` | 该服务商的推理控制方式：`toggle` 为开关，`effort` 为强度选项，`budget_tokens` 为推理 token 预算；空列表表示没有调用方控制，缺失表示未知。选项中的 `null` 保留原值，不擅自解释为关闭 |
-| `interleaved` | 交错推理的支持 / 格式信息；对象的 `field` 指明该 API 的推理通道字段，不是通用推理开关 |
-| `tool_call` | 支持工具调用；不代表服务自带工具执行、联网搜索或免费工具额度 |
-| `structured_output` | 支持专门的结构化输出功能，不等同于仅靠提示词要求 JSON；支持的 Schema 与组合限制取决于服务商 |
-| `temperature` | 支持温度调节，不是默认温度值，也不保证在所有推理模式下都可调 |
-| `open_weights` | 训练权重公开可获取；不等于开源、允许任意用途或允许商用，须查看模型的 `license` 与许可链接 |
-| `limit.context` / `limit.input` / `limit.output` | 最大上下文、输入与输出的 token 限制，不是 RPM / TPM 等请求额度；不能自行用上下文减输出推导缺失的输入限制 |
-| `status` | 该服务商上的 `alpha` / `beta` / `deprecated` 生命周期标记，不代表所有服务商上的同一模型均处于相同状态 |
+| `attachment` | 文件附件，不承诺任意格式 |
+| `modalities.input` / `output` | 输入／输出独立，能看图不等于能生成图 |
+| `reasoning` | 推理支持，不是质量分、不保证公开思维链或可调强度 |
+| `reasoning_options` | toggle／effort／budget_tokens 控制；空列表无调用方控制、缺失未知，选项 null 不猜关闭 |
+| `interleaved` | 布尔支持或 API 推理通道 field，不是通用开关 |
+| `tool_call` | 工具调用，不等于自带执行、搜索或免费额度 |
+| `structured_output` | 专门结构化功能，不等于提示词要求 JSON；Schema／组合限制另核 |
+| `temperature` | 支持调温，不是默认温度，也不承诺所有模式可用 |
+| `open_weights` | 权重可获取，不等于开源／商用授权 |
+| `limit.context` / `input` / `output` | token 上限，不是 RPM／TPM，不能相减推算缺失值 |
+| `status` | 服务侧 alpha／beta／deprecated，不代表所有服务商上的模型状态 |
 
-能力数据与对比页明细保留三态：`true` 为“支持”、`false` 为“不支持”、缺失 / `null` 为“暂无数据”；详情头部仅为明确的 `true` 展示摘要标签，未出现不代表“不支持”。缺失集合不能当成空集合；未知选项与模态不强行归为“不支持”。这些是来源报告的能力，不是本应用已执行验证的结果，也不保证多项能力可在同一次请求中组合使用。
+true／false／null 为支持／不支持／未知，缺失集合不是空集合。这些是来源报告而非本应用执行验证，不保证多能力可同时组合。参数量仅读 Atlas 扩展，不从名称、服务或组件之和补齐，见[参数契约](atlas-data.md#模型参数量)。
 
-## 接口与数据使用条件
+## 数据许可与来源署名
 
-### 请求、缓存与时效
+- Models.dev 仓库为 MIT，`Copyright (c) 2025 models.dev`；分发重大部分须保留完整版权及免责文本，仅名称／链接不替代许可。`res/raw/models_dev_license.txt` 随包，设置来源子页离线可读。
+- 独立第三方说明与许可保留是两件事；MIT 不决定本项目许可证、不替代权重／服务／商标条款。Atlas 及必要历史 DeepSeek 归属见[接入契约](atlas-data.md#许可与随包维护)。
+- LAB 素材来自 Models.dev Logos（`/logos/labs/{lab}.svg` 同图本地彩色变体），随包 `ic_lab_*.xml`，覆盖 23 个前缀；不运行时下载、不借图、不代表隶属／认可。
+- 服务商源为 `https://models.dev/logos/{provider-ID}.svg`；2026-10-27 的 232 ID 快照收录 212 ID／187 份矢量，只有原 SVG 完全相同才共用。12 个通用图 ID：`alibaba-token-plan-cn`、`chutes`、`cline-pass`、`cortecs`、`gmicloud`、`morph`、`requesty`、`sakana`、`sap-ai-core`、`sarvam`、`synthetic`、`upstage`；8 个无法完整转换 ID：`abliteration-ai`、`atomic-chat`、`hpc-ai`、`kenari`、`orcarouter`、`umans-ai`、`umans-ai-coding-plan`、`wafer.ai`。这些及未知 ID 都用独立兜底，数量不是接口保证。
+- 服务商 SVG 用构建期 Svg2Vector 转换，保留 viewBox／变换／显式颜色，固有 24dp、等比绘制，`currentColor` 固定黑配白底。`lucidquery` 超长路径先 SVGO 优化，不拆复合路径或换品牌；资源注释留地址／日期，更新须验证全部加载与图形，不要求运行时工具。
 
-- 本次读取两个公开 JSON 端点无需 API Key；服务商记录中的 `env` 是调用该服务商模型 API 的配置，不是读取 Models.dev 目录的鉴权要求。
-- 所查上游 README 与公开 API 说明未公布固定 QPS 配额或 SLA，不能理解为允许无限请求或保证可用。当前已设置超时、控制重试，并在限流时尊重 `Retry-After`；进入页面检查一次，主动刷新防重入，不高频轮询。
-- 核实时两个端点均返回 `Cache-Control: public, max-age=0, must-revalidate` 和 `ETag`。这是当次 HTTP 观察，不是固定缓存契约；后续 HTTP 缓存应遵循实际响应头，不把它与推理 API 的 prompt cache 混淆，也不据此承诺固定刷新周期。
-- 数据由社区维护，不保证与服务商实时同步。远程 `last_updated` 是条目元数据，不是本地抓取时间，也不能当作价格生效时间；当前映射已单独记录来源与获取时间。
+## 核实依据与时效
 
-### 数据许可与来源署名
+上游固定提交 `00b5db7ae590a0e3cbafb2d64df4da111c49c1e7`：
+- [README](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/README.md)、[维护规范](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/AGENTS.md)：币种、单位、覆盖及推理控制。
+- [Schema](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/packages/core/src/schema.ts)、[生成代码](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/packages/core/src/generate.ts)、[LICENSE](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/LICENSE)。
+- [OpenAI](https://developers.openai.com/api/docs/pricing)、[Claude](https://platform.claude.com/docs/en/about-claude/pricing)、[Gemini](https://ai.google.dev/gemini-api/docs/pricing) 官方计价示例，不是所有服务的统一条件。
 
-- 上游仓库采用 **MIT License**，版权声明为 `Copyright (c) 2025 models.dev`，允许使用、修改、分发及商业使用，并按原样提供、无担保。所查仓库未声明另一份独立的数据许可。
-- 分发上游数据或其重大部分时，应保留版权声明及完整 MIT 许可文本（含免责条款）；**仅写来源名称或放链接不能替代许可声明**。全文已随 `res/raw/models_dev_license.txt` 打包，可通过设置页的“数据来源与许可”进入独立页面查看，无需先加载目录。
-- 来源说明继续注明 Models.dev，并说明本应用为独立第三方；这与保留许可文本是不同事项。上游 MIT 不自动决定本项目自身的许可证，也不替代各模型权重许可、服务商条款或商标使用规则。
-- 列表的 LAB 彩色 logo 同样来自 Models.dev 的 Logos 服务，已转换为 Android 矢量资源随 `app/src/main/res/drawable/ic_lab_*.xml` 打包，不运行时请求；logo 为品牌商标，仅用于标示目录中的 LAB 前缀，不代表隶属、赞助或认可。
-- 详情“价格”的服务商 logo 来自 `https://models.dev/logos/{provider-ID}.svg`，按本地详情的服务商稳定 ID 精确匹配，与 LAB 素材独立。2026-10-27 核对当次 `api.json?type=all` 的 232 个 ID，收录 212 个 ID 对应的 187 份 SVG 矢量资源（`ic_provider_*.xml`，不含独立兜底图）；仅原始 SVG 内容完全相同才共用资源。保留路径、变换及显式颜色，`currentColor` 固定为黑色以配合白底，不运行时下载或改数据库。12 个 ID（`alibaba-token-plan-cn`、`chutes`、`cline-pass`、`cortecs`、`gmicloud`、`morph`、`requesty`、`sakana`、`sap-ai-core`、`sarvam`、`synthetic`、`upstage`）返回与不存在 ID 相同的通用图；8 个 ID（`abliteration-ai`、`atomic-chat`、`hpc-ai`、`kenari`、`orcarouter`、`umans-ai`、`umans-ai-coding-plan`、`wafer.ai`）包含当前矢量导入器不支持的文字、嵌入位图或纹理。以上及未来未收录 ID 均显示中性兜底图，不展示不完整图形或借用同名 LAB 图案。素材同样仅用于品牌识别，不代表隶属、赞助或认可；本次数量是来源快照，不是固定接口契约。
-
-服务商素材使用 Android 工具链 `Svg2Vector` 导入，移除非绘制元数据并按原 `viewBox` 转换，统一固有尺寸为 24dp、由组件等比绘制。`lucidquery` 原始单路径超过 Android 资源字符串编码限制，先经构建期 SVGO 路径优化后导入；没有拆散复合路径或用其他品牌替代。每份资源注释保留原始地址和收录日期，后续更新仍需验证 Compose 加载及实际图形；这些是已生成的随包资源，不要求用户或应用运行时安装转换工具。
-
-## 核实依据
-
-上游仓库资料固定到核实时的提交 `00b5db7ae590a0e3cbafb2d64df4da111c49c1e7`，便于追溯；在线报价与服务条件可能随后变化。
-
-- [上游 README](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/README.md)：计价单位、能力字段、模型与服务商覆盖关系。
-- [上游维护规范](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/AGENTS.md)：统一 USD、汇率注释、上下文档位及推理选项语义。
-- [字段 Schema](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/packages/core/src/schema.ts)与[生成代码](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/packages/core/src/generate.ts)：价格字段、档位与旧字段兼容逻辑。
-- [上游 LICENSE](https://github.com/anomalyco/models.dev/blob/00b5db7ae590a0e3cbafb2d64df4da111c49c1e7/LICENSE)：MIT 授权、版权保留及免责条款。
-- [OpenAI 定价](https://developers.openai.com/api/docs/pricing)、[Claude 定价](https://platform.claude.com/docs/en/about-claude/pricing)、[Gemini 定价](https://ai.google.dev/gemini-api/docs/pricing)：核对上下文门槛、缓存及模式等条件的官方示例，不作为全部服务商的统一规则。
-
-## 测试与后续接入
-
-- Models.dev 历史解析／服务商测试使用 [`app/src/test/resources/modelsdev/`](../app/src/test/resources/modelsdev/) 合成样本，不将合成数值当作真实报价。新发布包测试另直接解析 `assets/atlas/` 原字节，并覆盖文本分数、严格已知类型、定义匹配与中文回退，见[分级验证](testing.md)。
-- 已覆盖两类完整嵌套结构、跨服务商重复模型 ID、缺失与显式空值、未知字段、动态模式、整数与小数价格、超出 Int 的限制值、`interleaved` 双向序列化和异常响应。
-- 已添加普通 `INTERNET` 权限、客户端、Hilt 配置、后台映射、异步加载与失败重试。客户端设置连接 15 秒、读取 30 秒、整次调用 60 秒超时，不自动重试或轮询。HTTP 429 / 503 尊重 `Retry-After` 秒数或 HTTP 日期；缺失或无效时冷却 60 秒，冷却期间用户重试不会再次请求服务器。
-- 仅在 Atlas 整包校验、解析和 Models.dev 服务响应均成功后形成完整快照；本地获取时间按各响应成功后的时钟记录，同一响应记录保持一致。网络失败、非法响应或取消不写入部分目录。首次无目录且无发布标记时先导入真实随包模型／评测／翻译（没有价格）；新的列表 ViewModel 优先读取并观察本地目录，后台检查时规范模型 ID 集合有增删才提示并暂存完整快照供确认，ID 集合不变时静默同步内容且不显示成功提示。下拉刷新主动获取并提交，检查期间下拉复用该请求。后台检查失败不打扰本地浏览，主动刷新失败显示非阻断提示。
-- 是否提示只比较 `models.json` 字典键对应的完整规范模型 ID 集合，不受 LLM 收录、搜索或筛选影响；模型参数／名称／类型／许可、服务商和模型服务的增删改、报价、成绩及翻译变化均不单独提示。是否写库比较完整内容及发布内容哈希，以稳定主键匹配，忽略本地获取时间与字典顺序；仅抓取时间改变不会提示更新或重复写库。待应用快照仅存内存，进程重启后重新检查，不持久化另一份目录。有效空发布仍可经主动刷新／确认清空旧模型目录与成绩，但不删除收藏。
-- 网络路径与解析由 MockWebServer 测试覆盖，仓库和 ViewModel 异步行为使用 fake 与测试调度器；实际 SQLite 事务与列表状态交互由 `androidTest` 验证。
-- 展示时遵循上文已核实的口径；具体服务商的档位边界、缓存条件、模式组合及调用权限等未完整表达的信息，仍需按官方说明核实，不补造默认值。数据来源、独立第三方与 MIT 许可说明集中在设置说明页。
-- 已补充本地优先、更新检查与提交分离、主动刷新、失败保留数据及并发操作测试；记录级来源与获取时间仍存储但不再在详情显示，目录页统一更新时间尚未实现。接入和缓存任务的完成状态只在 [TODO.md](../TODO.md) 维护。
+当次两端点曾返回 `Cache-Control: public, max-age=0, must-revalidate`／ETag，是观察不是固定契约；未公布固定 QPS／SLA不代表无限请求或保证可用。社区数据可能滞后，`last_updated`、本地获取时间、价格生效时间不能混同。测试选取见[测试说明](testing.md)，线上整链及发布进度见 [TODO](../TODO.md#待验收与发布)。

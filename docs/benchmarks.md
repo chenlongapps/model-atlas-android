@@ -1,6 +1,6 @@
-# 大模型 Benchmark 清单
+# 候选 Benchmark 与参考来源
 
-本文按评测领域整理待关注的综合指数与 benchmark，供理解模型评测和后续调研使用。清单及下文的能力描述来自需求，**尚未逐项核对官方资料**；名称、版本、题量、评测方法和适用范围均需以对应发布方的原始资料为准。本文不是模型排行榜，也不代表项目已接入这些评测或验证其结果。
+本文只维护调研候选，不作为已接入／已核验清单。名称、版本和能力描述来自需求，**尚未逐项核对官方资料**；即使随包已有同名定义、成绩或 Logo，也不代表本清单的版本、测试口径、来源及分发许可已核实。当前数据接入见 [Atlas 契约](atlas-data.md)，选取任务见 [TODO](../TODO.md#近期任务)。
 
 ## 综合指数
 
@@ -58,6 +58,14 @@
 - **分数不等于实际表现。** benchmark 只覆盖特定任务样本，可能存在数据污染、过拟合和环境差异。
 - **核验使用条件。** 复用数据集、评测题、结果或品牌材料前，应分别核查许可、访问条件和归属；不同来源的条款可能不同。
 
-## 与本项目的关系
+## 参考来源（待评估）
 
-当前应用详情的“评测”标签读取独立成绩表，真实随包 v2 包含经维护者批准的 MMLU-Pro EM 和 MATH-500 pass@1 共五条 DeepSeek 官方自报成绩，来自独立 ModelAtlas Data 仓库，不是 Models.dev 的评测字段。出处、执行条件及许可见[数据源说明](data-source.md)。本清单仍是独立调研参考，不表示已接入上文每个项目。Pages 更新地址已配置但尚未部署，跨模型可比性与综合排名不在本轮范围。
+| 来源 | 评估重点 |
+| --- | --- |
+| [benchboard](https://github.com/SYuan03/benchboard) | 成绩收集参考，回溯原始出处、覆盖及再分发条件 |
+| [Artificial Analysis](https://artificialanalysis.ai)、[Vals AI](https://www.vals.ai)、[Scale Labs](https://labs.scale.com/) | 数据获取、测试配置、模型版本及许可 |
+| [Arena](https://arena.ai/) | 竞技场评分口径、模型版本、获取及使用条件 |
+| [LiveBench](https://github.com/livebench/livebench) | 原记录称“2.0”，具体版本、成绩出处与许可需核实 |
+| [Public AI Model Index](https://publicai.io/model-index)、[AI Release Tracker](https://aireleasetracker.com/) | 字段覆盖、原始数据、更新及再利用条件 |
+
+链接不代表已获分发许可或可直接比较。采用前记录原始证据与更新时间，AI 辅助结果也须核验，不替代来源审查；不因收集方便就扩张页面字段。

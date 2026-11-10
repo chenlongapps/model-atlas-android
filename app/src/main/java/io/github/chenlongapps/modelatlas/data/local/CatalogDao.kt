@@ -86,6 +86,10 @@ abstract class CatalogDao {
     @Query("SELECT * FROM models WHERE id = :id")
     abstract fun observeModelDetail(id: String): Flow<ModelDetailRecord?>
 
+    @Transaction
+    @Query("SELECT * FROM benchmark_definitions ORDER BY name COLLATE NOCASE, id")
+    abstract fun observeBenchmarkRankings(): Flow<List<BenchmarkRankingRecord>>
+
     @Insert
     protected abstract suspend fun insertModels(models: List<ModelEntity>)
 
