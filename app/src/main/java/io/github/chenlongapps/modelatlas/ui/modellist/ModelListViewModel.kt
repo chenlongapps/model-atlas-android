@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.CatalogRateLimitException
-import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import java.io.IOException
 import javax.inject.Inject
@@ -26,7 +25,6 @@ data class ModelListUiState(
     val isLoading: Boolean = true,
     val error: ModelListError? = null,
     val isRefreshing: Boolean = false,
-    val updateAvailable: Boolean = false,
     val message: ModelListMessage? = null,
     val refreshError: ModelListError? = null,
     val query: ModelListQuery = ModelListQuery(),
@@ -45,18 +43,16 @@ class ModelListViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ModelListUiState(query = restoreQuery()))
     val uiState: StateFlow<ModelListUiState> = _uiState.asStateFlow()
     private var loadJob: Job? = null
-    private var observationJob: Job? = null
+    private var hasDisplaySnapshot = false
     private var checking = false
     private var refreshAfterCheck = false
 
-    init {
-        load(initial = true)
-    }
+    init { loadInitial() }
 
     fun setQuery(query: ModelListQuery) {
         val normalized = query.withModalityCategories()
         if (_uiState.value.query == normalized) return
-        // 仅保存小型查询条件，不保存目录或派生结果。
+        // 仅保存小型查询条件，不保存目录或结果；展示快照由本次 ViewModel 持有。
         savedStateHandle[QUERY_KEY] = ModelListQueryJson.encodeToString(normalized)
         _uiState.update { it.copy(query = normalized) }
     }
@@ -65,11 +61,11 @@ class ModelListViewModel @Inject constructor(
         ?.let(::restoreModelListQuery) ?: ModelListQuery()
 
     fun retry() {
-        load(initial = _uiState.value.error != null || observationJob?.isActive != true)
+        if (hasDisplaySnapshot) refresh() else loadInitial()
     }
 
     fun refresh() {
-        // 用户在后台检查期间下拉时复用当前请求，检查完成后直接提交。
+        // 下拉时若启动检查仍在联网，复用该请求并在完成后发布展示快照。
         if (loadJob?.isActive == true) {
             if (checking) {
                 refreshAfterCheck = true
@@ -77,88 +73,75 @@ class ModelListViewModel @Inject constructor(
             }
             return
         }
-        load(initial = _uiState.value.error != null || observationJob?.isActive != true)
-    }
-
-    fun applyUpdate() {
-        if (!_uiState.value.updateAvailable) return
-        load(applyPending = true)
+        if (!hasDisplaySnapshot) {
+            loadInitial()
+            return
+        }
+        _uiState.update { it.copy(isRefreshing = true, error = null, message = null, refreshError = null) }
+        loadJob = viewModelScope.launch {
+            try {
+                publishRefreshed(modelRepository.refresh())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update { it.copy(refreshError = error.toListError()) }
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
+        }
     }
 
     fun clearMessage() {
         _uiState.update { it.copy(message = null, refreshError = null) }
     }
 
-    /** 其他页面已通过同一仓库完成刷新；只同步本地状态，不再次联网。 */
-    fun onCatalogRefreshedExternally() {
+    /** Debug 用户主动刷新后只发布本地快照，不再次联网。 */
+    fun onCatalogRefreshedExternally() = reloadLocalSnapshot()
+
+    /** Debug 用户主动修改记录后只发布本地快照，不恢复持续目录观察。 */
+    fun onCatalogMutatedExternally() = reloadLocalSnapshot()
+
+    private fun reloadLocalSnapshot() {
         viewModelScope.launch {
-            // 等待本页原有检查结束，避免其迟到结果恢复已经失效的待更新提示。
             loadJob?.join()
             try {
                 val models = modelRepository.observeModels().first()
+                hasDisplaySnapshot = true
                 _uiState.update {
-                    it.copy(models = models, isLoading = false, error = null, updateAvailable = false, message = null, refreshError = null)
+                    it.copy(models = models, isLoading = false, error = null, message = null, refreshError = null)
                 }
-                if (observationJob?.isActive != true) observeCatalog()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = ModelListError.STORAGE) }
+                _uiState.update {
+                    if (hasDisplaySnapshot) it.copy(refreshError = ModelListError.STORAGE)
+                    else it.copy(isLoading = false, error = ModelListError.STORAGE)
+                }
             }
         }
     }
 
-    /** 本地记录被直接修改；恢复本地观察，但不丢弃仍可由用户应用的远端待更新快照。 */
-    fun onCatalogMutatedExternally() {
-        viewModelScope.launch {
-            loadJob?.join()
-            try {
-                val models = modelRepository.observeModels().first()
-                _uiState.update { it.copy(models = models, isLoading = false, error = null) }
-                if (observationJob?.isActive != true) observeCatalog()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = ModelListError.STORAGE) }
-            }
-        }
-    }
-
-    private fun load(initial: Boolean = false, applyPending: Boolean = false) {
+    private fun loadInitial() {
         if (loadJob?.isActive == true) return
-        _uiState.update {
-            it.copy(isLoading = initial, isRefreshing = !initial, error = null, message = null, refreshError = null)
-        }
+        _uiState.update { it.copy(isLoading = true, error = null, message = null, refreshError = null) }
         loadJob = viewModelScope.launch {
             var backgroundCheck = false
             try {
-                if (initial) {
-                    val models = modelRepository.observeModels().first()
-                    val hasLocal = modelRepository.hasLocalCatalog()
-                    _uiState.update { it.copy(models = models, isLoading = !hasLocal) }
-                    if (hasLocal) observeCatalog()
-                    backgroundCheck = hasLocal
-                }
+                // 先导入可能存在的随包数据，再读取展示快照，避免把导入前的空结果冻结。
+                backgroundCheck = modelRepository.hasLocalCatalog()
                 if (backgroundCheck) {
+                    val models = modelRepository.observeModels().first()
+                    hasDisplaySnapshot = true
+                    _uiState.update { it.copy(models = models, isLoading = false) }
                     checking = true
-                    val result = modelRepository.checkForUpdates()
-                    _uiState.update { it.copy(updateAvailable = result == CatalogUpdateCheckResult.UPDATE_AVAILABLE) }
-                    if (refreshAfterCheck) {
-                        val changed = when (result) {
-                            CatalogUpdateCheckResult.UPDATE_AVAILABLE -> modelRepository.applyPendingUpdate()
-                            CatalogUpdateCheckResult.UPDATED_SILENTLY -> true
-                            CatalogUpdateCheckResult.UNCHANGED -> false
-                        }
-                        refreshed(changed)
-                    }
+                    val changed = modelRepository.refresh()
+                    if (refreshAfterCheck) publishRefreshed(changed)
                 } else {
-                    val changed = if (applyPending) modelRepository.applyPendingUpdate() else modelRepository.refresh()
-                    // 写库完成不等于观察者已收到结果；首次加载重新查询已提交目录，
-                    // 再原子发布列表与加载结束，避免短暂显示空目录（真实空结果仍可结束加载）。
-                    val models = if (initial) modelRepository.observeModels().first() else null
-                    _uiState.update { it.copy(models = models ?: it.models, isLoading = false, updateAvailable = false) }
-                    if (initial) observeCatalog()
-                    if (!initial) refreshed(changed)
+                    modelRepository.refresh()
+                    // 写库完成不等于读取结果已就绪；真实空结果也能结束首次加载。
+                    val models = modelRepository.observeModels().first()
+                    hasDisplaySnapshot = true
+                    _uiState.update { it.copy(models = models, isLoading = false) }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -167,7 +150,7 @@ class ModelListViewModel @Inject constructor(
                     when {
                         it.isLoading -> it.copy(isLoading = false, error = error.toListError())
                         !backgroundCheck || refreshAfterCheck -> it.copy(refreshError = error.toListError())
-                        else -> it // 静默检查失败不干扰离线浏览。
+                        else -> it // 自动更新失败不干扰本次缓存展示。
                     }
                 }
             } finally {
@@ -178,24 +161,14 @@ class ModelListViewModel @Inject constructor(
         }
     }
 
-    private fun refreshed(changed: Boolean) {
+    private suspend fun publishRefreshed(changed: Boolean) {
+        val models = modelRepository.observeModels().first()
         _uiState.update {
-            it.copy(updateAvailable = false, message = if (changed) ModelListMessage.UPDATED else ModelListMessage.UP_TO_DATE)
-        }
-    }
-
-    private fun observeCatalog() {
-        observationJob?.cancel()
-        observationJob = viewModelScope.launch {
-            try {
-                modelRepository.observeModels().collect { models ->
-                    _uiState.update { it.copy(models = models) }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = ModelListError.STORAGE) }
-            }
+            it.copy(
+                models = models,
+                // 后台已更新过缓存时，本次联网无变化但展示变化仍反馈“已更新”。
+                message = if (changed || models != it.models) ModelListMessage.UPDATED else ModelListMessage.UP_TO_DATE,
+            )
         }
     }
 

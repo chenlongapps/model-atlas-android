@@ -3,7 +3,6 @@ package io.github.chenlongapps.modelatlas.ui.modeldetail
 import androidx.lifecycle.ViewModelStore
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
-import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.testing.MainDispatcherRule
 import kotlinx.coroutines.CancellationException
@@ -121,11 +120,6 @@ class ModelDetailViewModelTest {
         }
         override fun observeModels() = flowOf(emptyList<ModelSummary>())
         override suspend fun hasLocalCatalog() = true
-        override suspend fun checkForUpdates(): CatalogUpdateCheckResult {
-            networkCalls++
-            return CatalogUpdateCheckResult.UNCHANGED
-        }
         override suspend fun refresh(): Boolean { networkCalls++; return false }
-        override suspend fun applyPendingUpdate() = false
     }
 }

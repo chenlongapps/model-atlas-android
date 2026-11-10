@@ -391,8 +391,8 @@ class ModelAtlasAppTest {
         compose.onNodeWithTag("nav-settings").assertIsSelected()
     }
 
-    @Test fun headerNoticeSurvivesTabSwitchAndStillAppliesUpdate() {
-        var applies = 0
+    @Test fun manualRefreshErrorSurvivesTabSwitchAndStillRetries() {
+        var refreshes = 0
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 ModelAtlasScaffold { bottomPadding, listState, _ ->
@@ -400,19 +400,19 @@ class ModelAtlasAppTest {
                         uiState = ModelListUiState(
                             models = listOf(ModelSummary("lab/cached", "本地模型")),
                             isLoading = false,
-                            updateAvailable = true,
+                            refreshError = io.github.chenlongapps.modelatlas.ui.modellist.ModelListError.NETWORK,
                         ),
                         bottomOverlayPadding = bottomPadding,
                         listState = listState,
-                        onApplyUpdate = { applies++ },
+                        onRefresh = { refreshes++ },
                     )
                 }
             }
         }
-        val action = compose.onNodeWithText("立即更新")
+        val action = compose.onNodeWithText("重试")
         action.assertIsDisplayed()
         compose.onNodeWithTag("nav-settings").performClick()
-        compose.onNodeWithText("立即更新").assertIsNotDisplayed()
+        compose.onNodeWithText("重试").assertIsNotDisplayed()
         compose.onNodeWithTag("nav-models").performClick()
         compose.onNodeWithTag("catalog-notice").assertIsDisplayed()
         val header = compose.onNodeWithTag("catalog-header").fetchSemanticsNode().boundsInRoot
@@ -421,7 +421,7 @@ class ModelAtlasAppTest {
         val navigation = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
         assertTrue(action.fetchSemanticsNode().boundsInRoot.bottom <= navigation.top)
         action.performClick()
-        compose.runOnIdle { assertEquals(1, applies) }
+        compose.runOnIdle { assertEquals(1, refreshes) }
     }
 
     @Test fun largeFontAndRtlKeepLabelsAndIndicatorUsable() {

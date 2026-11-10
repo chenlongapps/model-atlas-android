@@ -12,6 +12,15 @@
 - 修正旧 Pages／虚构数据阶段说明与最低 API 文案；当前榜单过滤规则按最新工作区核对，未以历史测试声称新版已通过。补提参数量回归中断和 Debug 返回确认未闭环风险，其他验收状态不擅自勾选。
 - 文档验证：本地链接与标题锚点、测试类名、`git diff --check` 通过；原 TODO 正文与整理前 Git 暂存版本核对一致，仅调整相对链接。未构建、Lint 或执行应用测试，不把本次整理计作功能验收。
 
+### 2026-11-10 静默同步与列表展示快照
+
+- 范围：移除模型增删待确认机制及提示；启动读取缓存后自动同步所有变化到数据库，本次列表不持续观察目录；主动下拉联网成功后才发布最新展示快照，反馈更新／最新／错误，复用进行中的启动请求。切页／详情返回不应用后台缓存，不新增轮询。Debug 显式刷新／修改仍只重读本地；收藏增删实时，目录身份／可用性跟随列表快照。合法空发布也作为离线缓存，避免重复导入或阻断启动。同步相关专题文档、README 和 AGENTS；保留本轮检测到的 TODO 用户修改。
+- 单元与构建：`testDebugUnitTest` 最终 56 类、363 项，0 失败／错误／忽略；Debug 应用与测试 APK 构建、Debug Lint 通过。新增读屏刷新测试曾误用 `CustomActions` 的调用 API 导致测试编译失败，改为读取动作列表并在主线程执行后通过；不是运行时功能失败。
+- 设备首轮：API 37 / `emulator-5554`，显式 runner `numtests=65`，实际完成 65 项，其中 63 通过、2 失败。覆盖 `SilentCatalogUpdateTest` 3、`CatalogStatusNoticeTest` 6、`CatalogNoticeAnimationTest` 4、`CatalogNoticeReducedMotionTest` 1、`ModelListScreenTest` 41、`ModelDetailNavigationTest` 3、`AtlasCatalogIntegrationTest` 6 及 `ModelAtlasAppTest#manualRefreshErrorSurvivesTabSwitchAndStillRetries` 1。两项失败均为浅／深提醒退出位移基线：新错误提醒较高，提醒高度与卡片 placement 两段动画尚未共同稳定即取样；仅延长测试虚拟时钟的端点等待到 500ms，保留中间帧位移／像素及最终无空隙断言，不修改产品动效。新 APK 定向复跑这两项，`numtests=2`、`OK (2 tests)`。
+- 验证边界：未清数据、卸载或重建模拟器；未执行 Release 或全量 instrumentation。模拟响应与自动化不等于实际线上 HTTPS、真机视觉或 TalkBack 验收，原待验收任务不据此清除。
+
+  最终受影响范围复跑：以最终源码重新构建安装 Debug／测试 APK，复用本轮产物运行完整 `CatalogNoticeAnimationTest` 4、`CatalogNoticeReducedMotionTest` 1、`SilentCatalogUpdateTest` 3、`AtlasCatalogIntegrationTest` 6（含合法空缓存离线启动新断言）及 `FavoritesScreenTest#detailOnlyAddStaysThenRemoveReturnsToModelsSource` 1；显式 runner 实际 `numtests=15`、`OK (15 tests)`。首轮失败记录不改记为全通过；未无条件重跑其余已通过范围。全量单元报告位于 `app/build/reports/tests/testDebugUnitTest/`，Lint 位于 `app/build/reports/lint-results-debug.html`，显式 runner 结果以本轮命令输出为证、不冒充 Gradle connected 报告。
+
 ## 原 TODO（以下保留原文）
 
 ## 产品目标与当前状态

@@ -27,7 +27,6 @@ import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
-import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
@@ -413,9 +412,7 @@ class FavoritesScreenTest {
             if (repository.items.value.any { it.model == null }) null else ModelDetail(id, model.name, fetchedAtEpochMillis = 0))
         override fun observeModels() = flowOf(listOf(model))
         override suspend fun hasLocalCatalog() = true
-        override suspend fun checkForUpdates(): CatalogUpdateCheckResult = error("No network")
         override suspend fun refresh(): Boolean = error("No network")
-        override suspend fun applyPendingUpdate(): Boolean = error("No network")
     }
 }
 

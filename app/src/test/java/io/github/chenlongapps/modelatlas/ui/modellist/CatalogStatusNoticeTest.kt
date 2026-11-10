@@ -13,50 +13,32 @@ class CatalogStatusNoticeTest {
         assertFalse(idle.hasCatalogNotice())
     }
 
-    @Test fun nonBlockingResultsAndPendingUpdatesHaveAnInlineNotice() {
-        listOf(
-            idle.copy(updateAvailable = true),
-            idle.copy(message = ModelListMessage.UPDATED),
-            idle.copy(message = ModelListMessage.UP_TO_DATE),
-        ).forEach { assertTrue(it.hasCatalogNotice()) }
+    @Test fun onlyExplicitResultsAndErrorsHaveAnInlineNotice() {
+        ModelListMessage.entries.forEach { assertTrue(idle.copy(message = it).hasCatalogNotice()) }
         ModelListError.entries.forEach { assertTrue(idle.copy(refreshError = it).hasCatalogNotice()) }
     }
 
     @Test fun refreshingNeverReservesInlineNoticeSpace() {
-        listOf(
-            idle,
-            idle.copy(updateAvailable = true),
-            idle.copy(message = ModelListMessage.UPDATED),
-            idle.copy(message = ModelListMessage.UP_TO_DATE),
-        ).forEach { assertFalse(it.copy(isRefreshing = true).hasCatalogNotice()) }
-        ModelListError.entries.forEach {
-            assertFalse(idle.copy(isRefreshing = true, refreshError = it).hasCatalogNotice())
-        }
+        ModelListMessage.entries.forEach { assertFalse(idle.copy(isRefreshing = true, message = it).hasCatalogNotice()) }
+        ModelListError.entries.forEach { assertFalse(idle.copy(isRefreshing = true, refreshError = it).hasCatalogNotice()) }
     }
 
     @Test fun initialLoadingAndBlockingErrorsUseTheirExistingStateCardsInstead() {
-        val pending = idle.copy(updateAvailable = true, refreshError = ModelListError.NETWORK)
-        assertFalse(pending.copy(isLoading = true).hasCatalogNotice())
-        ModelListError.entries.forEach { assertFalse(pending.copy(error = it).hasCatalogNotice()) }
+        val failed = idle.copy(refreshError = ModelListError.NETWORK)
+        assertFalse(failed.copy(isLoading = true).hasCatalogNotice())
+        ModelListError.entries.forEach { assertFalse(failed.copy(error = it).hasCatalogNotice()) }
     }
 
-    @Test fun dismissingResultsDoesNotLoseThePendingUpdate() {
-        val pending = idle.copy(updateAvailable = true, refreshError = ModelListError.STORAGE)
-        assertTrue(pending.copy(message = null, refreshError = null).hasCatalogNotice())
-        assertFalse(idle.copy(message = null, refreshError = null).hasCatalogNotice())
-    }
-
-    @Test fun hiddenStatesHaveNoAnimationTarget() {
+    @Test fun dismissingResultsLeavesNoNoticeOrAnimationTarget() {
+        val failed = idle.copy(refreshError = ModelListError.STORAGE)
+        assertFalse(failed.copy(message = null, refreshError = null).hasCatalogNotice())
         assertEquals(null, idle.catalogNotice())
-        assertEquals(null, idle.copy(isRefreshing = true, updateAvailable = true).catalogNotice())
-        assertEquals(null, idle.copy(isLoading = true, message = ModelListMessage.UPDATED).catalogNotice())
+        assertEquals(null, idle.copy(isRefreshing = true, message = ModelListMessage.UPDATED).catalogNotice())
     }
 
     @Test fun animationTargetOnlyChangesWhenNoticeContentChanges() {
-        val pending = idle.copy(updateAvailable = true, refreshError = ModelListError.NETWORK)
-        assertEquals(CatalogNotice(ModelListError.NETWORK, updateAvailable = true), pending.catalogNotice())
-        assertEquals(pending.catalogNotice(), pending.copy(
-            models = listOf(ModelSummary("lab/new", "新模型")),
-        ).catalogNotice())
+        val failed = idle.copy(refreshError = ModelListError.NETWORK)
+        assertEquals(CatalogNotice(ModelListError.NETWORK), failed.catalogNotice())
+        assertEquals(failed.catalogNotice(), failed.copy(models = listOf(ModelSummary("lab/new", "新模型"))).catalogNotice())
     }
 }

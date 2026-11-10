@@ -99,7 +99,6 @@ fun ModelListRoute(
         uiState = uiState,
         onRetry = viewModel::retry,
         onRefresh = viewModel::refresh,
-        onApplyUpdate = viewModel::applyUpdate,
         onDismissNotice = viewModel::clearMessage,
         onQueryChange = viewModel::setQuery,
         modifier = modifier,
@@ -118,7 +117,6 @@ internal fun ModelListScreen(
     onRetry: () -> Unit = {},
     windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     onRefresh: () -> Unit = {},
-    onApplyUpdate: () -> Unit = {},
     onDismissNotice: () -> Unit = {},
     bottomOverlayPadding: Dp = 0.dp,
     listState: LazyListState = rememberLazyListState(),
@@ -137,7 +135,8 @@ internal fun ModelListScreen(
     val isVisible = LocalModelListVisible.current
     val sharedTransition = LocalModelSharedTransition.current
     val removal = LocalFavoriteRemovalTransition.current
-    val favorites = if (favoritesState.hasError) emptyList() else favoritesState.favorites
+    val favoriteSnapshot = remember(uiState.models) { CatalogFavoriteSnapshot(uiState.models) }
+    val favorites = if (favoritesState.hasError) emptyList() else favoriteSnapshot.project(favoritesState.favorites)
     val rawEntries = catalogEntries(uiState.models, favorites, uiState.query).let { entries ->
         // 目录读取失败不展示过期目录，但仍允许访问已独立保存的下架收藏。
         if (uiState.error != null) entries.filter { it.model == null } else entries
@@ -273,7 +272,6 @@ internal fun ModelListScreen(
                         CatalogHeader(uiState = uiState)
                         AnimatedCatalogStatusNotice(
                             notice = uiState.catalogNotice(),
-                            onApplyUpdate = onApplyUpdate,
                             onRefresh = onRefresh,
                             onDismiss = onDismissNotice,
                         )

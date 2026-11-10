@@ -53,14 +53,12 @@ class CatalogStatusNoticeTest {
             isLoading = false,
         )
         val state = mutableStateOf(cached)
-        var applies = 0
         var refreshes = 0
         var dismissals = 0
         compose.setContent {
             ModelAtlasTheme(darkTheme = darkTheme, dynamicColor = false) {
                 ModelListScreen(
                     uiState = state.value,
-                    onApplyUpdate = { applies++ },
                     onRefresh = { refreshes++ },
                     onDismissNotice = {
                         dismissals++
@@ -70,16 +68,15 @@ class CatalogStatusNoticeTest {
             }
         }
         compose.onNodeWithTag("catalog-notice").assertDoesNotExist()
-        compose.runOnIdle { state.value = cached.copy(updateAvailable = true) }
-        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
+        compose.runOnIdle { state.value = cached.copy(refreshError = ModelListError.STORAGE) }
+        compose.onNodeWithText("无法读写本地模型目录，请重试。").assertIsDisplayed()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
         val actionableBounds = compose.onNodeWithTag("catalog-notice").getUnclippedBoundsInRoot()
         val actionableHeight = actionableBounds.bottom - actionableBounds.top
         compose.mainClock.advanceTimeBy(60_000)
-        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
-        compose.onNodeWithText("立即更新").performClick()
-        compose.onNodeWithText("关闭").assertDoesNotExist()
-        assertEquals(1, applies)
+        compose.onNodeWithText("无法读写本地模型目录，请重试。").assertIsDisplayed()
+        compose.onNodeWithText("重试").performClick()
+        assertEquals(1, refreshes)
 
         // 刷新期间只保留上方的下拉刷新指示器，内联提醒不占位。
         compose.runOnIdle { state.value = state.value.copy(isRefreshing = true) }
@@ -87,19 +84,19 @@ class CatalogStatusNoticeTest {
         compose.onNodeWithText("立即更新").assertDoesNotExist()
         compose.onNodeWithText("关闭").assertDoesNotExist()
 
-        // 提交失败仍可直接重试暂存更新；关闭错误后恢复待更新提示。
-        compose.runOnIdle { state.value = cached.copy(updateAvailable = true, refreshError = ModelListError.STORAGE) }
+        // 失败只提供重试；关闭后不再恢复旧的待确认提示。
+        compose.runOnIdle { state.value = cached.copy(refreshError = ModelListError.STORAGE) }
         compose.onNodeWithText("无法读写本地模型目录，请重试。").assertIsDisplayed()
-        compose.onNodeWithText("立即更新").performClick()
-        assertEquals(2, applies)
+        compose.onNodeWithText("重试").performClick()
+        assertEquals(2, refreshes)
         compose.onNodeWithText("关闭").performClick()
-        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
+        compose.onNodeWithTag("catalog-notice").assertDoesNotExist()
 
         compose.runOnIdle { state.value = cached.copy(refreshError = ModelListError.NETWORK) }
         compose.mainClock.advanceTimeBy(60_000)
         compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertIsDisplayed()
         compose.onNodeWithText("重试").performClick()
-        assertEquals(1, refreshes)
+        assertEquals(3, refreshes)
         compose.onNodeWithText("关闭").performClick()
         compose.onNodeWithTag("catalog-notice").assertDoesNotExist()
 
@@ -231,7 +228,6 @@ class CatalogStatusNoticeTest {
                     ModelListScreen(
                         uiState = ModelListUiState(
                             isLoading = false,
-                            updateAvailable = true,
                             refreshError = ModelListError.NETWORK,
                         ),
                         modifier = Modifier.width(320.dp),
@@ -240,7 +236,7 @@ class CatalogStatusNoticeTest {
                 }
             }
         }
-        for (text in listOf(message, "关闭", "立即更新")) {
+        for (text in listOf(message, "关闭", "重试")) {
             val node = compose.onNodeWithText(text, useUnmergedTree = true)
             node.performScrollTo().assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
@@ -255,7 +251,7 @@ class CatalogStatusNoticeTest {
             assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1))
         }
         // 大字号可以增高按钮，但不能低于 Material 的最小触摸高度。
-        val action = compose.onNodeWithText("立即更新")
+        val action = compose.onNodeWithText("重试")
         assertTrue(action.fetchSemanticsNode().boundsInRoot.height >= with(compose.density) { 48.dp.toPx() })
     }
 }

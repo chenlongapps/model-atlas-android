@@ -166,8 +166,6 @@ class DebugViewModelTest {
         override fun observeModels() = flowOf(emptyList<ModelSummary>())
         override fun observeModelDetail(id: String) = flowOf<ModelDetail?>(null)
         override suspend fun hasLocalCatalog() = true
-        override suspend fun checkForUpdates() = error("Debug must not check for pending updates")
-        override suspend fun applyPendingUpdate() = error("Debug must use refresh")
     }
 
     private class FakeStore : CatalogStore {

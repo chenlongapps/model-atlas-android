@@ -39,22 +39,20 @@ import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 internal fun ModelListUiState.hasCatalogNotice(): Boolean =
     !isLoading && !isRefreshing && error == null &&
-        (updateAvailable || message != null || refreshError != null)
+        (message != null || refreshError != null)
 
 /** 只保留提醒的展示字段，避免目录内容变化触发动画或保留整份模型列表。 */
 internal data class CatalogNotice(
     val refreshError: ModelListError? = null,
     val message: ModelListMessage? = null,
-    val updateAvailable: Boolean = false,
 )
 
 internal fun ModelListUiState.catalogNotice(): CatalogNotice? =
-    if (hasCatalogNotice()) CatalogNotice(refreshError, message, updateAvailable) else null
+    if (hasCatalogNotice()) CatalogNotice(refreshError, message) else null
 
 @Composable
 internal fun AnimatedCatalogStatusNotice(
     notice: CatalogNotice?,
-    onApplyUpdate: () -> Unit,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -79,7 +77,6 @@ internal fun AnimatedCatalogStatusNotice(
             Box(Modifier.padding(top = 16.dp)) {
                 CatalogStatusNotice(
                     notice = displayedNotice,
-                    onApplyUpdate = onApplyUpdate,
                     onRefresh = onRefresh,
                     onDismiss = onDismiss,
                     enabled = active,
@@ -94,7 +91,6 @@ internal fun AnimatedCatalogStatusNotice(
 @Composable
 internal fun CatalogStatusNotice(
     notice: CatalogNotice,
-    onApplyUpdate: () -> Unit,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
     enabled: Boolean = true,
@@ -107,7 +103,7 @@ internal fun CatalogStatusNotice(
         notice.refreshError != null -> notice.refreshError.messageResource()
         notice.message == ModelListMessage.UPDATED -> R.string.model_list_updated
         notice.message == ModelListMessage.UP_TO_DATE -> R.string.model_list_up_to_date
-        else -> R.string.model_list_update_available
+        else -> R.string.model_list_up_to_date
     }
 
     Surface(
@@ -128,8 +124,7 @@ internal fun CatalogStatusNotice(
                     painter = painterResource(
                         when {
                             failed -> R.drawable.ic_info
-                            notice.message != null -> R.drawable.ic_check_circle
-                            else -> R.drawable.ic_database
+                            else -> R.drawable.ic_check_circle
                         },
                     ),
                     contentDescription = null,
@@ -142,23 +137,15 @@ internal fun CatalogStatusNotice(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (failed || notice.updateAvailable) {
+            if (failed) {
                 // 操作放在独立的可换行区域，窄屏与大字号时不挤压提示正文。
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if (failed) {
-                        TextButton(onClick = onDismiss, enabled = enabled) { Text(stringResource(R.string.close)) }
-                    }
-                    if (notice.updateAvailable) {
-                        FilledTonalButton(onClick = onApplyUpdate, enabled = enabled) {
-                            Text(stringResource(R.string.model_list_apply_update))
-                        }
-                    } else if (failed) {
-                        FilledTonalButton(onClick = onRefresh, enabled = enabled) { Text(stringResource(R.string.retry)) }
-                    }
+                    TextButton(onClick = onDismiss, enabled = enabled) { Text(stringResource(R.string.close)) }
+                    FilledTonalButton(onClick = onRefresh, enabled = enabled) { Text(stringResource(R.string.retry)) }
                 }
             }
         }
@@ -171,7 +158,6 @@ private fun CatalogSuccessNoticePreview() {
     ModelAtlasTheme(dynamicColor = false) {
         CatalogStatusNotice(
             notice = CatalogNotice(message = ModelListMessage.UP_TO_DATE),
-            onApplyUpdate = {},
             onRefresh = {},
             onDismiss = {},
         )
@@ -185,8 +171,7 @@ private fun CatalogSuccessNoticePreview() {
 private fun CatalogStatusNoticePreview() {
     ModelAtlasTheme(dynamicColor = false) {
         CatalogStatusNotice(
-            notice = CatalogNotice(updateAvailable = true),
-            onApplyUpdate = {},
+            notice = CatalogNotice(message = ModelListMessage.UPDATED),
             onRefresh = {},
             onDismiss = {},
         )
@@ -199,7 +184,6 @@ private fun CatalogFailureNoticePreview() {
     ModelAtlasTheme(dynamicColor = false) {
         CatalogStatusNotice(
             notice = CatalogNotice(refreshError = ModelListError.NETWORK),
-            onApplyUpdate = {},
             onRefresh = {},
             onDismiss = {},
         )

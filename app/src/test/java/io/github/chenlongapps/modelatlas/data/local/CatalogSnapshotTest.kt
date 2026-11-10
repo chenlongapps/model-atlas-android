@@ -51,22 +51,9 @@ class CatalogSnapshotTest {
         )))
     }
 
-    @Test fun modelIdsIgnoreOrderMetadataProvidersAndOfferings() {
-        assertTrue(snapshot.hasSameModelIdsAs(snapshot.copy(
-            models = snapshot.models.reversed().map { it.copy(name = "Renamed", type = "embedding", contextLimitTokens = 200) },
-            providers = emptyList(),
-            offerings = emptyList(),
-        )))
-        assertTrue(snapshot.copy(models = emptyList()).hasSameModelIdsAs(
-            CatalogSnapshot(emptyList(), emptyList(), emptyList()),
-        ))
-    }
-
-    @Test fun modelIdsDetectAdditionsDeletionsAndEqualCountReplacements() {
-        assertFalse(snapshot.hasSameModelIdsAs(snapshot.copy(models = snapshot.models + ModelEntity("lab/c", "c", "C", 3))))
-        assertFalse(snapshot.hasSameModelIdsAs(snapshot.copy(models = snapshot.models.drop(1))))
-        assertFalse(snapshot.hasSameModelIdsAs(snapshot.copy(models = snapshot.models.map { it.copy(id = "new/${it.id}") })))
-        assertFalse(snapshot.hasSameModelIdsAs(snapshot.copy(models = emptyList())))
+    @Test fun contentComparisonDetectsEqualCountReplacementsAndEmptyCatalog() {
+        assertFalse(snapshot.hasSameContentAs(snapshot.copy(models = snapshot.models.map { it.copy(id = "new/${it.id}") })))
+        assertFalse(snapshot.hasSameContentAs(snapshot.copy(models = emptyList())))
     }
 
     @Test fun catalogExistenceIncludesProvidersAndUnlinkedOfferings() {
@@ -75,15 +62,13 @@ class CatalogSnapshotTest {
         assertFalse(snapshot.copy(models = emptyList()).isEmpty)
     }
 
-    @Test fun parameterProvenanceIsContentButNeverAModelIdChange() {
+    @Test fun parameterProvenanceIsContent() {
         val parameters = ModelParametersLocal("8.2".toBigDecimal(), sources = listOf("https://example.org/model"))
         val withParameters = snapshot.copy(models = snapshot.models.map { it.copy(parameters = parameters) })
-        assertTrue(snapshot.hasSameModelIdsAs(withParameters))
         assertFalse(snapshot.hasSameContentAs(withParameters))
         for (changed in listOf(parameters.copy(totalBillion = "8.3".toBigDecimal()),
             parameters.copy(notes = "Hub weight count"), parameters.copy(sources = listOf("https://example.org/other")))) {
             val candidate = withParameters.copy(models = withParameters.models.map { it.copy(parameters = changed) })
-            assertTrue(withParameters.hasSameModelIdsAs(candidate))
             assertFalse(withParameters.hasSameContentAs(candidate))
         }
     }

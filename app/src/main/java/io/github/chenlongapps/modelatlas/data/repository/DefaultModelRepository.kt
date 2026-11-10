@@ -42,17 +42,15 @@ class DefaultModelRepository @Inject constructor(
 ) : ModelRepository {
     private val refreshMutex = Mutex()
     private var retryNotBefore = 0L
-    private var pendingSnapshot: CatalogSnapshot? = null
 
     override suspend fun hasLocalCatalog() = refreshMutex.withLock {
         withContext(ioDispatcher) {
-            if (!store.hasCatalog() && store.readCatalog().release == null) {
-                atlas.bundled()?.let { release ->
-                    coroutineContext.ensureActive()
-                    store.replaceCatalog(mapper.mapAtlas(release, emptyMap(), clock.millis(), clock.millis()))
-                }
-            }
-            store.hasCatalog()
+            // 已提交的合法空发布也是可展示缓存，不能因零条记录阻断离线启动。
+            if (store.hasCatalog() || store.readCatalog().release != null) return@withContext true
+            val release = atlas.bundled() ?: return@withContext false
+            coroutineContext.ensureActive()
+            store.replaceCatalog(mapper.mapAtlas(release, emptyMap(), clock.millis(), clock.millis()))
+            true
         }
     }
 
@@ -67,37 +65,11 @@ class DefaultModelRepository @Inject constructor(
         .distinctUntilChanged()
         .flowOn(ioDispatcher)
 
-    override suspend fun checkForUpdates(): CatalogUpdateCheckResult = refreshMutex.withLock {
-        withContext(ioDispatcher) {
-            val snapshot = fetchCatalog()
-            val local = store.readCatalog()
-            if (!snapshot.hasSameModelIdsAs(local)) {
-                pendingSnapshot = snapshot
-                CatalogUpdateCheckResult.UPDATE_AVAILABLE
-            } else {
-                val changed = !snapshot.hasSameContentAs(local)
-                if (changed) store.replaceCatalog(snapshot)
-                pendingSnapshot = null
-                if (changed) CatalogUpdateCheckResult.UPDATED_SILENTLY else CatalogUpdateCheckResult.UNCHANGED
-            }
-        }
-    }
-
-    override suspend fun applyPendingUpdate(): Boolean = refreshMutex.withLock {
-        withContext(ioDispatcher) {
-            val snapshot = pendingSnapshot ?: return@withContext false
-            store.replaceCatalog(snapshot)
-            pendingSnapshot = null
-            true
-        }
-    }
-
     override suspend fun refresh(): Boolean = refreshMutex.withLock {
         withContext(ioDispatcher) {
             val snapshot = fetchCatalog()
             val changed = !snapshot.hasSameContentAs(store.readCatalog())
             if (changed) store.replaceCatalog(snapshot)
-            pendingSnapshot = null
             changed
         }
     }

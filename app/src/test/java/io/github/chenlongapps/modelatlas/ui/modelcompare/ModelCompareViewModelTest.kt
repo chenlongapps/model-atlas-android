@@ -7,7 +7,6 @@ import io.github.chenlongapps.modelatlas.data.model.FavoriteModel
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
-import io.github.chenlongapps.modelatlas.data.repository.CatalogUpdateCheckResult
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.testing.MainDispatcherRule
@@ -301,8 +300,6 @@ class ModelCompareViewModelTest {
             try { details.getValue(id).collect { emit(it) } } finally { activeDetails-- }
         }
         override suspend fun hasLocalCatalog() = true
-        override suspend fun checkForUpdates(): CatalogUpdateCheckResult { networkCalls++; return CatalogUpdateCheckResult.UNCHANGED }
-        override suspend fun applyPendingUpdate(): Boolean { networkCalls++; return false }
         override suspend fun refresh(): Boolean { networkCalls++; return false }
     }
 

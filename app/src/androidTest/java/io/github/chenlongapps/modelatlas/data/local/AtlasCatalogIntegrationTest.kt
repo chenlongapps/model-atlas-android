@@ -210,6 +210,9 @@ class AtlasCatalogIntegrationTest {
                 assertTrue(db.benchmarkScoreDao().observeForModel(modelId).first().isEmpty())
                 assertNotNull(db.favoriteDao().observeFavorite(modelId).first())
                 assertNotNull(db.catalogDao().readCatalog().release)
+                val offline = OkHttpClient.Builder().addInterceptor { error("Empty cached release must not request network") }.build()
+                assertTrue(repository(db, offline).hasLocalCatalog())
+                assertTrue(db.catalogDao().readCatalog().isEmpty)
             } finally { db.close() } }
         } finally { context.deleteDatabase(name) }
     }

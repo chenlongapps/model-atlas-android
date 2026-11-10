@@ -45,7 +45,7 @@ class CatalogNoticeAnimationTest {
         val originalModelTop = modelTop()
         assertEquals(0f, transitionHeight(), 0.5f)
         compose.mainClock.autoAdvance = false
-        compose.runOnIdle { state.value = idle.copy(updateAvailable = true) }
+        compose.runOnIdle { state.value = idle.copy(refreshError = ModelListError.NETWORK) }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(80)
         val enteringHeight = transitionHeight()
@@ -54,50 +54,53 @@ class CatalogNoticeAnimationTest {
         assertTrue("Notice must expand rather than appear at full height", enteringHeight > 0f)
         assertTrue("Following models must move down with the expansion", enteringTop > originalModelTop)
 
-        compose.mainClock.advanceTimeBy(250)
+        // 提醒高度 200ms 和卡片 placement 220ms 是独立动画；等两者都稳定再记录退出基线。
+        compose.mainClock.advanceTimeBy(500)
         val visibleHeight = transitionHeight()
         val visibleTop = modelTop()
         val visibleColor = noticeBackgroundPixel()
         assertTrue("Height must still be intermediate during entry", enteringHeight < visibleHeight)
         assertTrue("List movement must be intermediate during entry", enteringTop < visibleTop)
         assertNotEquals("Entry must also fade the painted surface", visibleColor, enteringColor)
-        compose.onNodeWithText("立即更新").assertIsDisplayed()
+        compose.onNodeWithText("重试").assertIsDisplayed()
 
         compose.runOnIdle { state.value = idle }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(80)
         val exitingHeight = transitionHeight()
         assertTrue("Exit must retain intermediate height", exitingHeight > 0f && exitingHeight < visibleHeight)
-        assertTrue("Models must move up gradually", modelTop() > originalModelTop && modelTop() < visibleTop)
+        val exitingTop = modelTop()
+        assertTrue("Models must move up gradually: initial=$originalModelTop visible=$visibleTop exiting=$exitingTop",
+            exitingTop > originalModelTop && exitingTop < visibleTop)
         assertNotEquals("Exit must fade the painted surface", visibleColor, noticeBackgroundPixel())
-        compose.onNodeWithText("立即更新").assertDoesNotExist()
+        compose.onNodeWithText("重试").assertDoesNotExist()
 
-        compose.mainClock.advanceTimeBy(250)
+        compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag("catalog-notice").assertDoesNotExist()
         assertEquals("The notice and its spacing must fully collapse", 0f, transitionHeight(), 0.5f)
         assertEquals("Models must return to their original position", originalModelTop, modelTop(), 0.5f)
     }
 
-    @Test fun errorToPendingUpdateCrossfadesAndAnimatesHeight() {
-        val state = show(idle.copy(refreshError = ModelListError.NETWORK, updateAvailable = true))
+    @Test fun errorToManualResultCrossfadesAndAnimatesHeight() {
+        val state = show(idle.copy(refreshError = ModelListError.NETWORK))
         val errorHeight = transitionHeight()
         compose.mainClock.autoAdvance = false
-        compose.onNodeWithText("关闭").performClick()
+        compose.runOnIdle { state.value = idle.copy(message = ModelListMessage.UPDATED) }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(80)
         val changingHeight = transitionHeight()
         compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertDoesNotExist()
-        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
+        compose.onNodeWithText("模型目录已更新").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(250)
         val pendingHeight = transitionHeight()
         assertTrue("The replacement must interpolate its height", changingHeight < errorHeight && changingHeight > pendingHeight)
         compose.onAllNodes(hasTestTag("catalog-notice")).assertCountEquals(1)
-        compose.onNodeWithText("立即更新").assertIsDisplayed()
-        compose.runOnIdle { assertTrue(state.value.updateAvailable) }
+        compose.onNodeWithText("重试").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(ModelListMessage.UPDATED, state.value.message) }
     }
 
     @Test fun refreshAndNewResultCanInterruptAnExitWithoutLeavingOldContent() {
-        val state = show(idle.copy(updateAvailable = true))
+        val state = show(idle.copy(refreshError = ModelListError.NETWORK))
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { state.value = idle.copy(isRefreshing = true) }
         compose.mainClock.advanceTimeBy(80)
@@ -153,13 +156,13 @@ class CatalogNoticeReducedMotionTest {
         val notice = mutableStateOf<CatalogNotice?>(null)
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                AnimatedCatalogStatusNotice(notice.value, {}, {}, {})
+                AnimatedCatalogStatusNotice(notice.value, {}, {})
             }
         }
         compose.mainClock.autoAdvance = false
-        compose.runOnIdle { notice.value = CatalogNotice(updateAvailable = true) }
+        compose.runOnIdle { notice.value = CatalogNotice(refreshError = ModelListError.NETWORK) }
         compose.mainClock.advanceTimeBy(32)
-        compose.onNodeWithText("立即更新").assertIsDisplayed()
+        compose.onNodeWithText("重试").assertIsDisplayed()
         compose.runOnIdle { notice.value = null }
         compose.mainClock.advanceTimeBy(32)
         compose.onNodeWithTag("catalog-notice").assertDoesNotExist()

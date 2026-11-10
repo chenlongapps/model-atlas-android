@@ -35,21 +35,22 @@ Debug 工具位于 `src/debug/java/.../ui/debug/`，Release 同路径仅保留�
 首次无目录且无发布标记 → 导入 assets/atlas/ 真数据（无价格）
 Room 本地目录 → ModelListViewModel → Route → Screen
 
-checkForUpdates() / refresh()
+refresh()（启动自动同步／用户主动刷新共用）
   → 并行读取 Atlas 整包 + Models.dev api.json?type=all
   → 原字节／结构／许可校验 + AtlasCatalogMapper
   → 比较完整候选快照
-  → 后台检查：模型 ID 增删 → 暂存 → 用户确认 applyPendingUpdate()
-              ID 不变但内容变 → 静默提交；相同内容不写库
-  → 主动刷新：直接提交变化
+  → 模型增删及内容变化均直接提交；相同内容不写库
   → CatalogDao.replaceCatalog() 原子更新目录／成绩／定义／发布及可用收藏身份
   → 模型左连接 Flow + 独立报价投影 Flow
-  → ModelListMapper / selectPriceFor → ModelSummary → models + query → visibleModels
+  → ModelListMapper / selectPriceFor → ModelSummary
+  → 启动读取／主动刷新成功时发布列表展示快照 → models + query → visibleModels
 ```
 
-- 首次有任意目录记录即本地展示，即使 LLM 收录结果为空也不当成未加载；已提交的空发布不重复导入。首次加载／重试等提交后的首个目录查询结果再一起发布 `models` 和加载结束，避免短暂空态。
-- 后台只比较完整规范模型 ID 集合决定是否提示，不受搜索、LLM 收录或服务变动影响；内容比较忽略本地抓取时间与字典顺序。候选仅存在仓库内存，进程重启重新检查。
-- 所有来源成功才形成完整候选；失败／取消不写半份。`checkForUpdates()` 区分无变化、静默更新和待确认；确认提交已有快照不重下，检查期间下拉复用请求。初始化／检查／刷新／提交防重入，取消不是错误。
+- 每个新建的列表 ViewModel 先确保随包导入完成，再读取本地展示快照；任意目录记录或已提交发布标记存在即结束加载，即使 LLM 收录结果或正式发布为空。已提交的空发布不重复导入，也能离线显示空目录。确实无本地数据时联网提交，再等首个目录查询结果一起发布 `models` 和加载结束，避免短暂空态。
+- 启动时展示缓存并自动联网同步一次；模型新增、删除、参数、价格、成绩、中文等变化全部静默写库，不保留待确认候选，不显示更新提示。内容比较忽略本地抓取时间与字典顺序，相同内容不写库。
+- `ModelListViewModel` 只在启动、主动刷新成功或 Debug 显式用户操作后读取 `observeModels().first()`，不持续订阅目录。后台写库不改变本次列表内容、数量、顺序、查询匹配／选项或价格；切页、详情返回和同 ViewModel 的配置重建不发布新快照。下次新建列表 ViewModel 使用最新缓存，不把大快照写入 SavedState。
+- 下拉刷新主动联网并在提交、重新读取成功后原子替换展示快照；进行中的启动请求可复用，重复下拉防重入。结果按数据库变化或展示快照变化显示“已更新”，两者均无变化显示“已是最新”，避免后台已写库后主动刷新误报未应用。查询不重置，UI 不主动回顶、不清展开状态；内容删除可能引起正常位置约束。
+- 所有来源成功才形成完整候选；失败／取消不写半份。主动刷新读取失败仍保留旧展示快照、允许重试，取消不是错误。
 - `observeModels()` 在仓库 `combine` 规范模型投影和报价投影，按规范 ID 去重；DAO 不选择默认报价，也不混入服务参数。详情／榜单另用事务 Relation，不拼接不同发布的独立成绩 Flow。
 - 后台失败保留数据且不打扰浏览；主动失败非阻断。无本地数据的错误可重试；无目录与查询无匹配是不同状态。不轮询、不引入退出后的后台任务；网络约束见[数据源说明](data-source.md#请求与解析)。
 
@@ -58,8 +59,8 @@ checkForUpdates() / refresh()
 - `ModelListQuery` 是纯匹配条件，`ModelListViewModel.setQuery()` 在完整 `models` 上派生 `visibleModels`，不联网。搜索去首尾空白、按词不区分大小写，每个词须命中名称／ID／LAB 之一；不同筛选字段取交集、LAB 多选并集、每个方向要求全部所选模态。
 - `ModalityCategory` 供列表／详情映射及查询／草稿恢复共用，原 MIME 保存在库中；已有缓存无需刷新即可按类别展示。转换细则见 [Atlas 模态](atlas-data.md#模态格式与展示类别)。
 - `SavedStateHandle` 只存查询 JSON；`ModelListQueryJson`／`restoreModelListQuery()` 兼容删除的门槛／报价字段，保留其余有效条件，损坏回退。面板草稿在 UI 单独保存，只在“应用”时提交，离页关闭并清焦点。
-- 候选选项来自完整目录和已选值，不随匹配结果缩小；`LabFilterOrder` 固定前八位 `openai → anthropic → google → deepseek → alibaba → meta → xai → moonshotai`，其余按完整目录计数降序、ID 兜底，已选失效值仍可取消。这不是热度或能力排名。
-- `CatalogHeader` 和状态动画放在同一稳定列表项；`AnimatedCatalogStatusNotice` 只接收轻量 `CatalogNotice`，不以目录变化重播动画。成功计时放在列表外，回收不重置，替换时取消旧计时；关闭错误不丢待更新快照。表现与优先级见[设计规范](Design.md#状态与反馈)。
+- 候选选项来自当前完整展示快照和已选值，不随匹配结果缩小；`LabFilterOrder` 固定前八位 `openai → anthropic → google → deepseek → alibaba → meta → xai → moonshotai`，其余按展示目录计数降序、ID 兜底，已选失效值仍可取消。这不是热度或能力排名。
+- `CatalogHeader` 和状态动画放在同一稳定列表项；`AnimatedCatalogStatusNotice` 只接收轻量 `CatalogNotice`，仅展示主动刷新结果／错误，无待确认入口。成功计时放在列表外，回收不重置，替换时取消旧计时。表现与优先级见[设计规范](Design.md#状态与反馈)。
 - 骨架只用于首次无数据，复用真实查询控件测量，不创建假模型；共享一个绘制阶段时钟，非前台／离屏／禁用动画时静态，加载完成无额外延时。
 
 ## 顶层分页与子页面
@@ -69,11 +70,11 @@ checkForUpdates() / refresh()
 - 底栏实测高度保存为 dp，恢复首帧沿用，页面末尾增加实测高度＋32dp 留白；不因底栏显隐改变留白、夹回阅读位置。玻璃采样由 `layerBackdrop` 提供，当前支持设备为 API 33+，设计预览使用实色兜底。
 - `NavigationScrollConnection` 始终零消费，只观察当前停稳页 `UserInput` 已消费纵向位移；松手／反向重置累计，不响应惯性、程序或独立弹层滚动。横向零位移 fling 不当成切页。阈值、动效、触摸探索规则见[设计规范](Design.md#悬浮底部导航)。
 - 模型标签双击走 UI 的 `animateScrollToItem(0, 0)`，不经过 ViewModel 或刷新。监听不消费原点击，拖动／多指／长按／越界／其他标签中断双击序列，另提供等效无障碍操作。
-- Debug 统计仅在切入停稳、重读或刷新结束后读取，离屏预组合不读库。手动刷新复用同一仓库；成功后 `onCatalogRefreshedExternally()` 等既有操作结束，仅恢复本地观察并清过期提示。数据库修改用 `onCatalogMutatedExternally()`，保留待更新提示，均不二次联网。
+- Debug 统计仅在切入停稳、重读或刷新结束后读取，离屏预组合不读库。手动刷新复用同一仓库；成功后 `onCatalogRefreshedExternally()` 等既有操作结束，仅重读本地展示快照并清过期反馈。数据库显式修改用 `onCatalogMutatedExternally()` 同样发布本地快照，均不二次联网、不恢复持续目录观察。
 
 ## 收藏的数据与状态
 
-- `FavoritesViewModel` 只观察收藏／目录事务投影，`ModelListRoute` 收集；`CatalogEntries` 先匹配查询再将收藏稳定前置，可用组沿发布时间顺序，不可用收藏只留历史身份。目录计数不含不可用记录；其历史名称／ID／LAB 可搜索，其他未知筛选不匹配。读取失败保留普通目录并本地重试。
+- `FavoritesViewModel` 只观察收藏／目录事务投影，`ModelListRoute` 收集；`CatalogFavoriteSnapshot` 将身份、参数与可用性投影到本次列表展示快照，避免后台目录恢复／删除模型让收藏卡片跳动；用户收藏增删仍实时生效。`CatalogEntries` 先匹配查询再将收藏稳定前置，可用组沿发布时间顺序，不可用收藏只留历史身份。目录计数不含不可用记录；其历史名称／ID／LAB 可搜索，其他未知筛选不匹配。读取失败保留普通目录并本地重试。
 - `FavoriteDetailViewModel` 只观察当前模型；未读、读取失败或保存中禁用操作。添加在事务校验最新目录，保存后由 Flow 更新，不用乐观状态伪装成功；收藏成功停留，取消保存成功才返回，失败不返回。
 - 详情打开期间固定来源条目位置，不冻结全列表；控制器、两端 Transition 及共享覆盖层交接后才释放重排。取消不可用收藏在写入前暂留来源，数据库先删除，交接后淡出；失败释放暂留。表与数据隔离见[本地收藏](local-data.md#本地收藏)。
 

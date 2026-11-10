@@ -160,22 +160,17 @@ class ModelRepositoryTest {
         assertTrue(store.snapshot!!.isEmpty)
     }
 
-    @Test fun modelAdditionStagesFullSnapshotAndApplyDoesNotDownloadAgain() = runTest {
+    @Test fun modelAdditionImmediatelyCommitsFullSnapshot() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         assertEquals(false, repository.hasLocalCatalog())
         repository.refresh()
-        val previous = store.snapshot
         api.models = api.models.mapValues { (_, model) -> model.copy(name = "Updated") }
         api.models = api.models + ("new-key" to ModelDto("new", "New"))
-        assertEquals(CatalogUpdateCheckResult.UPDATE_AVAILABLE, repository.checkForUpdates())
-        assertEquals(previous, store.snapshot)
-        assertEquals(1, store.writes)
-        assertTrue(repository.applyPendingUpdate())
+        assertTrue(repository.refresh())
         assertEquals(setOf("model-key", "new-key"), store.snapshot!!.models.map { it.id }.toSet())
         assertEquals("Updated", store.snapshot!!.models.first { it.id == "model-key" }.name)
         assertEquals(2, api.providerRequests)
         assertEquals(2, store.writes)
-        assertEquals(false, repository.applyPendingUpdate())
         assertTrue(repository.hasLocalCatalog())
     }
 
@@ -187,26 +182,24 @@ class ModelRepositoryTest {
             providers = snapshot.providers.map { it.copy(fetchedAtEpochMillis = 2) },
             offerings = snapshot.offerings.map { it.copy(fetchedAtEpochMillis = 2) },
         ) }
-        assertEquals(CatalogUpdateCheckResult.UNCHANGED, repository.checkForUpdates())
+        assertEquals(false, repository.refresh())
         assertEquals(false, repository.refresh())
         assertEquals(1, store.writes)
     }
 
-    @Test fun modelDeletionAndEqualCountReplacementRequireConfirmation() = runTest {
+    @Test fun modelDeletionAndEqualCountReplacementAreCommittedAutomatically() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
         val originalModels = api.models
-        val previous = store.snapshot
-        listOf(emptyMap(), mapOf("replacement" to ModelDto("replacement", "Replacement"))).forEach { models ->
+        listOf(emptyMap(), mapOf("replacement" to ModelDto("replacement", "Replacement"))).forEachIndexed { index, models ->
             api.models = models
-            assertEquals(CatalogUpdateCheckResult.UPDATE_AVAILABLE, repository.checkForUpdates())
-            assertEquals(previous, store.snapshot)
-            assertEquals(1, store.writes)
+            assertTrue(repository.refresh())
+            assertEquals(models.keys, store.snapshot!!.models.map { it.id }.toSet())
+            assertEquals(index + 2, store.writes)
         }
         api.models = originalModels
-        assertEquals(CatalogUpdateCheckResult.UNCHANGED, repository.checkForUpdates())
-        assertEquals(false, repository.applyPendingUpdate())
-        assertEquals(1, store.writes)
+        assertTrue(repository.refresh())
+        assertEquals(4, store.writes)
     }
 
     @Test fun metadataChangesAreCommittedSilentlyWithoutPendingUpdate() = runTest {
@@ -216,11 +209,10 @@ class ModelRepositoryTest {
             name = "Updated", type = "embedding", limit = ModelLimitDto(context = 200_000),
             openWeights = true, license = "MIT", lastUpdated = "2026-10-21",
         ) }
-        assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+        assertTrue(repository.refresh())
         assertEquals(CatalogMapper().mapAtlas(release(), api.providers, clock.millis(), clock.millis()), store.snapshot)
         assertEquals(2, store.writes)
-        assertEquals(false, repository.applyPendingUpdate())
-        assertEquals(CatalogUpdateCheckResult.UNCHANGED, repository.checkForUpdates())
+        assertEquals(false, repository.refresh())
         assertEquals(2, store.writes)
     }
 
@@ -239,24 +231,22 @@ class ModelRepositoryTest {
         )
         changes.forEachIndexed { index, providers ->
             api.providers = providers
-            assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+            assertTrue(repository.refresh())
             assertEquals(CatalogMapper().mapAtlas(release(), api.providers, clock.millis(), clock.millis()), store.snapshot)
             assertEquals(index + 2, store.writes)
-            assertEquals(false, repository.applyPendingUpdate())
         }
     }
 
-    @Test fun contentOnlyCheckClearsStalePendingModelAddition() = runTest {
+    @Test fun consecutiveRefreshesApplyLatestFullSnapshotWithoutStagedData() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
         val originalModels = api.models
         api.models = api.models + ("new-key" to ModelDto("new", "New"))
-        assertEquals(CatalogUpdateCheckResult.UPDATE_AVAILABLE, repository.checkForUpdates())
+        assertTrue(repository.refresh())
         api.models = originalModels.mapValues { (_, model) -> model.copy(name = "Updated") }
-        assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
-        assertEquals(false, repository.applyPendingUpdate())
+        assertTrue(repository.refresh())
         assertEquals("Updated", store.snapshot!!.models.single().name)
-        assertEquals(2, store.writes)
+        assertEquals(3, store.writes)
     }
 
     @Test fun silentWriteFailureAndCancellationPreserveCatalogAndCanBeRetried() = runTest {
@@ -267,7 +257,7 @@ class ModelRepositoryTest {
         listOf(IllegalStateException("disk"), CancellationException("cancelled")).forEach { failure ->
             store.writeFailure = failure
             try {
-                repository.checkForUpdates()
+                repository.refresh()
                 error("Expected write failure")
             } catch (error: Exception) {
                 assertEquals(failure.javaClass, error.javaClass)
@@ -277,7 +267,7 @@ class ModelRepositoryTest {
             }
         }
         store.writeFailure = null
-        assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+        assertTrue(repository.refresh())
         assertEquals("Updated", store.snapshot!!.models.single().name)
         assertEquals(2, store.writes)
     }
@@ -291,40 +281,37 @@ class ModelRepositoryTest {
         assertEquals(2, store.writes)
     }
 
-    @Test fun manualRefreshSupersedesStagedUpdateAndCanClearCatalog() = runTest {
+    @Test fun refreshCanClearCatalog() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
-        api.models = api.models + ("staged-key" to ModelDto("staged", "Staged"))
-        repository.checkForUpdates()
         api.models = emptyMap()
         api.providers = emptyMap()
         assertTrue(repository.refresh())
         assertTrue(store.snapshot!!.isEmpty)
-        assertEquals(false, repository.applyPendingUpdate())
     }
 
-    @Test fun failedCheckPreservesDatabaseAndPendingSnapshotCanBeRetriedAfterWriteFailure() = runTest {
+    @Test fun failedRefreshPreservesDatabaseAndCanBeRetriedAfterWriteFailure() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
         val previous = store.snapshot
         api.models = mapOf("new-key" to ModelDto("new", "New"))
-        repository.checkForUpdates()
         api.providerFailure = IOException("offline")
         try {
-            repository.checkForUpdates()
+            repository.refresh()
             error("Expected network failure")
         } catch (_: IOException) {
             assertEquals(previous, store.snapshot)
         }
         store.writeFailure = IllegalStateException("disk")
+        api.providerFailure = null
         try {
-            repository.applyPendingUpdate()
+            repository.refresh()
             error("Expected write failure")
         } catch (_: IllegalStateException) {
             assertEquals(previous, store.snapshot)
         }
         store.writeFailure = null
-        assertTrue(repository.applyPendingUpdate())
+        assertTrue(repository.refresh())
         assertEquals("New", store.snapshot!!.models.single().name)
     }
 
@@ -346,21 +333,35 @@ class ModelRepositoryTest {
         assertEquals(1, store.writes)
     }
 
-    @Test fun benchmarkOnlyChangeCommitsSilentlyAndStagedModelChangeKeepsScoresTogether() = runTest {
+    @Test fun committedEmptyReleaseIsAvailableOfflineAndDoesNotReimportBundle() = runTest {
+        api.models = emptyMap()
+        api.providers = emptyMap()
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        repository.refresh()
+        assertTrue(store.snapshot!!.isEmpty)
+        assertTrue(repository.hasLocalCatalog())
+        val reopened = repository(StandardTestDispatcher(testScheduler), object : AtlasDataSource {
+            override suspend fun fetch(): AtlasRelease = error("No request for local read")
+            override suspend fun bundled(): AtlasRelease = error("Do not reimport a committed empty release")
+        })
+        assertTrue(reopened.hasLocalCatalog())
+        assertEquals(1, api.providerRequests)
+        assertEquals(1, store.writes)
+    }
+
+    @Test fun benchmarkAndModelChangesAreCommittedTogetherWithoutConfirmation() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
         api.models = api.models.mapValues { (_, m) -> m.copy(benchmarks = listOf(
             ModelBenchmarkDto("Bench", 1.0, version = "v1", effort = "high", variant = "no tools"),
         )) }
-        assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+        assertTrue(repository.refresh())
         val score = store.snapshot!!.scores!!.single()
         assertEquals("high", score.reasoningEffort)
         assertEquals("v1", score.version)
         api.models = api.models + ("new/model" to ModelDto("id", "New"))
         api.models = api.models.mapValues { (_, m) -> m.copy(benchmarks = m.benchmarks?.map { it.copy(score = 2.0) }) }
-        assertEquals(CatalogUpdateCheckResult.UPDATE_AVAILABLE, repository.checkForUpdates())
-        assertEquals(1.0, requireNotNull(store.snapshot!!.scores!!.single().score), 0.0)
-        assertTrue(repository.applyPendingUpdate())
+        assertTrue(repository.refresh())
         assertEquals(2.0, requireNotNull(store.snapshot!!.scores!!.single().score), 0.0)
         assertEquals(2, store.snapshot!!.models.size)
     }
@@ -390,12 +391,11 @@ class ModelRepositoryTest {
             remote = remote.copy(models = remote.models.mapValues { (_, m) ->
                 m.copy(metadata = AtlasMetadataDto(AtlasModelAtlasMetadataDto(value)))
             })
-            assertEquals(CatalogUpdateCheckResult.UPDATED_SILENTLY, repository.checkForUpdates())
+            assertTrue(repository.refresh())
             assertEquals(value?.totalBillion, store.snapshot!!.models.single().parameters?.totalBillion)
             assertEquals(value?.notes, store.snapshot!!.models.single().parameters?.notes)
             assertEquals(originalOfferings, store.snapshot!!.offerings)
-            assertEquals(false, repository.applyPendingUpdate())
-            assertEquals(CatalogUpdateCheckResult.UNCHANGED, repository.checkForUpdates())
+            assertEquals(false, repository.refresh())
         }
         assertEquals(4, store.writes)
     }

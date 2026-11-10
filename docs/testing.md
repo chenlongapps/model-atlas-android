@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 纯文档 | 相对链接、标题锚点、命令与当前描述 | 不构建、不启动模拟器 |
 | 搜索／筛选 | `ModelListQueryTest`、`ModelListViewModelTest`、`ModelCatalogControlsTest` | 卡片／状态加 `ModelListScreenTest`，切页恢复加 `ModelAtlasAppTest` |
-| 目录刷新／反馈／骨架 | `ModelRepositoryTest`、`CatalogSnapshotTest`、列表 ViewModel、`CatalogStatusNoticeTest` | 对应 Screen、`CatalogNoticeAnimationTest`／`CatalogNoticeReducedMotionTest`、`ModelCardSkeletonTest`／`ModelCardSkeletonReducedMotionTest` |
+| 目录刷新／反馈／骨架 | `ModelRepositoryTest`、`CatalogSnapshotTest`、列表 ViewModel、`CatalogEntriesTest`、`CatalogStatusNoticeTest` | `SilentCatalogUpdateTest`（后台冻结／主动发布／切页及详情返回）、对应 Screen、`CatalogNoticeAnimationTest`／`CatalogNoticeReducedMotionTest`、`ModelCardSkeletonTest`／`ModelCardSkeletonReducedMotionTest` |
 | 详情字段／布局 | `ModelDetailMapperTest`、`ModelDetailViewModelTest`、`ModelDetailScreenTest` | `ModelDetailNavigationTest`，身份／容器变化再加共享转场 |
 | 详情评测／Logo | `BenchmarkPresentationTest`、`BenchmarkLogoTest`、详情／Atlas Mapper、`ModelBenchmarkCardTest` | 详情排序／标签／滚动及返回；全矢量加载、浅深原色白底、文本／明示单位、窄屏大字 RTL |
 | 对比 | `ModelCompareQueryTest`、`ModelCompareViewModelTest`、`ModelCompareScreenTest` | 报价变化加 `ModelPriceMapperTest`／`PriceProviderPolicyTest` 及列表；覆盖等高、替换重置、异步恢复 |

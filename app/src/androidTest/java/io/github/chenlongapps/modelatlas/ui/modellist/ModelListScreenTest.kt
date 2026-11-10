@@ -68,30 +68,20 @@ class ModelListScreenTest {
         }
     }
 
-    @Test fun updatePromptKeepsCachedListAndHasExplicitApplyAction() {
-        var applies = 0
+    @Test fun cachedListDoesNotOfferAnUpdateConfirmation() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 ModelListScreen(
                     uiState = ModelListUiState(
                         models = listOf(ModelSummary("lab/cached", "本地模型")),
                         isLoading = false,
-                        updateAvailable = true,
                     ),
-                    onApplyUpdate = { applies++ },
                 )
             }
         }
         compose.onNodeWithText("本地模型").assertIsDisplayed()
-        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
-        val header = compose.onNodeWithTag("catalog-header").getUnclippedBoundsInRoot()
-        val notice = compose.onNodeWithTag("catalog-notice").getUnclippedBoundsInRoot()
-        val order = compose.onNodeWithText("收藏优先 · 组内按发布时间从新到旧").getUnclippedBoundsInRoot()
-        assertTrue("Notice must follow the header", notice.top >= header.bottom)
-        assertTrue("Notice must precede the sort order", notice.bottom <= order.top)
-        assertEquals(0, applies)
-        compose.onNodeWithText("立即更新").performClick()
-        assertEquals(1, applies)
+        compose.onNodeWithTag("catalog-notice").assertDoesNotExist()
+        compose.onNodeWithText("立即更新").assertDoesNotExist()
     }
 
     @Test fun pullAtTopRequestsRefreshWithoutRemovingCachedModels() {
@@ -119,18 +109,18 @@ class ModelListScreenTest {
         show(ModelListUiState(
             models = List(40) { ModelSummary("lab/model-$it", "模型 $it") },
             isLoading = false,
-            updateAvailable = true,
+            refreshError = ModelListError.NETWORK,
         ))
         compose.onNodeWithTag("catalog-notice").assertIsDisplayed()
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/model-20"))
         compose.onNodeWithTag("catalog-notice").assertIsNotDisplayed()
-        compose.onNodeWithText("立即更新").assertIsNotDisplayed()
+        compose.onNodeWithText("重试").assertIsNotDisplayed()
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
         compose.onNodeWithTag("catalog-notice").assertIsDisplayed()
-        compose.onNodeWithText("立即更新").assertIsDisplayed()
+        compose.onNodeWithText("重试").assertIsDisplayed()
     }
 
-    @Test fun incomingUpdateNoticeDoesNotScrollTheUserBackToTheHeader() {
+    @Test fun incomingRefreshErrorDoesNotScrollTheUserBackToTheHeader() {
         val state = mutableStateOf(ModelListUiState(
             models = List(40) { ModelSummary("lab/model-$it", "模型 $it") },
             isLoading = false,
@@ -141,12 +131,12 @@ class ModelListScreenTest {
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/model-20"))
         val model = compose.onNodeWithTag("model:lab/model-20")
         val before = model.getUnclippedBoundsInRoot().top
-        compose.runOnIdle { state.value = state.value.copy(updateAvailable = true) }
+        compose.runOnIdle { state.value = state.value.copy(refreshError = ModelListError.NETWORK) }
         model.assertIsDisplayed()
         assertEquals(before.value, model.getUnclippedBoundsInRoot().top.value, 1f)
         compose.onNodeWithTag("catalog-notice").assertIsNotDisplayed()
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
-        compose.onNodeWithText("发现新数据，可更新模型目录").assertIsDisplayed()
+        compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertIsDisplayed()
     }
 
     private fun assertPullRequestsRefresh(models: List<ModelSummary>) {
