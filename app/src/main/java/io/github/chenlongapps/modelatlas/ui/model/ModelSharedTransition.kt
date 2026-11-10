@@ -5,16 +5,13 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -45,7 +42,7 @@ internal data class ModelIdentitySnapshot(
     val license: String?,
 )
 
-internal const val ModelTransitionDurationMillis = 450
+internal const val ModelTransitionDurationMillis = io.github.chenlongapps.modelatlas.ui.transition.SharedPageTransitionDurationMillis
 
 /** 外层容器与内部身份使用不同类型的键，均以规范模型 ID 匹配。 */
 internal data class ModelContainerKey(val modelId: String)
@@ -62,26 +59,6 @@ internal class ModelSharedTransition(
 )
 
 internal val LocalModelSharedTransition = compositionLocalOf<ModelSharedTransition?> { null }
-
-/**
- * 只提供公开的 EnterExitState Transition，不让 AnimatedVisibility 在退出后销毁页面。
- * 主分页器因此保持组合，列表展开、焦点清理和提醒计时不随导航重建。
- * 是否放置页面、屏蔽交互以及退出后的详情清理由外壳统一管理。
- */
-@Composable
-internal fun rememberRetainedModelVisibility(
-    state: SeekableTransitionState<EnterExitState>,
-    onTargetComposed: (EnterExitState) -> Unit,
-): AnimatedVisibilityScope {
-    val transition = rememberTransition(state, label = "model-page-visibility")
-    val target = state.targetState
-    SideEffect { onTargetComposed(target) }
-    return remember(transition) {
-        object : AnimatedVisibilityScope {
-            override val transition = transition
-        }
-    }
-}
 
 /** 只改变裁剪轮廓，不逐帧重排文字，也不把卡片高度传播给惰性列表。 */
 private class ModelContainerShape(val progress: () -> Float) : Shape {

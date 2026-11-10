@@ -79,7 +79,12 @@ import io.github.chenlongapps.modelatlas.ui.model.ModelDetailContainer
 import io.github.chenlongapps.modelatlas.ui.model.ModelDetailTransitionController
 import io.github.chenlongapps.modelatlas.ui.model.ModelSharedTransition
 import io.github.chenlongapps.modelatlas.ui.model.ModelTransitionDurationMillis
-import io.github.chenlongapps.modelatlas.ui.model.rememberRetainedModelVisibility
+import io.github.chenlongapps.modelatlas.ui.transition.rememberRetainedPageVisibility
+import io.github.chenlongapps.modelatlas.ui.transition.RetainedPageTransitionController
+import io.github.chenlongapps.modelatlas.ui.transition.SharedPageTransitionDurationMillis
+import io.github.chenlongapps.modelatlas.ui.benchmark.LocalBenchmarkSharedTransition
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkSharedTransition
+import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkLeaderboardContainer
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkRoute
 import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkScreen
@@ -173,6 +178,15 @@ internal fun ModelAtlasScaffold(
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showDatabase by rememberSaveable { mutableStateOf(false) }
     var selectedBenchmarkId by rememberSaveable { mutableStateOf<String?>(null) }
+    var retainedBenchmarkId by remember { mutableStateOf(selectedBenchmarkId) }
+    val benchmarkTransition = remember { RetainedPageTransitionController(selectedBenchmarkId != null) }
+    val benchmarkMainVisibility = rememberRetainedPageVisibility(benchmarkTransition.main, benchmarkTransition::onMainTargetComposed)
+    val leaderboardVisibility = rememberRetainedPageVisibility(benchmarkTransition.detail, benchmarkTransition::onDetailTargetComposed)
+    LaunchedEffect(benchmarkTransition) { benchmarkTransition.run { selectedBenchmarkId = null } }
+    val benchmarkExpansionProgress by leaderboardVisibility.transition.animateFloat(
+        transitionSpec = { tween(SharedPageTransitionDurationMillis) }, label = "benchmark-container-expansion",
+    ) { if (it == EnterExitState.Visible) 1f else 0f }
+    val benchmarkExpansion = remember { { benchmarkExpansionProgress } }
     val leaderboardStates = rememberSaveableStateHolder()
     var selectedModelId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailSourceTag by rememberSaveable { mutableStateOf(GlassNavigationItem.Models.tag) }
@@ -181,8 +195,8 @@ internal fun ModelAtlasScaffold(
     var initialIdentity by remember { mutableStateOf<ModelIdentitySnapshot?>(null) }
     val favoriteRemoval = remember { FavoriteRemovalTransition() }
     val detailTransition = remember { ModelDetailTransitionController(selectedModelId != null) }
-    val mainVisibility = rememberRetainedModelVisibility(detailTransition.main, detailTransition::onMainTargetComposed)
-    val detailVisibility = rememberRetainedModelVisibility(detailTransition.detail, detailTransition::onDetailTargetComposed)
+    val mainVisibility = rememberRetainedPageVisibility(detailTransition.main, detailTransition::onMainTargetComposed)
+    val detailVisibility = rememberRetainedPageVisibility(detailTransition.detail, detailTransition::onDetailTargetComposed)
     LaunchedEffect(detailTransition) {
         detailTransition.run { selectedModelId = null }
     }
@@ -190,13 +204,15 @@ internal fun ModelAtlasScaffold(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || showAppearance || showDatabase || selectedBenchmarkId != null || retainedModelId != null
+    val subpageVisible = showDataSource || showAppearance || showDatabase || retainedBenchmarkId != null || retainedModelId != null
     LaunchedEffect(subpageVisible, navigationScroll) { navigationScroll.resetTracking() }
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
-    LaunchedEffect(backState, detailTransition) {
+    LaunchedEffect(backState, detailTransition, benchmarkTransition) {
         snapshotFlow { backState.transitionState }.collect { state ->
             if (state is NavigationEventTransitionState.InProgress && selectedModelId != null) {
                 detailTransition.seekBack(state.latestEvent.progress)
+            } else if (state is NavigationEventTransitionState.InProgress && selectedBenchmarkId != null) {
+                benchmarkTransition.seekBack(state.latestEvent.progress)
             }
             // Idle 不重置动画；取消／确认回调明确决定结算方向。
         }
@@ -206,10 +222,12 @@ internal fun ModelAtlasScaffold(
         NavigationBackHandler(
             state = backState,
             isBackEnabled = subpageVisible && !showDatabase,
-            onBackCancelled = { detailTransition.cancelBack() },
+            onBackCancelled = {
+                if (retainedBenchmarkId != null) benchmarkTransition.cancelBack() else detailTransition.cancelBack()
+            },
             onBackCompleted = {
                 if (retainedModelId != null) detailTransition.exit()
-                else if (selectedBenchmarkId != null) selectedBenchmarkId = null
+                else if (retainedBenchmarkId != null) benchmarkTransition.exit()
                 else if (showAppearance) showAppearance = false
                 else showDataSource = false
             },
@@ -221,7 +239,18 @@ internal fun ModelAtlasScaffold(
         val transitioning = detailTransition.active || mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
             detailVisibility.transition.currentState != detailVisibility.transition.targetState ||
             mainVisibility.transition.isRunning || detailVisibility.transition.isRunning || isTransitionActive
-        val placeMain = !showDataSource && !showAppearance && !showDatabase && selectedBenchmarkId == null && (selectedModelId == null || transitioning)
+        val benchmarkTransitioning = benchmarkTransition.active ||
+            benchmarkMainVisibility.transition.currentState != benchmarkMainVisibility.transition.targetState ||
+            leaderboardVisibility.transition.currentState != leaderboardVisibility.transition.targetState ||
+            benchmarkMainVisibility.transition.isRunning || leaderboardVisibility.transition.isRunning || isTransitionActive
+        val placeMain = !showDataSource && !showAppearance && !showDatabase &&
+            (selectedBenchmarkId == null || benchmarkTransitioning) && (selectedModelId == null || transitioning)
+        LaunchedEffect(selectedBenchmarkId, benchmarkTransitioning, leaderboardVisibility.transition.currentState) {
+            if (selectedBenchmarkId == null && !benchmarkTransitioning &&
+                leaderboardVisibility.transition.currentState == EnterExitState.PostExit) {
+                retainedBenchmarkId = null
+            }
+        }
         LaunchedEffect(selectedModelId, transitioning, detailVisibility.transition.currentState) {
             if (selectedModelId == null && !transitioning && detailVisibility.transition.currentState == EnterExitState.PostExit) {
                 // 共享覆盖层也完成交接后，才允许收藏来源卡片开始自己的退出动画。
@@ -230,7 +259,7 @@ internal fun ModelAtlasScaffold(
                 initialIdentity = null
             }
         }
-        RetainedModelPage(placeMain, interactive = !subpageVisible) {
+        RetainedPage(placeMain, interactive = !subpageVisible) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize().testTag("main-pager").layerBackdrop(backdrop),
@@ -269,10 +298,23 @@ internal fun ModelAtlasScaffold(
                                 modelContent(bottomOverlayPadding, modelListState, openModel)
                             }
                             GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
-                            GlassNavigationItem.Benchmarks -> benchmarkContent(
-                                bottomOverlayPadding,
-                                pagerState.settledPage == page && (!subpageVisible || selectedBenchmarkId != null),
-                            ) { selectedBenchmarkId = it }
+                            GlassNavigationItem.Benchmarks -> CompositionLocalProvider(
+                                LocalBenchmarkSharedTransition provides BenchmarkSharedTransition(
+                                    sharedScope, benchmarkMainVisibility, enabled = placeMain,
+                                    expansionProgress = benchmarkExpansion,
+                                ),
+                            ) {
+                                benchmarkContent(
+                                    bottomOverlayPadding,
+                                    pagerState.settledPage == page && (!subpageVisible || retainedBenchmarkId != null),
+                                ) { id ->
+                                    if (!subpageVisible && retainedBenchmarkId == null) {
+                                        retainedBenchmarkId = id
+                                        selectedBenchmarkId = id
+                                        benchmarkTransition.enter()
+                                    }
+                                }
+                            }
                             GlassNavigationItem.Settings -> SettingsScreen(
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onShowDataSource = { showDataSource = true },
@@ -326,13 +368,19 @@ internal fun ModelAtlasScaffold(
         if (showDatabase) {
             databaseContent { showDatabase = false }
         }
-        selectedBenchmarkId?.let { id ->
-            leaderboardStates.SaveableStateProvider(id) {
-                leaderboardContent(id) { selectedBenchmarkId = null }
+        retainedBenchmarkId?.let { id ->
+            RetainedPage(placed = true, interactive = selectedBenchmarkId != null && benchmarkTransition.interactive) {
+                CompositionLocalProvider(LocalBenchmarkSharedTransition provides BenchmarkSharedTransition(
+                    sharedScope, leaderboardVisibility, enabled = true, expansionProgress = benchmarkExpansion,
+                )) {
+                    leaderboardStates.SaveableStateProvider(id) {
+                        BenchmarkLeaderboardContainer(id) { leaderboardContent(id, benchmarkTransition::exit) }
+                    }
+                }
             }
         }
         retainedModelId?.let { id ->
-            RetainedModelPage(placed = true, interactive = selectedModelId != null && detailTransition.interactive) {
+            RetainedPage(placed = true, interactive = selectedModelId != null && detailTransition.interactive) {
                 CompositionLocalProvider(LocalModelSharedTransition provides ModelSharedTransition(
                     sharedScope, detailVisibility, enabled = true,
                     expansionProgress = expansion,
@@ -349,7 +397,7 @@ internal fun ModelAtlasScaffold(
 
 /** 退出时保留布局供容器边界匹配，但立即屏蔽旧页面的触摸与无障碍操作。 */
 @Composable
-private fun RetainedModelPage(
+private fun RetainedPage(
     placed: Boolean,
     interactive: Boolean,
     content: @Composable BoxScope.() -> Unit,

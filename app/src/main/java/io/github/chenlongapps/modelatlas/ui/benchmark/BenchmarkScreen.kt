@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -162,11 +163,17 @@ internal fun BenchmarkLeaderboardScreen(
     var showDescription by rememberSaveable(boardId) { mutableStateOf(false) }
     val contentState = rememberLazyListState()
     val placeholderState = rememberLazyListState()
+    val sharedElementsEnabled by remember {
+        derivedStateOf { contentState.firstVisibleItemIndex == 0 && contentState.firstVisibleItemScrollOffset == 0 }
+    }
+    val topModelIds = remember(board?.rankings) { board?.rankings.orEmpty().take(3).map { it.modelId }.toSet() }
     // 全榜固定一个坐标范围，不能根据 LazyColumn 当时组合的条目动态改变。
     val range = remember(board) {
         benchmarkChartRange(board?.rankings.orEmpty().mapNotNull { it.score }, board?.minScore, board?.maxScore)
     }
-    Scaffold(modifier.testTag("benchmark-leaderboard"), containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+    Scaffold(modifier.testTag("benchmark-leaderboard"),
+        containerColor = if (LocalBenchmarkSharedTransition.current != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
@@ -187,12 +194,14 @@ internal fun BenchmarkLeaderboardScreen(
                     board == null -> item("removed") { BenchmarkMessage(stringResource(R.string.benchmark_removed)) }
                     else -> {
                         item("identity") {
-                            BenchmarkIdentity(board, onInfo = if (description != null) ({ showDescription = true }) else null)
+                            BenchmarkIdentity(board, onInfo = if (description != null) ({ showDescription = true }) else null,
+                                sharedElementsEnabled = sharedElementsEnabled)
                         }
                         if (board.rankings.isNotEmpty()) {
                             items(board.rankings, key = { "rank:${it.modelId}" }, contentType = { "result" }) { entry ->
                                 Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
-                                    BenchmarkResultRow(entry, board.unit, range, modifier = Modifier.padding(16.dp))
+                                    BenchmarkResultRow(entry, board.unit, range, modifier = Modifier.padding(16.dp),
+                                        sharedBoardId = board.id.takeIf { sharedElementsEnabled && entry.modelId in topModelIds })
                                 }
                             }
                         } else item("no-numeric") { BenchmarkMessage(stringResource(R.string.benchmark_no_numeric)) }

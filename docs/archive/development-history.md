@@ -37,6 +37,7 @@
 - 最终续跑：共享转场 21＋零动画 1，显式 `numtests=22`、`OK (22 tests)`；对比 17＋Debug 数据库 12，`numtests=29`、`OK (29 tests)`；列表 41，`numtests=41`、`OK (41 tests)`。方法级核对原 133 项全部有后续成功结果，无缺类／忽略／未结束项；不将原中断批次改写为全通过。加本轮首批已通过的参数专项 7、详情返回 3、静默快照 3，累计 13 类／146 个不同 instrumentation 用例通过。参数量精简的历史缺口、收藏导航迁移、收藏标识／列表／共享返回及 Debug 脏编辑返回自动化闭环；真机验收另列。
 - 偶发跟踪：上述共享类已含预测性取消方法，之后同一安装版本再独立连续执行 10 次，每次核对实际类／方法、`numtests=1`、唯一成功结束码及 `OK (1 test)`，全部通过。该结果是“本轮未复现”，不是历史截图超时或 Logo 缺失已找到根因／修复的证据；保留 TODO 稳定性跟踪与失败诊断，不再保留未执行连续验证的旧描述。
 - 版本边界：续跑期间另一个工作区任务正在修复评测页重入，不能宣称所有批次均用同一应用 APK。续跑与 10 次重复结束后核对设备上应用／测试 APK 的实际摘要及 `lastUpdateTime=2026-11-10 20:53:46`，早于续跑首批开始（20:54:37）及十次重复（21:05–21:16），支持这些续跑使用同一安装版本。另一个任务的 `BenchmarkReentryTest` 未纳入本轮清单，不据本轮结果取消其独立待验收项，保留其源码／文档修改。
+- 验证完成后的环境事件：SwiftShader 模拟器进程随后仍以 139／SIGSEGV 退出，末尾日志为 ColorBuffer 缺失、QEMU 主循环／CPU 线程挂起（23:02）；本轮连续验证已于 21:16 全部结束，不撤销已有明确 `OK` 的结果，也不据通过结果认定设备环境已稳定。没有再次启动、清数据或修改配置；后续设备验收仍需稳定环境。
 - 证据：本轮 runner、构建、Lint、APK 摘要及截图保存在会话临时目录 `regression-closure-WWsTNA/`，长期状态以本文的实际类／数量／结果为准。133 项中断批次应用 APK SHA-256 为 `4058049bb65ceed67a404defbb883f11b9cd1d06f4bcac3c9ed257061c50e816`，测试 APK 为 `87918763eccc9f2995a0d2f7bc763102cb20ddd6eb3fbc9ad02548855ed6a7ba`；恢复后实际安装应用为 `66121673f9486292aa84fe6555e08ff3a6b5fd7e46dec4edcfc42eb8ba9dd4e5`，测试为 `ef33ff1cc6c7a8286b16e2d7f6d37cc38699949a2eb2be0ef9cab3364f1b9eb9`。未 clean、清数据、卸载或重建模拟器；不把模拟器自动化计作真机／TalkBack／系统手势验收。
 
 ### 2026-11-10 评测页切回时保留成功结果
@@ -45,6 +46,31 @@
 - 单元／构建：新增延迟首个结果的回归，修复前 8 项中 4 项失败，修复后完整 `BenchmarkViewModelTest` 8 项通过，0 失败／错误／忽略。覆盖首次加载、非空／空结果恢复、更新应用、失败清旧内容／重试及连续往返取消。Debug 应用／测试 APK 构建及 Debug Lint 通过，`git diff --check` 通过。
 - 设备范围：新增 `BenchmarkReentryTest`，通过真实 Route／ViewModel 和可控延迟数据覆盖双向滑入、底栏连续往返、生命周期恢复、完整榜单按钮／系统返回；连同原 `BenchmarkScreenTest` 计划 25 项。首次 runner 在测试开始前被另一 instrumentation 终止；复跑实际报告 `numtests=25`，完成 `leaderboardButtonAndSystemBackKeepTheSameSubscriptionAndOverviewPosition` 1 项通过，第二项开始后再次被并行测试终止，无最终 OK，不计整批通过。ActivityManager 日志记录 `due to start instr` 强制停止，另一个宿主 runner 为共享转场／其他功能回归；不能将这种中断记作应用异常或设备验收通过。
 - 验证边界：尚未补齐余下设备用例及真机视觉验收；未清数据、卸载、重建模拟器或修改其他任务的代码／测试。不删除本轮开始前已有的工作区修改。
+
+### 2026-11-10 评测总览卡片与完整排行榜共享转场
+
+- 范围：总览整卡与全榜共用 450ms 容器转场，Logo／名称按完整榜单 ID 匹配；模型名／成绩／柱条不共享，不改变两页各自刻度。支持按钮／系统返回、预测性暂停／取消／确认、入场中反向与零动画；保留阅读位置及本地订阅，说明弹窗优先返回，错误／移除不留旧成绩，来源缺失退化淡出。公共双端时间轴及保留可见性移至 `ui/transition/`，模型端保留类型别名，不引入新导航框架或数据改动。
+- 单元／构建：评测与导航 5 类／31 项单元测试通过，Debug 应用／测试 APK 构建、Debug Lint 通过（0 Error、71 Warning、2 Hint）。新增 instrumentation 首次编译误导入成员函数 `onNode`，移除无效 import 后通过；应用与测试 APK 最初误用多 APK split 安装被拒绝，改为分别 `adb install -r` 成功，未卸载或清数据。
+- 首批设备回归：API 37／`emulator-5554`，显式 runner 实际 `numtests=86`，86 项全部结束，80 通过、6 失败。原有 `BenchmarkScreenTest` 21、`BenchmarkReentryTest` 4、`ModelAtlasAppTest` 24、`ModelDetailNavigationTest` 3、`ModelSharedTransitionTest` 21、`ModelSharedTransitionReducedMotionTest` 1、`ModelSeekableTransitionTest` 1 共 75 项全部通过；新增评测转场 10＋零动画 1 中 5 通过、6 失败，不将首批改记全通过。
+- 首批测试修订：冻结时钟前先等待顶层 Pager 停稳，稳定全榜的预测性测试先确认入场完成；中间帧按真实颜色变化检测几何，只有端点像素比较允许抗锯齿误差，不将低主题色差过滤成内容边界。保留中间帧／暂停／清理断言，并新增预测性取消逐帧容器裁剪与 Logo 可见性检查。
+- 定向复跑：首批 6 个失败项加新增取消检查，显式 `numtests=7`，原 6 项全部通过；新增检查首次错用被共享语义覆盖的 Logo 内部 tag 而失败，改按共享角色及来源／目标祖先定位。浅／深中间帧截图另发现真实视觉问题：总览名称共享边界包含整列留白，缩放时异常放大；返回栏过早淡入与名称叠压。修复为仅包裹文字，非共享返回栏／正文延至入场后段淡入，补名称两端宽高一致断言；按钮入场返回用例在按钮已显现且仍入场的 336ms 操作，早期返回仍由系统手势覆盖。
+- 视觉修复后定向 4 项（浅／深整卡、取消逐帧、入场按钮返回）实际 `numtests=4`、`OK (4 tests)`。已读取检查新截图的浅／深展开及收缩中间帧，名称正常等大交接、无返回栏标题叠压；此前截图问题不归为环境。
+- 完整评测范围：新转场 11、零动画 1、`BenchmarkScreenTest` 21、`BenchmarkReentryTest` 4，显式 runner 实际 `numtests=37`、`OK (37 tests)`，无缺类／忽略／未结束项。与首批已通过且公共逻辑未再改动的外壳／模型 50 项合计，本轮 9 类／87 个不同 instrumentation 用例均有通过结果；不宣称各批使用同一应用 APK，也不将首批失败抹除。
+- 最终产物：最后仅统一外壳新增分支缩进，重新构建 Debug／测试 APK，重跑上述 31 项单元及 Debug Lint，通过后分别覆盖安装。最终 APK 定向复跑浅／深整卡、预测性取消逐帧、零动画及 `ModelDetailNavigationTest` 3 项，实际 `numtests=7`、`OK (7 tests)`。应用 SHA-256 为 `70dee75d686af96712331a0ab73c889a1c948e924022e254b420978b3d021d0e`，测试为 `92ecb31c92c264ad1020eaa99ab8a17c0c06b3141ca1e03107154cb21a50af50`；37 项全类结果属于前一仅缩进不同的应用产物，不冒充最终 7 项批次结果。
+- 验证边界：无新增网络／数据库行为，未执行 Release、全量单元或全量 instrumentation；未 clean、清数据、卸载或重建模拟器。模拟器截图及 dispatcher 手势注入不等于真机、TalkBack 或 Android 系统边缘触摸端到端验收；评测共享转场真机待验收保留在当前 TODO。
+
+### 2026-11-10 评测前三名成绩共享元素
+
+- 范围：在既有整卡／Logo／名称转场上增加前三名模型名、分数、轨道及填充，按完整榜单 ID＋模型 ID＋角色匹配，不按同名、并列名次或成绩记录 ID 配对。文字只包裹实际内容并按 Fit 淡化原有样式／单位，不做分数计数动画；轨道及填充分别重测边界，条高 6→8dp、长度在各页真实比例之间连续变化，不统一坐标轴、修改成绩或新增请求。第四名以后、名次和单项卡片背景仍淡入，滚动后停用成绩匹配、不强制回顶。
+- 改动边界：复用原 450ms 时间轴及预测性返回，不改公共控制器、外壳导航、ViewModel 或数据层；无宿主的 Screen／预览保持原样。保留本轮开始前已有的暂存修改，以及 `BenchmarkCard.kt` 未暂存的两组设计预览。
+- 构建／单元：Debug 应用与测试 APK 构建通过；评测 3 类／17 项单元测试通过（图表 7、展示格式 2、ViewModel 8）；Debug Lint 通过，0 Error、71 Warning、2 Hint，无新增警告。`git diff --check` 通过。
+- 新增专项：API 37／`emulator-5554`，显式 runner 核对实际 `numtests=6`、`OK (6 tests)`。覆盖浅／深两向像素边界、第四名改变坐标轴后的端点比例与中间帧、轨道／填充高度及暂停／取消、同名／并列与 `pts`→`points`、窄屏双倍字号 RTL 换行／滚动返回及零长度填充。已读取浅／深展开与收缩中间帧截图，前三行文字、分数及柱条保持连续，未见文字异常放大或填充重影。
+- 首批全类回归：实际 `numtests=43`，42 通过、1 失败，全部结束。失败为原 `BenchmarkScreenTest#referenceModelNamesStayOnOneLineAndPointsAreCompactWithoutChangingSpokenUnit` 的 `didOverflowWidth` 断言；加测量信息后原 APK 定向重跑仍失败，`Gemini 4 Carbon` 布局宽 277px、底层段落宽 765px，约束为 0..765px。松开 weight 最小宽度使文字布局收紧，但仍复用满列宽段落；不将其解释为环境或删除断言。
+- 修复：共享文字内部用本征宽度显式约束段落，同时保留父级可换行最大宽度与 weight 列布局；名称与分数均处理，不只绕过无宿主用例。新增浅／深与大字号 RTL 两端真实段落宽高断言。原失败方法＋浅／深成绩转场＋大字 RTL 共 4 项定向复跑，实际 `numtests=4`、`OK (4 tests)`；新截图再次读取检查，文字与柱条中间帧连续。
+- 设备中断：最终产物的评测全类回归显式 `numtests=43`，跑到第 14 项时模拟器 QEMU 退出，无最终 `OK`，不计整批通过；已完成的 13 项有明确通过结果，第 14 项起未完成，不改写为通过。
+- 恢复：仅用启动参数 `-no-snapshot-load -no-snapshot-save -gpu swiftshader` 启动原 AVD，不改持久配置、不清数据、不卸载；核对设备上应用／测试 APK 的 SHA-256 与当前构建一致（`6526178748268c7bd0304ae5492521ff9decf55e6a388a8de7ccc3f05967f9d2`、`ec8a87bd84704f3a277523b517a342e6b4b055896978eab1c9e4a7ad133c1e0d`）。补跑未完成范围：转场尾项与零动画 5 项 `OK (5 tests)`、`BenchmarkScreenTest` 21 项 `OK (21 tests)`、`BenchmarkReentryTest` 4 项 `OK (4 tests)`；与中断前已通过的 13 项及先前 4 项定向结果合计，最终产物的评测范围 4 类／43 项全部有通过结果。
+- 模型转场回归（公共共享层未改，仅作回归）：`ModelSharedTransitionTest` 等 4 类显式 `numtests=26`，25 项通过、1 项 `lightPredictiveReturnDuringEntryDoesNotFlashAtTheRewoundEndpoint` 因 `Failed waiting for PixelCopy!` 截图超时失败，非断言失败；该方法定向复跑 1 次及浅／深两项合跑 2 次均通过（`OK (1 test)`、`OK (2 tests)`）。按既有记录，截图超时不能当作 Logo 缺失，本轮未修改模型共享转场代码，也未据此宣布修复。
+- 验证边界：本轮未新增网络／数据库行为，未执行 Release、全量单元或全量 instrumentation；未 clean、清数据、卸载或重建模拟器。模拟器截图与 dispatcher 手势注入不等于真机、TalkBack 或 Android 系统边缘触摸端到端验收；评测共享转场真机待验收保留在当前 TODO。
 
 ## 原 TODO（以下保留原文）
 

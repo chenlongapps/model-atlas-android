@@ -178,7 +178,8 @@ class BenchmarkScreenTest {
             compose.onNodeWithTag("benchmark-name:${entry.scoreId}", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             assertEquals(1, layouts.single().lineCount)
-            assertFalse(layouts.single().didOverflowWidth)
+            assertFalse("${entry.modelName}: size=${layouts.single().size}, paragraphWidth=${layouts.single().multiParagraph.width}, constraints=${layouts.single().layoutInput.constraints}",
+                layouts.single().didOverflowWidth)
             compose.onNodeWithText("${entry.score} pts", useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithContentDescription("第 ${entry.rank} 名，${entry.modelName}，分数 ${entry.score} points", useUnmergedTree = true).assertIsDisplayed()
             val name = compose.onNodeWithTag("benchmark-name:${entry.scoreId}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot

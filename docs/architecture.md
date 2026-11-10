@@ -18,6 +18,7 @@
 | `ui/modellist/`、`ui/favorites/` | 目录、查询、状态提醒／骨架、本地收藏及详情收藏操作 |
 | `ui/modeldetail/`、`ui/modelcompare/`、`ui/benchmark/` | 详情、双模型对比、评测榜单及各自本地观察状态 |
 | `ui/model/` | 共用身份展示、整卡共享转场与预测性返回控制器 |
+| `ui/transition/` | 模型／评测共用的保留可见性与可寻址双端转场时间轴 |
 | `ui/settings/`、`ui/theme/` | 设置子页、外观状态与语义主题；持久化见[外观设置](appearance-settings.md) |
 
 Debug 工具位于 `src/debug/java/.../ui/debug/`，Release 同路径仅保留空 `DebugFeature`，不通过 `BuildConfig.DEBUG` 决定是否打包。隔离与签名见[双版本说明](debug-release-coexistence.md)。
@@ -88,6 +89,16 @@ refresh()（启动自动同步／用户主动刷新共用）
 - `BenchmarkChart.kt` 用 BigDecimal 增留白并按 `1／2／5 × 10ⁿ` 向外取整；仅尊重明确且不排除实值的定义边界。Top 3 用自身集合、全榜用全部排名，滚动不改轴，单值／同分／零值仍有非零区间。机构色按背景提高至至少 3∶1，不按名次换色。
 - 外壳仅保存榜单 ID；`SaveableStateHolder` 按 ID 隔离阅读状态，加载／错误另用列表状态。读取失败清旧成绩、本地重试；说明弹窗以榜单 ID 保存打开状态，旧描述不泄漏到错误／移除状态。页面字段与格式见[页面字段](page-information.md#评测页与完整排行榜)。
 
+### 评测卡片与排行榜共享转场
+
+- `ui/benchmark/BenchmarkSharedTransition.kt` 用 `BenchmarkContainerKey(boardId)` 匹配总览整卡与全屏榜单，用 `BenchmarkElementKey(boardId, role)` 匹配 Logo／名称；榜单 ID 区分实际版本／指标／单位，不以共用的评测定义 ID 或显示名匹配，也不与模型共享键混用。
+- 两端共用 450ms 时间轴，容器圆角／底色连续，正文等比缩放并淡化，背景总览不整页淡出。Logo 两端底座比例不同，采用等比 `sharedBounds` 交接，宽字标不拉伸；名称共享边界仅包裹实际文字，不包含总览 `weight` 列留白，允许总览附版本、全榜仅名称之间淡化。非共享返回栏／正文在身份接近终点后交接，避免标题叠压。
+- Top 3 成绩用独立的 `BenchmarkResultKey(boardId, modelId, role)` 匹配模型名／分数／轨道／填充，不按同名、并列名次或会变化的成绩记录 ID 配对。文字边界仅包裹实际内容，放松列最小宽度后仍以本征宽度约束真实段落，避免复用满列段落而超出文字布局；按 `Fit` 等比缩放及原有样式／单位淡化交接，分数不做计数动画。轨道／填充是两份独立 `sharedElement`，按各自边界重测宽高并保持圆角，层级高于容器且填充高于轨道，不叠加父级正文淡化。两页仍用各自固定轴，填充长度在两个真实端点之间插值，不修改分数、排名或计算规则。
+- 全榜仅为当前前三个模型注册成绩匹配，滚动后停用成绩匹配，不为共享元素额外组合离屏条目或强制回顶。名次、全榜单项卡片背景及第四名之后内容仍随非共享正文淡入；没有匹配的内容走既有局部淡化，不补旧成绩或动画快照。
+- 外壳保留主 Pager 的组合与两端转场布局，隐藏／退出端立即屏蔽触摸、焦点及读屏；共享层交接结束后才清理 `retainedBenchmarkId`。本地订阅持续至交接完成，不因按钮或系统返回重订阅。
+- 简介不在列表初始位置时停用身份匹配，但仍缩回来源整卡，不强制回顶；来源不存在退化淡出。读取失败／榜单移除不保留旧身份或成绩，也不为动画缓存业务快照。
+- 预测性返回、取消及入场中反向复用 `ui/transition/RetainedPageTransitionController.kt`，模型端保留类型别名；同一返回 handler 按当前子页分发进度／取消／确认，说明弹窗仍优先消费返回。配置恢复只恢复稳定全榜及阅读状态，不保存手势中间状态。
+
 ## 双模型对比的数据与状态
 
 - `ModelCompareViewModel` 仅保存两个规范 ID，拒绝重复／目录外模型／非法槽位。停稳且可见才观察目录、收藏与所选详情，离屏取消，替换立刻取消旧模型订阅；重入读最新本地，任何重试不联网。
@@ -113,7 +124,7 @@ refresh()（启动自动同步／用户主动刷新共用）
 
 ### 模型详情预测性返回
 
-- `ModelDetailTransitionController` 只管 UI，统一两套稳定公开 `SeekableTransitionState`，区分 Idle／Entering／BackDragging／BackCancelling／BackCommitting／Exiting；阶段／手势代次变化才取消旧任务，进度经 `snapshotFlow` 合并、两端串行 `seekTo()`。
+- `ModelDetailTransitionController` 是公共 `RetainedPageTransitionController` 的模型端类型别名，只管 UI，统一两套稳定公开 `SeekableTransitionState`，区分 Idle／Entering／BackDragging／BackCancelling／BackCommitting／Exiting；阶段／手势代次变化才取消旧任务，进度经 `snapshotFlow` 合并、两端串行 `seekTo()`。
 - `NavigationBackHandler` 获取系统进度，取消／确认明确结算；Idle 不重置，重复退出忽略。拖动／暂停／100% 仍保留两端布局与选中 ID，并屏蔽底层交互；取消恢复标签／阅读状态，确认只完成剩余收缩。
 - 入场中返回沿原时间轴倒放；取消途中再拖从实际 fraction 开始，帧时钟遵循 `MotionDurationScale`。文字及正文用同一 Transition 显式透明度，避免 `PostExit → Visible` 默认 spring 干扰精确寻址；非共享详情正文在退出最初 120ms 清出。
 - Compose 1.12.1 的 `animateTo()` 端点 fraction 归零和共享层时长重建会重复应用旧 segment，因此以帧时钟推进、端点 `snapTo()` 清缓存；不用实验性 `createChildTransition()` 或视觉遮盖。
