@@ -1,6 +1,8 @@
 package io.github.chenlongapps.modelatlas.ui.modellist
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertIsDisplayed
@@ -33,17 +35,50 @@ class CatalogFavoritesTest {
     @Test fun favoriteMovesFirstAndUnavailableRemainsAccessible() {
         val favorites = mutableStateOf(FavoritesUiState(false, listOf(saved, missing)))
         var opened = ""
+        lateinit var listState: LazyListState
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
+                listState = rememberLazyListState()
                 ModelListScreen(ModelListUiState(models = listOf(a, b), isLoading = false),
-                    favoritesState = favorites.value, onModelClick = { opened = it })
+                    favoritesState = favorites.value, onModelClick = { opened = it }, listState = listState)
             }
         }
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/b"))
         compose.onNodeWithTag("model-favorite:lab/b", useUnmergedTree = true).assertExists()
+        compose.runOnIdle { assertEquals(3, listState.layoutInfo.visibleItemsInfo.single { it.key == "model:lab/b" }.index) }
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("favorite-unavailable:old/gone"))
+        compose.runOnIdle { assertEquals(4, listState.layoutInfo.visibleItemsInfo.single { it.key == "model:old/gone" }.index) }
         compose.onNodeWithTag("favorite-unavailable:old/gone").performClick()
         compose.runOnIdle { assertEquals("old/gone", opened) }
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/a"))
+        compose.runOnIdle { assertEquals(5, listState.layoutInfo.visibleItemsInfo.single { it.key == "model:lab/a" }.index) }
+    }
+
+    @Test fun backgroundFavoriteProjectionKeepsSnapshotIdentityUntilExplicitCatalogPublication() {
+        val models = mutableStateOf(listOf(a, b))
+        val favorites = mutableStateOf(FavoritesUiState(false, listOf(saved, missing)))
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            ModelListScreen(ModelListUiState(models = models.value, isLoading = false), favoritesState = favorites.value)
+        } }
+        compose.runOnIdle {
+            favorites.value = FavoritesUiState(false, listOf(
+                saved.copy(identity = saved.identity.copy(name = "Renamed Beta"), model = null),
+                missing.copy(identity = missing.identity.copy(name = "Recovered"), model = ModelSummary("old/gone", "Recovered")),
+            ))
+        }
+        compose.onNodeWithTag("model:lab/b").assertExists()
+        compose.onNodeWithTag("favorite-unavailable:lab/b").assertDoesNotExist()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("favorite-unavailable:old/gone"))
+        compose.onNodeWithText("Historical").assertIsDisplayed()
+        compose.onNodeWithText("Recovered").assertDoesNotExist()
+        // 用户取消收藏仍即时生效，不必等待目录发布。
+        compose.runOnIdle { favorites.value = favorites.value.copy(favorites = favorites.value.favorites.take(1)) }
+        compose.onNodeWithTag("favorite-unavailable:old/gone").assertDoesNotExist()
+        // 模拟主动刷新发布新目录，才将 b 变成下架历史记录。
+        compose.runOnIdle { models.value = listOf(a) }
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("favorite-unavailable:lab/b"))
+        compose.onNodeWithText("Renamed Beta").assertIsDisplayed()
+        compose.onNodeWithTag("model:lab/b").assertDoesNotExist()
     }
 
     @Test fun readFailureKeepsCatalogAndRetryCanRestoreFavorites() {
@@ -79,6 +114,7 @@ class CatalogFavoritesTest {
         }
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/b"))
         compose.onNodeWithTag("model:lab/b").performClick()
+        compose.waitForIdle()
         compose.mainClock.autoAdvance = false
         compose.onNodeWithText("收藏并返回").performClick()
         compose.mainClock.advanceTimeBy(100)

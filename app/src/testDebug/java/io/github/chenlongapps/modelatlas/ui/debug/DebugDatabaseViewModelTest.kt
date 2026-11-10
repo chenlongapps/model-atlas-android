@@ -40,6 +40,7 @@ class DebugDatabaseViewModelTest {
         vm.discard()
         assertEquals(DatabaseDestination.DETAIL, vm.state.value.destination)
         assertEquals("Original", vm.state.value.row?.values?.get("name"))
+        assertEquals(0, store.saves)
         vm.back()
         advanceUntilIdle()
         assertEquals(DatabaseDestination.TABLE, vm.state.value.destination)
@@ -47,6 +48,26 @@ class DebugDatabaseViewModelTest {
         advanceUntilIdle()
         assertTrue(vm.back())
         assertEquals(DatabaseUiState(), vm.state.value)
+    }
+
+    @Test fun unmodifiedOrRevertedDraftLeavesWithoutConfirmationOrWrite() = runTest {
+        val vm = create()
+        vm.openTable(DatabaseTable.FAVORITES)
+        advanceUntilIdle()
+        vm.create()
+        assertFalse(vm.back())
+        advanceUntilIdle()
+        assertEquals(DatabaseDestination.TABLE, vm.state.value.destination)
+        assertFalse(vm.state.value.confirmDiscard)
+        vm.openRow(store.row.key)
+        advanceUntilIdle()
+        vm.edit()
+        vm.change("name", "Changed")
+        vm.change("name", "Original")
+        assertFalse(vm.back())
+        assertEquals(DatabaseDestination.DETAIL, vm.state.value.destination)
+        assertFalse(vm.state.value.confirmDiscard)
+        assertEquals(0, store.saves)
     }
 
     @Test fun invalidAndConflictingWritesKeepDraftAndSuccessfulWriteNotifiesOnce() = runTest {

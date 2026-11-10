@@ -21,6 +21,31 @@
 
   最终受影响范围复跑：以最终源码重新构建安装 Debug／测试 APK，复用本轮产物运行完整 `CatalogNoticeAnimationTest` 4、`CatalogNoticeReducedMotionTest` 1、`SilentCatalogUpdateTest` 3、`AtlasCatalogIntegrationTest` 6（含合法空缓存离线启动新断言）及 `FavoritesScreenTest#detailOnlyAddStaysThenRemoveReturnsToModelsSource` 1；显式 runner 实际 `numtests=15`、`OK (15 tests)`。首轮失败记录不改记为全通过；未无条件重跑其余已通过范围。全量单元报告位于 `app/build/reports/tests/testDebugUnitTest/`，Lint 位于 `app/build/reports/lint-results-debug.html`，显式 runner 结果以本轮命令输出为证、不冒充 Gradle connected 报告。
 
+### 2026-11-10 六项自动化欠账定向闭环
+
+- 范围：迁移 `FavoritesScreenTest` 到模型目录入口，区分可用项取消后的普通卡保留／重排与下架项的返回后淡出；补目录顺序索引、后台收藏投影冻结与显式目录发布断言，保留保存失败、延迟 Flow、滚动／展开／重建／系统返回及零动画覆盖。收藏标识增加浅深主题与非交互语义检查。未修改收藏持久化或生产转场逻辑。
+- 排行榜：补说明实际滚到底、非零阅读位置下的弹窗恢复／返回、跨榜单及错误／移除／空说明隔离和真实遮罩触摸。首次回归发现 320dp／双倍字号／RTL 下长版本与类别横向溢出，简介改为按文字实测将文字移至 Logo／信息按钮下方，元数据不足时独占整行；保留普通字号约 64dp 与至少 48dp 信息按钮，不缩字、不放宽完整文字断言。
+- Debug 根因：当前原 `dirtyEditorPromptsBeforeSystemBack` 定向失败在第二次返回后的“放弃修改”按钮，第一次确认能显示。取消对话框后输入焦点恢复、IME 重新出现，第二次返回被键盘消费；不是已证实的脏草稿判断缺失。明确隐藏 IME 后原方法通过，另补真实 IME 可见时先收键盘再确认、工具栏返回／无修改退出及重建草稿返回；验证放弃不写库。生产返回逻辑未改。
+- 预测性取消：同一帧只截一张图，Logo 与容器判断复用该图；失败保留最近三帧及手势比例／帧号／Transition 状态，不删断言、不扩大容差、不据单次通过宣布修复。
+- 首批 API 37／`emulator-5554` 显式 runner 实际 `numtests=71`，66 通过、5 失败，全部结束，无设备退出。其中参数专项 7、详情返回 3、静默快照 3 全通过；失败为排行榜遮罩 root 歧义、大字号横向溢出、收藏来源返回后仍隐藏的导航、收藏测试在入场尚未完成时冻结时钟、对比阅读恢复测试未先唤回导航。修正测试前提时不绕过隐藏导航交互、不放宽布局／像素断言。遮罩后续尝试另发现 Compose root 事件不经过 `Dialog.onTouchEvent`，且语义窗口出现早于绘制；改为同步弹窗截图后发送系统触摸，定向 `numtests=1`、`OK (1 test)`。首轮及中间失败原输出保留，不改记首批全部通过。
+- 参数缺口核对：11 月 7 日“65 项仅完成 18”之后，11 月 9 日已有详情 38＋详情返回 3 的完整通过记录（见原文）。本轮参数专项 7 及详情返回 3 再次通过；对比页首批 16／17 通过，切页方法修正导航操作前提后单独通过。历史的“剩余 47”不是当前固定待跑清单；不重复补早已取消的参数展开行为。
+- 单元／构建：最终定向 6 类／32 项全部通过：`CatalogEntriesTest` 6、`FavoritesViewModelTest` 8、`FavoriteRemovalTransitionTest` 4、`DebugDatabaseViewModelTest` 5、`BenchmarkChartTest` 7、`BenchmarkResultPresentationTest` 2。Debug／测试 APK 构建及 Debug Lint 通过（0 Error、71 Warning、2 Hint）；首轮测试编译误用了不存在的 `performScrollBy`，改为已有 `ScrollBy` 语义动作后通过，未引入新测试依赖。
+- 视觉：已实际读取并检查本轮模拟器截图，覆盖简介浅／深色、说明弹窗浅／深色、滚到底的唯一末尾标记及关闭按钮、320dp／双倍字号／RTL 长名称与版本／类型。未见截断、入口挤压或末尾不可达；窄屏截图中的右侧空白为测试 320dp 宿主外区域，不是应用正文。该项为合成测试数据的定向页面视觉检查，不冒充真机或 TalkBack 验收。
+- 扩大回归中断：上述 APK 的显式 runner 报告 `numtests=133`，完成 68 项（65 通过、3 失败），第 69 项 `dirtyEditorPromptsBeforeSystemBack` 开始后模拟器退出，没有最终 `OK`，不计整批通过。完整通过类为 `BenchmarkScreenTest` 21、`FavoritesScreenTest` 13、`FavoriteRemovalAnimationDisabledTest` 1、`CatalogFavoritesTest` 4、`ModelCardFavoriteLayoutTest` 2；对比 16／17、Debug 数据库 8／12 通过。列表 41、共享转场 21＋零动画 1、Debug 两个未结束方法共 65 项未完成，预测性取消连续 10 次未开始。QEMU 宿主崩溃报告为 `EXC_BAD_ACCESS / SIGSEGV`；原 AVD 保留数据冷启动后再次主循环／CPU 线程挂起，在安装修订测试 APK 前退出。
+- 扩大批次三项失败的测试修订：对比收藏排序在输入后跨帧分别取两项坐标，改为同一 UI 帧读取并保留排序断言；Debug CRUD 返回保留隐藏导航，增加反向轻滑后再操作；校验错误动态出现在保存按钮下，先滚到错误再断言可见。修订没有改产品排序、返回或字段校验，须以其后实际执行记录判定通过，不能据构建成功闭环。
+- 恢复后定向验证：仅用启动参数 `-no-snapshot-load -no-snapshot-save -gpu swiftshader` 启动原 AVD，不更改持久配置或清除数据；重新安装修订测试 APK，三项失败方法显式 `numtests=3`、`OK (3 tests)`。其后按未完成及测试修改影响分组执行，不无条件重跑已通过的排行榜／收藏／标识类。
+- 最终续跑：共享转场 21＋零动画 1，显式 `numtests=22`、`OK (22 tests)`；对比 17＋Debug 数据库 12，`numtests=29`、`OK (29 tests)`；列表 41，`numtests=41`、`OK (41 tests)`。方法级核对原 133 项全部有后续成功结果，无缺类／忽略／未结束项；不将原中断批次改写为全通过。加本轮首批已通过的参数专项 7、详情返回 3、静默快照 3，累计 13 类／146 个不同 instrumentation 用例通过。参数量精简的历史缺口、收藏导航迁移、收藏标识／列表／共享返回及 Debug 脏编辑返回自动化闭环；真机验收另列。
+- 偶发跟踪：上述共享类已含预测性取消方法，之后同一安装版本再独立连续执行 10 次，每次核对实际类／方法、`numtests=1`、唯一成功结束码及 `OK (1 test)`，全部通过。该结果是“本轮未复现”，不是历史截图超时或 Logo 缺失已找到根因／修复的证据；保留 TODO 稳定性跟踪与失败诊断，不再保留未执行连续验证的旧描述。
+- 版本边界：续跑期间另一个工作区任务正在修复评测页重入，不能宣称所有批次均用同一应用 APK。续跑与 10 次重复结束后核对设备上应用／测试 APK 的实际摘要及 `lastUpdateTime=2026-11-10 20:53:46`，早于续跑首批开始（20:54:37）及十次重复（21:05–21:16），支持这些续跑使用同一安装版本。另一个任务的 `BenchmarkReentryTest` 未纳入本轮清单，不据本轮结果取消其独立待验收项，保留其源码／文档修改。
+- 证据：本轮 runner、构建、Lint、APK 摘要及截图保存在会话临时目录 `regression-closure-WWsTNA/`，长期状态以本文的实际类／数量／结果为准。133 项中断批次应用 APK SHA-256 为 `4058049bb65ceed67a404defbb883f11b9cd1d06f4bcac3c9ed257061c50e816`，测试 APK 为 `87918763eccc9f2995a0d2f7bc763102cb20ddd6eb3fbc9ad02548855ed6a7ba`；恢复后实际安装应用为 `66121673f9486292aa84fe6555e08ff3a6b5fd7e46dec4edcfc42eb8ba9dd4e5`，测试为 `ef33ff1cc6c7a8286b16e2d7f6d37cc38699949a2eb2be0ef9cab3364f1b9eb9`。未 clean、清数据、卸载或重建模拟器；不把模拟器自动化计作真机／TalkBack／系统手势验收。
+
+### 2026-11-10 评测页切回时保留成功结果
+
+- 根因与修复：顶层 Pager 本已保留组合，但 `BenchmarkViewModel.observe()` 每次激活都会将榜单重置为 loading，正文卡片暂时被占位替换。恢复本地观察改为保留上次成功结果（含空榜单），最新结果到达后直接替换；仅首读／错误后重试显示加载，真实失败仍清旧成绩。离屏取消订阅、完整榜单复用订阅、无新增联网和滚动状态分离规则不变。
+- 单元／构建：新增延迟首个结果的回归，修复前 8 项中 4 项失败，修复后完整 `BenchmarkViewModelTest` 8 项通过，0 失败／错误／忽略。覆盖首次加载、非空／空结果恢复、更新应用、失败清旧内容／重试及连续往返取消。Debug 应用／测试 APK 构建及 Debug Lint 通过，`git diff --check` 通过。
+- 设备范围：新增 `BenchmarkReentryTest`，通过真实 Route／ViewModel 和可控延迟数据覆盖双向滑入、底栏连续往返、生命周期恢复、完整榜单按钮／系统返回；连同原 `BenchmarkScreenTest` 计划 25 项。首次 runner 在测试开始前被另一 instrumentation 终止；复跑实际报告 `numtests=25`，完成 `leaderboardButtonAndSystemBackKeepTheSameSubscriptionAndOverviewPosition` 1 项通过，第二项开始后再次被并行测试终止，无最终 OK，不计整批通过。ActivityManager 日志记录 `due to start instr` 强制停止，另一个宿主 runner 为共享转场／其他功能回归；不能将这种中断记作应用异常或设备验收通过。
+- 验证边界：尚未补齐余下设备用例及真机视觉验收；未清数据、卸载、重建模拟器或修改其他任务的代码／测试。不删除本轮开始前已有的工作区修改。
+
 ## 原 TODO（以下保留原文）
 
 ## 产品目标与当前状态

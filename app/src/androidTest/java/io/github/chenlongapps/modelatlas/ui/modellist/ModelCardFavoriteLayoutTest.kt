@@ -2,11 +2,13 @@ package io.github.chenlongapps.modelatlas.ui.modellist
 
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -30,19 +32,25 @@ class ModelCardFavoriteLayoutTest {
 
     @Test fun favoriteMarkerSharesHeaderAndCardRemainsClickable() {
         var opened = false
+        val dark = mutableStateOf(false)
         compose.setContent {
-            ModelAtlasTheme(dynamicColor = false) {
+            ModelAtlasTheme(darkTheme = dark.value, dynamicColor = false) {
                 ModelCard(ModelSummary("lab/a", "Alpha"), false, {}, modifier = Modifier.width(320.dp),
                     onOpenDetail = { opened = true }, isFavorite = true)
             }
         }
-        val name = compose.onNodeWithTag("model-name", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val marker = compose.onNodeWithTag("model-favorite:lab/a", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        assertEquals(name.top.value, marker.top.value, 1f)
-        assertTrue(name.right <= marker.left)
-        compose.onNodeWithContentDescription("已收藏", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithTag("model:lab/a").performClick()
-        compose.runOnIdle { assertTrue(opened) }
+        for (isDark in listOf(false, true)) {
+            compose.runOnIdle { dark.value = isDark; opened = false }
+            val name = compose.onNodeWithTag("model-name", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            val marker = compose.onNodeWithTag("model-favorite:lab/a", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertEquals(name.top.value, marker.top.value, 1f)
+            assertTrue(name.right <= marker.left)
+            compose.onNodeWithContentDescription("已收藏", useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithTag("model-favorite:lab/a", useUnmergedTree = true)
+                .assert(androidx.compose.ui.test.SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+            compose.onNodeWithTag("model:lab/a").performClick()
+            compose.runOnIdle { assertTrue(opened) }
+        }
     }
 
     @Test fun longNameAndMarkerFitNarrowLargeFontRtl() {

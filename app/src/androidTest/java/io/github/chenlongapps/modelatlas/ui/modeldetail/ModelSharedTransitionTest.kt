@@ -11,6 +11,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.PixelMap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -404,6 +405,7 @@ class ModelSharedTransitionTest {
         compose.onNodeWithTag("model:openai/one").performClick()
         val full = compose.onRoot().captureToImage().toPixelMap()
         compose.mainClock.autoAdvance = false
+        val recentFrames = ArrayDeque<Pair<androidx.compose.ui.graphics.ImageBitmap, String>>()
         for (fraction in listOf(.25f, .5f, .9f)) {
             startBack()
             progressBack(fraction)
@@ -422,15 +424,24 @@ class ModelSharedTransitionTest {
                     assertEquals(detailTransition.visibilityScope.transition.currentState, detailTransition.visibilityScope.transition.targetState)
                 }
                 // 每帧实际绘制应有且只有一个共享 Logo。
+                val visibility = detailTransition.visibilityScope.transition
+                val context = "fraction=$fraction frame=$frame expansion=$value " +
+                    "state=${visibility.currentState}->${visibility.targetState} running=${visibility.isRunning}"
                 try {
                     val container = lerp(source, root, value)
-                    drawnLogoBounds(container)
-                    val changed = changedBoundsOrNull(catalog, compose.onRoot().captureToImage().toPixelMap(), 4)
+                    // 同一帧只截图一次，Logo 与容器断言必须基于同一实际绘制结果。
+                    val image = compose.onRoot().captureToImage()
+                    recentFrames.addLast(image to context)
+                    if (recentFrames.size > 3) recentFrames.removeFirst()
+                    val pixels = image.toPixelMap()
+                    detectDrawnLogoBounds(pixels, container)
+                    val changed = changedBoundsOrNull(catalog, pixels, 4)
                     assertTrue("取消途中详情不能闪出扩展容器", changed != null &&
                         changed.left >= container.left - 3 && changed.top >= container.top - 3 &&
                         changed.right <= container.right + 3 && changed.bottom <= container.bottom + 3)
-                } catch (failure: AssertionError) {
-                    throw AssertionError("取消 fraction=$fraction frame=$frame expansion=$value", failure)
+                } catch (failure: Throwable) {
+                    savePredictiveFailure(recentFrames, context, failure)
+                    throw failure
                 }
             }
             assertEquals(1f, detailTransition.expansionProgress(), .001f)
@@ -443,6 +454,26 @@ class ModelSharedTransitionTest {
             assertEquals(1, listCompositions)
             assertEquals(0, listDisposals)
         }
+    }
+
+    private fun savePredictiveFailure(
+        frames: ArrayDeque<Pair<androidx.compose.ui.graphics.ImageBitmap, String>>,
+        context: String,
+        failure: Throwable,
+    ) {
+        runCatching {
+            val root = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .targetContext.getExternalFilesDir("predictive-failures")!!
+            val directory = java.io.File(root, System.currentTimeMillis().toString()).apply { mkdirs() }
+            java.io.File(directory, "state.txt").writeText(context + "\n" + failure.stackTraceToString())
+            frames.forEachIndexed { index, (image, state) ->
+                java.io.File(directory, "frame-$index.txt").writeText(state)
+                java.io.File(directory, "frame-$index.png").outputStream().use {
+                    image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+            }
+            android.util.Log.e("PredictiveCancelTest", "Failure evidence: ${directory.absolutePath}", failure)
+        }.onFailure { android.util.Log.e("PredictiveCancelTest", "Could not save failure evidence", it) }
     }
 
     @Test fun predictiveCommitContinuesOnlyTheRemainderAndCleansUpOnceOnEitherEdge() {
@@ -658,7 +689,10 @@ class ModelSharedTransitionTest {
 
     /** 最终 Logo 仍保持比例，并返回原卡片。 */
     private fun drawnLogoBounds(container: Rect? = null): Rect {
-        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        return detectDrawnLogoBounds(compose.onRoot().captureToImage().toPixelMap(), container)
+    }
+
+    private fun detectDrawnLogoBounds(pixels: PixelMap, container: Rect?): Rect {
         val width = pixels.width
         val height = pixels.height
         val white = BooleanArray(width * height) { index ->

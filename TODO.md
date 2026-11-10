@@ -8,19 +8,15 @@
 
 实现查 [docs](docs/README.md)，构建规范查 [AGENTS.md](AGENTS.md)，以往完成项和测试原文查[开发历史](docs/archive/development-history.md)。本文件只维护当前任务；历史通过不代表当前版本已验证，功能完成不代表设备验收完成。
 
+## bug
+
+- [ ] 完成评测页切回闪烁修复的设备回归：已保留上次成功结果；补齐 `BenchmarkReentryTest` 双向滑入／连续切页／生命周期恢复及 `BenchmarkScreenTest`，本轮执行受同模拟器并行 instrumentation 中断。
+
 ## 近期任务
 
+- [ ] benchmark 页面,的共享动画
 
 ## 待验收与发布
-
-### 自动化与已知问题
-
-- [ ] 补完整排行榜简介／说明弹窗的 `BenchmarkScreenTest` 及入口、返回、阅读恢复回归；2026-11-10 批次 `numtests=20`，首个用例未完成即设备退出，不能计通过。视觉检查亦待补。
-- [ ] 核对参数量精简后的回归缺口：2026-11-07 计划 65 项、完成 18 项通过，余 47 项因设备退出未补齐；后续详情回归不能未经核对视为覆盖全部对比及返回范围。
-- [ ] 迁移 `FavoritesScreenTest` 中依赖已移除收藏导航的旧用例，补目录收藏排序、下架记录、导航及返回转场回归。
-- [ ] 补 `ModelCardFavoriteLayoutTest`、列表与共享转场回归；上次无线设备首个用例超时，无已完成用例。
-- [ ] 核实 `DebugDatabaseScreenTest#dirtyEditorPromptsBeforeSystemBack`：2026-10-28 仍未显示放弃确认，未找到明确闭环记录，不据其他批次通过判定修复。
-- [ ] 跟踪预测性取消像素用例偶发失败：`ModelSharedTransitionTest#predictiveCancelAt25And50And90RestoresTheSameDetailWithoutFlickerOrDisposal` 曾超时／未识别 Logo，同 APK 单独复跑通过；区分截图同步、环境与实际绘制问题，不能直接认定修复。
 
 ### 网络、设备与无障碍
 

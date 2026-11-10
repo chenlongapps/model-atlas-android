@@ -22,6 +22,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,11 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.room3.Room
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.espresso.Espresso.pressBack
+import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.chenlongapps.modelatlas.data.local.CatalogDatabase
@@ -92,6 +100,8 @@ class DebugDatabaseScreenTest {
         await { it.destination == DatabaseDestination.OVERVIEW && !it.loading }
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("debug-screen").assertIsDisplayed()
+        // 返回保留进入数据库前的滚动显隐，像用户一样反向轻滑唤回导航。
+        compose.onNodeWithTag("debug-content").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
         compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
     }
 
@@ -102,13 +112,62 @@ class DebugDatabaseScreenTest {
         await { it.destination == DatabaseDestination.TABLE && !it.loading }
         compose.onNodeWithTag("database-add").performClick()
         field("modelId", "new")
+        hideIme()
         pressBack()
+        await { it.confirmDiscard }
         compose.onNodeWithText("放弃未保存的修改？").assertIsDisplayed()
         compose.onNodeWithText("取消").performClick()
+        await { !it.confirmDiscard && it.draft["modelId"] == "new" }
         compose.onNodeWithTag("database-field-modelId").assertIsDisplayed()
+        // 关闭对话框后焦点可能恢复到输入框；第二次系统返回前明确隐藏 IME。
+        hideIme()
         pressBack()
+        await { it.confirmDiscard }
         compose.onNodeWithText("放弃修改").performClick()
         await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        assertEquals(0L, vm.state.value.page!!.total)
+    }
+
+    @Test fun visibleKeyboardConsumesFirstBackWithoutDiscardingDraftThenNextBackPrompts() {
+        show()
+        openDatabase()
+        compose.onNodeWithTag("database-table-favorites").performClick()
+        await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        compose.onNodeWithTag("database-add").performClick()
+        field("modelId", "keyboard-draft")
+        compose.onNodeWithTag("database-field-modelId").performClick()
+        compose.waitUntil(5_000) { imeVisible() }
+        pressBack()
+        compose.waitUntil(5_000) { !imeVisible() }
+        compose.runOnIdle {
+            assertEquals(DatabaseDestination.EDIT, vm.state.value.destination)
+            assertEquals("keyboard-draft", vm.state.value.draft["modelId"])
+            assertFalse(vm.state.value.confirmDiscard)
+        }
+        pressBack()
+        await { it.confirmDiscard }
+        compose.onNodeWithText("放弃未保存的修改？").assertIsDisplayed()
+        compose.onNodeWithText("放弃修改").performClick()
+        await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        assertEquals(0L, vm.state.value.page!!.total)
+    }
+
+    @Test fun toolbarBackPromptsAndUnmodifiedEditorLeavesWithoutPrompt() {
+        show()
+        openDatabase()
+        compose.onNodeWithTag("database-table-favorites").performClick()
+        await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        compose.onNodeWithTag("database-add").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+        await { it.destination == DatabaseDestination.TABLE && !it.loading }
+        compose.onNodeWithText("放弃未保存的修改？").assertDoesNotExist()
+        compose.onNodeWithTag("database-add").performClick()
+        field("modelId", "toolbar-draft")
+        compose.onNodeWithContentDescription("返回").performClick()
+        await { it.confirmDiscard }
+        compose.onNodeWithText("取消").performClick()
+        assertEquals("toolbar-draft", vm.state.value.draft["modelId"])
+        assertEquals(DatabaseDestination.EDIT, vm.state.value.destination)
     }
 
     @Test fun invalidValueShowsFieldErrorWithoutCreatingRecord() {
@@ -122,6 +181,7 @@ class DebugDatabaseScreenTest {
         compose.onNodeWithTag("database-save").performClick()
         await { it.fieldError != null && !it.saving }
         assertEquals("favoritedAtEpochMillis", vm.state.value.fieldError?.field)
+        compose.onNodeWithTag("debug-database-content").performScrollToNode(hasText("favoritedAtEpochMillis: 请输入有效的 64 位整数"))
         compose.onNodeWithText("favoritedAtEpochMillis: 请输入有效的 64 位整数").assertIsDisplayed()
         assertEquals(DatabaseDestination.EDIT, vm.state.value.destination)
     }
@@ -176,6 +236,7 @@ class DebugDatabaseScreenTest {
         compose.onNodeWithTag("debug-database-screen").assertIsDisplayed()
         compose.onNodeWithTag("main-pager").assertIsNotDisplayed()
         assertEquals("draft-id", vm.state.value.draft["modelId"])
+        hideIme()
         pressBack()
         compose.onNodeWithText("放弃未保存的修改？").assertIsDisplayed()
     }
@@ -267,6 +328,21 @@ class DebugDatabaseScreenTest {
     private fun field(name: String, value: String) {
         compose.onNodeWithTag("debug-database-content").performScrollToNode(androidx.compose.ui.test.hasTestTag("database-field-$name"))
         compose.onNodeWithTag("database-field-$name").performTextInput(value)
+    }
+
+    private fun imeVisible(): Boolean {
+        var visible = false
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).single()
+            visible = ViewCompat.getRootWindowInsets(activity.window.decorView)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
+        return visible
+    }
+
+    private fun hideIme() {
+        closeSoftKeyboard()
+        compose.waitUntil(5_000) { !imeVisible() }
     }
 
     private fun useValue(name: String) {

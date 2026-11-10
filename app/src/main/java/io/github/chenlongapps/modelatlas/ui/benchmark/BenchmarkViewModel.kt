@@ -37,7 +37,9 @@ class BenchmarkViewModel @Inject constructor(private val repository: BenchmarkRe
     }
 
     private fun observe() {
-        _uiState.value = BenchmarkUiState()
+        // 恢复观察时保留上次成功结果（包括空榜单），避免停稳后内容被 loading 替换。
+        // 首读沿用初始 loading；失败后重试才重新进入 loading，真实读取失败仍清旧数据。
+        if (_uiState.value.hasError) _uiState.value = BenchmarkUiState()
         job = viewModelScope.launch {
             try {
                 repository.observeBoards().collect { _uiState.value = BenchmarkUiState(isLoading = false, boards = it) }

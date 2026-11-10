@@ -146,22 +146,67 @@ private fun BenchmarkCompactBar(entry: BenchmarkBoardEntry, range: BenchmarkChar
 
 @Composable
 internal fun BenchmarkIdentity(board: BenchmarkBoard, onInfo: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().testTag("benchmark-introduction").heightIn(min = 64.dp).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        BenchmarkLogo(board.benchmarkId)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(board.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(stringResource(R.string.benchmark_version, board.version), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(benchmarkCategory(board.category), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val version = stringResource(R.string.benchmark_version, board.version)
+    val nameStyle = MaterialTheme.typography.titleMedium
+    val metadataStyle = MaterialTheme.typography.bodySmall
+    BoxWithConstraints(Modifier.fillMaxWidth().testTag("benchmark-introduction").heightIn(min = 64.dp).padding(vertical = 8.dp)) {
+        val textWidth = with(density) {
+            (maxWidth - benchmarkLogoWidth(board.benchmarkId) - 12.dp - if (onInfo != null) 60.dp else 0.dp).toPx()
+        }
+        val longestWord = board.name.split(Regex("\\s+")).maxOfOrNull { measurer.measure(it, nameStyle).size.width } ?: 0
+        val inline = maxOf(longestWord, measurer.measure(version, metadataStyle).size.width) <= textWidth
+        if (inline) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BenchmarkLogo(board.benchmarkId)
+                BenchmarkIdentityText(board, Modifier.weight(1f))
+                BenchmarkInfoButton(onInfo)
+            }
+        } else {
+            // 不让宽字标与 48dp 信息入口挤窄长名称／版本，文字独占整行。
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    BenchmarkLogo(board.benchmarkId)
+                    BenchmarkInfoButton(onInfo)
+                }
+                BenchmarkIdentityText(board, Modifier.fillMaxWidth())
             }
         }
-        if (onInfo != null) IconButton(onClick = onInfo, modifier = Modifier.size(48.dp)) {
-            Icon(painterResource(R.drawable.ic_info), contentDescription = stringResource(R.string.benchmark_show_description),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun BenchmarkIdentityText(board: BenchmarkBoard, modifier: Modifier) {
+    val version = stringResource(R.string.benchmark_version, board.version)
+    val category = benchmarkCategory(board.category)
+    val style = MaterialTheme.typography.bodySmall
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(board.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val fits = measurer.measure(version, style).size.width + measurer.measure(category, style).size.width +
+                with(density) { 8.dp.toPx() } <= with(density) { maxWidth.toPx() }
+            if (fits) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(version, style = style, color = color)
+                Text(category, style = style, color = color)
+            } else Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(version, style = style, color = color, modifier = Modifier.fillMaxWidth())
+                Text(category, style = style, color = color, modifier = Modifier.fillMaxWidth())
+            }
         }
+    }
+}
+
+@Composable
+private fun BenchmarkInfoButton(onInfo: (() -> Unit)?) {
+    if (onInfo != null) IconButton(onClick = onInfo, modifier = Modifier.size(48.dp)) {
+        Icon(painterResource(R.drawable.ic_info), contentDescription = stringResource(R.string.benchmark_show_description),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

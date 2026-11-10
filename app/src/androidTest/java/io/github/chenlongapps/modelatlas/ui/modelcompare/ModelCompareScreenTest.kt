@@ -27,6 +27,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -133,9 +136,15 @@ class ModelCompareScreenTest {
         } }
         compose.onNodeWithTag("compare-slot-0").performClick()
         fun assertBefore(first: String, second: String) {
-            val firstBounds = compose.onNodeWithTag("compare-option:$first").fetchSemanticsNode().boundsInRoot
-            val secondBounds = compose.onNodeWithTag("compare-option:$second").fetchSemanticsNode().boundsInRoot
-            assertTrue(firstBounds.bottom <= secondBounds.top)
+            val nodes = compose.onAllNodes(hasTestTag("compare-option:$first") or hasTestTag("compare-option:$second"))
+                .fetchSemanticsNodes()
+            compose.runOnIdle {
+                // IME 会移动整个面板；同一个 UI 帧读取两项，不能跨帧比较两套窗口坐标。
+                val bounds = nodes.associate { it.config[SemanticsProperties.TestTag] to it.boundsInRoot }
+                assertEquals(2, bounds.size)
+                assertTrue("收藏候选必须在前：$bounds", bounds.getValue("compare-option:$first").bottom <=
+                    bounds.getValue("compare-option:$second").top)
+            }
         }
         assertBefore("openai/b", "deepseek/a")
         compose.onNodeWithTag("compare-option:openai/b").assertIsNotEnabled().performClick()
@@ -390,6 +399,9 @@ class ModelCompareScreenTest {
         compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").assertDoesNotExist()
         compose.onNodeWithTag("compare-list").performScrollToNode(hasText("权重与许可"))
+        // 滚动可能隐藏导航，反向轻滑唤回后再记录需要恢复的阅读位置。
+        compose.onNodeWithTag("compare-list").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         val before = compose.onNodeWithText("权重与许可").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("nav-compare").performClick().assertIsSelected()

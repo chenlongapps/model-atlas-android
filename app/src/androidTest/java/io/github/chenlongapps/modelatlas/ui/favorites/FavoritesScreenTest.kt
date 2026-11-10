@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.ui.favorites
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chenlongapps.modelatlas.data.model.FavoriteIdentity
 import io.github.chenlongapps.modelatlas.data.model.FavoriteModel
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
@@ -53,6 +55,7 @@ class FavoritesScreenTest {
     private val favoriteDetail = FavoriteDetailViewModel(repository).also { store.put("favorite", it) }
     private val list = FavoritesViewModel(repository).also { store.put("list", it) }
     private lateinit var removal: FavoriteRemovalTransition
+    private val catalog = mutableStateOf(listOf(model))
     @After fun close() = store.clear()
 
     @Test fun detailOnlyAddStaysThenRemoveReturnsToModelsSource() {
@@ -68,70 +71,60 @@ class FavoritesScreenTest {
         compose.runOnIdle { assertTrue(repository.items.value.isEmpty()) }
     }
 
-    @Test fun sameModelInBothPagesReturnsToFavoritesBeforeRemovingSource() {
+    @Test fun cancellingLastAvailableFavoriteKeepsOneOrdinaryCatalogCard() {
         repository.items.value = listOf(favorite())
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        sourceModel("favorites-list").performClick()
+        compose.onNodeWithTag("nav-favorites").assertDoesNotExist()
+        compose.onAllNodesWithTag("model:lab/a").assertCountEquals(1)
+        sourceModel("model-list").performClick()
         compose.onNodeWithContentDescription("取消收藏").performClick()
         compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
-        compose.onNodeWithTag("nav-favorites").assertIsSelected()
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
-        compose.onNodeWithTag("nav-models").performClick()
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithTag("model-favorite:lab/a", useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodesWithTag("model:lab/a").assertCountEquals(1)
         sourceModel("model-list").assertIsDisplayed()
     }
 
-    @Test fun persistedRemovalKeepsTheSharedTargetUntilReturnThenFadesAndReflows() {
+    @Test fun persistedRemovalKeepsAvailableSourceUntilReturnThenReordersWithoutDeletingIt() {
         val second = FavoriteModel(FavoriteIdentity("lab/b", "Second model", "lab"), 0,
             ModelSummary("lab/b", "Second model"))
-        repository.items.value = listOf(favorite(), second)
+        repository.items.value = listOf(favorite())
+        catalog.value = listOf(second.model!!, model)
         show(dark = true)
-        compose.onNodeWithTag("nav-favorites").performClick()
-        val source = sourceModel("favorites-list").fetchSemanticsNode().boundsInRoot
         val secondBefore = compose.onNodeWithTag("model:lab/b").fetchSemanticsNode().boundsInRoot.top
+        // 目录发布时间顺序为 b、a，收藏只有 a，使其先置顶；取消后才允许降回 b 后面。
+        val pinnedSource = sourceModel("model-list").fetchSemanticsNode().boundsInRoot
         val before = compose.onRoot().captureToImage().toPixelMap()
-        sourceModel("favorites-list").performClick()
+        sourceModel("model-list").performClick()
         compose.onNodeWithContentDescription("取消收藏").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("取消收藏").performClick()
         compose.mainClock.advanceTimeBy(160)
         compose.runOnIdle {
-            assertEquals(listOf(second), repository.items.value)
+            assertTrue(repository.items.value.isEmpty())
             assertTrue(removal.awaitingReturn)
             assertEquals("lab/a", removal.retained?.favorite?.identity?.id)
         }
         val returning = changedBounds(before, compose.onRoot().captureToImage().toPixelMap())
-        assertTrue("必须缩回原卡，不能直接整页淡出: $returning", returning.width > source.width + 1 && returning.width < before.width - 1)
-        assertTrue(returning.height > source.height + 1 && returning.height < before.height - 1)
+        assertTrue("必须缩回原卡，不能直接整页淡出: $returning", returning.width > pinnedSource.width + 1 && returning.width < before.width - 1)
+        assertTrue(returning.height > pinnedSource.height + 1 && returning.height < before.height - 1)
         assertEquals("返回途中后续卡片不能提前补位", secondBefore,
             compose.onNodeWithTag("model:lab/b", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.onNodeWithText("尚无收藏").assertDoesNotExist()
-
         compose.mainClock.advanceTimeUntil(1_500) { !removal.awaitingReturn }
         compose.waitForIdle()
         compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
-        compose.runOnIdle { assertNotNull("返回结束后还有独立的卡片淡出", removal.retained) }
-        val fadeStart = compose.onRoot().captureToImage().toPixelMap()
-        compose.mainClock.advanceTimeBy(80)
-        val fadeMiddle = compose.onRoot().captureToImage().toPixelMap()
-        val x = source.left.toInt() + 8
-        val y = source.center.y.toInt()
-        assertNotEquals("卡片应在返回后淡出", fadeStart[x, y].toArgb(), fadeMiddle[x, y].toArgb())
-        assertEquals("淡出完成前保持原位置", secondBefore,
-            compose.onNodeWithTag("model:lab/b").fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.mainClock.advanceTimeUntil(500) { removal.retained == null }
-        compose.mainClock.advanceTimeBy(80)
-        val movingTop = compose.onNodeWithTag("model:lab/b").fetchSemanticsNode().boundsInRoot.top
-        assertTrue("其余卡片应平滑补位", movingTop > source.top + 1 && movingTop < secondBefore - 1)
-        compose.mainClock.advanceTimeBy(300)
-        assertEquals(source.top, compose.onNodeWithTag("model:lab/b").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.mainClock.advanceTimeBy(500)
         compose.mainClock.autoAdvance = true
+        sourceModel("model-list").assertIsDisplayed()
+        assertTrue(compose.onNodeWithTag("model:lab/b").fetchSemanticsNode().boundsInRoot.top <
+            sourceModel("model-list").fetchSemanticsNode().boundsInRoot.top)
+        compose.runOnIdle { assertNull(removal.retained) }
     }
 
     @Test fun lastUnavailableFavoriteWaitsForFallbackReturnAndCardFadeBeforeEmptyState() {
         repository.items.value = listOf(favorite(available = false))
+        catalog.value = emptyList()
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
         compose.onNodeWithTag("favorite-unavailable:lab/a").performClick()
         compose.onNodeWithContentDescription("取消收藏").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
@@ -142,41 +135,41 @@ class FavoritesScreenTest {
             assertTrue(removal.awaitingReturn)
             assertNotNull(removal.retained)
         }
-        compose.onNodeWithText("尚无收藏").assertDoesNotExist()
+        compose.onNodeWithText("目录暂时为空").assertDoesNotExist()
         compose.mainClock.advanceTimeUntil(1_500) { !removal.awaitingReturn }
         compose.waitForIdle()
         compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
-        compose.onNodeWithText("尚无收藏").assertDoesNotExist()
+        compose.onNodeWithText("目录暂时为空").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(80)
         compose.runOnIdle { assertNotNull(removal.retained) }
-        compose.onNodeWithText("尚无收藏").assertDoesNotExist()
+        compose.onNodeWithText("目录暂时为空").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
+        compose.onNodeWithText("目录暂时为空").assertIsDisplayed()
         compose.mainClock.autoAdvance = true
     }
 
     @Test fun externalRemovalDoesNotRetainSourceOrFreezeTheList() {
         repository.items.value = listOf(favorite())
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        sourceModel("favorites-list").performClick()
+        sourceModel("model-list").performClick()
         compose.runOnIdle { repository.items.value = emptyList() }
         compose.runOnIdle { assertNull(removal.retained) }
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
+        sourceModel("model-list").assertIsDisplayed()
+        compose.onNodeWithTag("model-favorite:lab/a", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun scrolledExpandedSourceKeepsItsExactBoundsDuringRemovalReturn() {
         fun other(index: Int) = FavoriteModel(FavoriteIdentity("lab/$index", "Other $index", "lab"), index.toLong(),
             ModelSummary("lab/$index", "Other $index"))
         repository.items.value = List(8, ::other) + favorite() + List(8) { other(it + 8) }
+        catalog.value = repository.items.value.mapNotNull { it.model }
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        compose.onNodeWithTag("favorites-list").performScrollToNode(hasTestTag("model:lab/a"))
-        compose.onNode(hasContentDescription("展开档位价格") and hasAnyAncestor(hasTestTag("favorites-list"))).performClick()
-        val source = sourceModel("favorites-list").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/a"))
+        compose.onNode(hasContentDescription("展开档位价格") and hasAnyAncestor(hasTestTag("model-list"))).performClick()
+        val source = sourceModel("model-list").fetchSemanticsNode().boundsInRoot
         val neighbor = compose.onNodeWithTag("model:lab/8").fetchSemanticsNode().boundsInRoot
-        sourceModel("favorites-list").performClick()
+        sourceModel("model-list").performClick()
         compose.onNodeWithContentDescription("取消收藏").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("取消收藏").performClick()
@@ -190,21 +183,25 @@ class FavoritesScreenTest {
         compose.mainClock.advanceTimeUntil(1_500) { !removal.awaitingReturn }
         compose.waitForIdle()
         // 共享元素的中间帧本来就会变换根坐标；交接后才核对原卡与已展开报价的精确尺寸。
-        val retainedBounds = compose.onNode(hasTestTag("model:lab/a") and hasAnyAncestor(hasTestTag("favorites-list")),
+        val retainedBounds = compose.onNode(hasTestTag("model:lab/a") and hasAnyAncestor(hasTestTag("model-list")),
             useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(source, retainedBounds)
         compose.mainClock.advanceTimeBy(1_000)
         compose.mainClock.autoAdvance = true
-        compose.onNodeWithTag("nav-favorites").assertIsSelected()
-        sourceModel("favorites-list").assertDoesNotExist()
+        // 来源滚动已隐藏底栏，详情返回应保留该状态；先反向滚动再使用导航。
+        compose.onNodeWithTag("model-list").performTouchInput { swipe(center, center + androidx.compose.ui.geometry.Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/a"))
+        sourceModel("model-list").assertIsDisplayed()
+        compose.onNodeWithContentDescription("收起档位价格").assertIsDisplayed()
     }
 
     @Test fun lateListEmissionStillPlaysCardExitOnlyAfterReturn() {
-        repository.items.value = listOf(favorite())
+        repository.items.value = listOf(favorite(false))
+        catalog.value = emptyList()
         repository.deferRemovalEmission = true
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        sourceModel("favorites-list").performClick()
+        compose.onNodeWithTag("favorite-unavailable:lab/a").performClick()
         compose.onNodeWithContentDescription("取消收藏").performClick()
         compose.onNodeWithTag("model-detail-screen").assertDoesNotExist()
         compose.runOnIdle {
@@ -215,33 +212,33 @@ class FavoritesScreenTest {
         compose.runOnIdle { repository.items.value = emptyList() }
         compose.mainClock.advanceTimeBy(80)
         compose.runOnIdle { assertNotNull("晚到的 Flow 也不能直接移除卡片", removal.retained) }
-        compose.onNodeWithText("尚无收藏").assertDoesNotExist()
+        compose.onNodeWithText("目录暂时为空").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
+        compose.onNodeWithText("目录暂时为空").assertIsDisplayed()
         compose.mainClock.autoAdvance = true
     }
 
-    @Test fun normalBackKeepsFavoritePriceExpansionAndBothSourcesUseTheCorrectCard() {
+    @Test fun buttonAndSystemBackKeepFavoritePriceExpansionAndCatalogSource() {
         repository.items.value = listOf(favorite())
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        compose.onNode(hasContentDescription("展开档位价格") and hasAnyAncestor(hasTestTag("favorites-list"))).performClick()
-        sourceModel("favorites-list").performClick()
-        compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithTag("nav-favorites").assertIsSelected()
-        compose.onNode(hasContentDescription("收起档位价格") and hasAnyAncestor(hasTestTag("favorites-list"))).assertIsDisplayed()
-        compose.onNodeWithTag("nav-models").performClick()
+        compose.onNodeWithContentDescription("展开档位价格").performClick()
         sourceModel("model-list").performClick()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithContentDescription("收起档位价格").assertIsDisplayed()
+        sourceModel("model-list").performClick()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithTag("nav-models").assertIsSelected()
         sourceModel("model-list").assertIsDisplayed()
+        compose.onNodeWithContentDescription("收起档位价格").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(listOf(favorite()), repository.items.value) }
     }
 
     @Test fun unavailableFavoriteShowsOnlyHistoricalIdentityAndCanRemoveThroughDetail() {
         repository.items.value = listOf(favorite(available = false))
+        catalog.value = emptyList()
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        compose.onNode(hasText("lab/a") and hasAnyAncestor(hasTestTag("favorites-list")), useUnmergedTree = true)
+        compose.onNode(hasText("lab/a") and hasAnyAncestor(hasTestTag("model-list")), useUnmergedTree = true)
             .assertIsDisplayed()
         compose.onNodeWithTag("favorite-unavailable:lab/a").performClick()
         compose.onNodeWithTag("model-detail-screen").assertIsDisplayed()
@@ -253,15 +250,14 @@ class FavoritesScreenTest {
         compose.onNodeWithTag("model-detail-tabs").assertDoesNotExist()
         compose.onNodeWithTag("model-price-section").assertIsNotDisplayed()
         compose.onNodeWithContentDescription("取消收藏").performClick()
-        compose.onNodeWithTag("nav-favorites").assertIsSelected()
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithText("目录暂时为空").assertIsDisplayed()
     }
 
     @Test fun writeFailureDoesNotNavigateAndRetryCanRemove() {
         repository.items.value = listOf(favorite())
         show()
-        compose.onNodeWithTag("nav-favorites").performClick()
-        sourceModel("favorites-list").performClick()
+        sourceModel("model-list").performClick()
         compose.runOnIdle { repository.failWrite = true }
         compose.onNodeWithContentDescription("取消收藏").performClick()
         compose.onNodeWithText("收藏操作未能保存，请重试。").assertIsDisplayed()
@@ -270,8 +266,9 @@ class FavoritesScreenTest {
         compose.runOnIdle { assertNull(removal.retained) }
         compose.runOnIdle { repository.failWrite = false }
         compose.onNodeWithContentDescription("取消收藏").performClick()
-        compose.onNodeWithTag("nav-favorites").assertIsSelected()
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        sourceModel("model-list").assertIsDisplayed()
+        compose.onNodeWithTag("model-favorite:lab/a", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun priceExpansionAndFavoriteScrollSurviveSwitchAndAsyncRestoration() {
@@ -280,36 +277,39 @@ class FavoritesScreenTest {
             FavoriteModel(FavoriteIdentity("lab/$index", "Other $index", "lab"), index.toLong(),
                 ModelSummary("lab/$index", "Other $index"))
         }))
+        val models = state.value.favorites.mapNotNull { it.model }
         restoration.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(favoritesContent = { padding, click ->
-                    FavoritesScreen(state.value, click, bottomOverlayPadding = padding)
-                }) { _, _, _ -> }
+                ModelAtlasScaffold(touchExplorationEnabled = true) { padding, listState, click ->
+                    ModelListScreen(ModelListUiState(models = models, isLoading = false),
+                        favoritesState = state.value, onModelClick = click,
+                        bottomOverlayPadding = padding, listState = listState)
+                }
             }
         }
-        compose.onNodeWithTag("nav-favorites").performClick()
         compose.onNodeWithContentDescription("展开档位价格").performClick()
-        compose.onNodeWithTag("favorites-list").performScrollToNode(hasText("Other 12"))
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("Other 12"))
         val before = compose.onNodeWithText("Other 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-settings").performClick()
-        compose.onNodeWithTag("nav-favorites").performClick()
+        compose.onNodeWithTag("nav-models").performClick()
         assertEquals(before, compose.onNodeWithText("Other 12").fetchSemanticsNode().boundsInRoot.top, 1f)
         val loaded = state.value
         compose.runOnIdle { state.value = FavoritesUiState() }
         restoration.emulateSavedInstanceStateRestore()
         compose.runOnIdle { state.value = loaded }
         assertEquals(before, compose.onNodeWithText("Other 12").fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.onNodeWithTag("favorites-list").performScrollToIndex(0)
+        compose.onNodeWithTag("model-list").performScrollToIndex(0)
         compose.onNodeWithContentDescription("收起档位价格").assertIsDisplayed()
     }
 
-    @Test fun arbitraryModelIdDoesNotCollideWithHeaderAndReadFailureClearsContentThenRetriesLocally() {
+    @Test fun arbitraryModelIdDoesNotCollideWithHeaderAndFavoriteReadFailureKeepsCatalogThenRetriesLocally() {
         val state = mutableStateOf(FavoritesUiState(false, listOf(FavoriteModel(
             FavoriteIdentity("header", "Header ID model", null), 1, ModelSummary("header", "Header ID model")))))
         var retries = 0
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                FavoritesScreen(state.value, {}, onRetry = {
+                ModelListScreen(ModelListUiState(models = listOf(ModelSummary("header", "Header ID model")), isLoading = false),
+                    favoritesState = state.value, onRetryFavorites = {
                     retries++
                     state.value = FavoritesUiState(isLoading = false)
                 })
@@ -317,11 +317,12 @@ class FavoritesScreenTest {
         }
         compose.onNodeWithTag("model:header").assertIsDisplayed()
         compose.runOnIdle { state.value = FavoritesUiState(isLoading = false, hasError = true) }
-        compose.onNodeWithTag("model:header").assertDoesNotExist()
+        compose.onNodeWithTag("model:header").assertIsDisplayed()
         compose.onNodeWithText("无法读取收藏列表，请重试。").assertIsDisplayed()
         compose.onNodeWithText("重试").performClick()
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
-        compose.onNodeWithContentDescription("搜索模型").assertDoesNotExist()
+        compose.onNodeWithTag("model:header").assertIsDisplayed()
+        compose.onNodeWithText("无法读取收藏列表，请重试。").assertDoesNotExist()
+        compose.onNodeWithContentDescription("搜索模型").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, retries) }
     }
 
@@ -332,15 +333,18 @@ class FavoritesScreenTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f), LocalLayoutDirection provides LayoutDirection.Rtl) {
                 ModelAtlasTheme(darkTheme = true, dynamicColor = false) {
                     Box(Modifier.width(320.dp)) {
-                        ModelAtlasScaffold(favoritesContent = { padding, click ->
-                            FavoritesScreen(state, click, bottomOverlayPadding = padding)
-                        }) { _, _, _ -> }
+                        ModelAtlasScaffold(touchExplorationEnabled = true) { padding, listState, click ->
+                            ModelListScreen(ModelListUiState(models = emptyList(), isLoading = false),
+                                favoritesState = state, onModelClick = click,
+                                bottomOverlayPadding = padding, listState = listState)
+                        }
                     }
                 }
             }
         }
-        compose.onNodeWithTag("nav-favorites").performClick().assertIsSelected()
-        for ((tag, label) in listOf("nav-models" to "模型", "nav-favorites" to "收藏", "nav-compare" to "对比", "nav-settings" to "设置", "nav-debug" to "调试")) {
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithTag("nav-favorites").assertDoesNotExist()
+        for ((tag, label) in listOf("nav-models" to "模型", "nav-benchmarks" to "评测", "nav-compare" to "对比", "nav-settings" to "设置", "nav-debug" to "调试")) {
             val results = mutableListOf<TextLayoutResult>()
             compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
@@ -351,7 +355,7 @@ class FavoritesScreenTest {
                 assertTrue(layout.getLineRight(line) <= layout.size.width + 1f)
             }
         }
-        compose.onNodeWithTag("favorites-list").performScrollToNode(hasText("当前目录不可用"))
+        compose.onNodeWithTag("model-list").performScrollToNode(hasText("当前目录不可用"))
         compose.onNodeWithText("当前目录不可用").assertIsDisplayed()
     }
 
@@ -361,14 +365,13 @@ class FavoritesScreenTest {
         compose.setContent {
             ModelAtlasTheme(darkTheme = dark, dynamicColor = false) {
                 ModelAtlasScaffold(
-                    favoritesContent = { padding, click ->
-                        removal = LocalFavoriteRemovalTransition.current!!
-                        FavoritesRoute(padding, click, list)
-                    },
                     detailContent = { id, back -> ModelDetailRoute(id, back, detail, favoriteDetail) },
                 ) { padding, state, click ->
-                    ModelListScreen(ModelListUiState(models = listOf(model), isLoading = false),
-                        bottomOverlayPadding = padding, listState = state, onModelClick = click)
+                    removal = LocalFavoriteRemovalTransition.current!!
+                    val favorites by list.uiState.collectAsStateWithLifecycle()
+                    ModelListScreen(ModelListUiState(models = catalog.value, isLoading = false),
+                        bottomOverlayPadding = padding, listState = state, onModelClick = click,
+                        favoritesState = favorites, onRetryFavorites = list::retry)
                 }
             }
         }
@@ -409,7 +412,7 @@ class FavoritesScreenTest {
 
     private inner class FakeModels : ModelRepository {
         override fun observeModelDetail(id: String) = flowOf(
-            if (repository.items.value.any { it.model == null }) null else ModelDetail(id, model.name, fetchedAtEpochMillis = 0))
+            catalog.value.find { it.id == id }?.let { ModelDetail(id, it.name, fetchedAtEpochMillis = 0) })
         override fun observeModels() = flowOf(listOf(model))
         override suspend fun hasLocalCatalog() = true
         override suspend fun refresh(): Boolean = error("No network")
@@ -421,14 +424,14 @@ class FavoriteRemovalAnimationDisabledTest {
         override val scaleFactor: Float = 0f
     })
 
-    @Test fun zeroAnimationScaleReleasesSourceAndShowsEmptyWithoutWaiting() {
-        val favorite = FavoriteModel(FavoriteIdentity("lab/a", "Model", "lab"), 1, ModelSummary("lab/a", "Model"))
+    @Test fun zeroAnimationScaleReleasesUnavailableSourceAndShowsEmptyWithoutWaiting() {
+        val favorite = FavoriteModel(FavoriteIdentity("lab/a", "Model", "lab"), 1, null)
         val state = mutableStateOf(FavoritesUiState(false, listOf(favorite)))
         val removal = FavoriteRemovalTransition()
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 CompositionLocalProvider(LocalFavoriteRemovalTransition provides removal) {
-                    FavoritesScreen(state.value, {})
+                    ModelListScreen(ModelListUiState(models = emptyList(), isLoading = false), favoritesState = state.value)
                 }
             }
         }
@@ -437,9 +440,9 @@ class FavoriteRemovalAnimationDisabledTest {
             state.value = FavoritesUiState(false)
         }
         compose.runOnIdle { assertNotNull(removal.retained) }
-        compose.onNodeWithText("尚无收藏").assertDoesNotExist()
+        compose.onNodeWithText("目录暂时为空").assertDoesNotExist()
         compose.runOnIdle { removal.finishReturn() }
-        compose.onNodeWithText("尚无收藏").assertIsDisplayed()
+        compose.onNodeWithText("目录暂时为空").assertIsDisplayed()
         compose.runOnIdle { assertNull(removal.retained) }
     }
 }

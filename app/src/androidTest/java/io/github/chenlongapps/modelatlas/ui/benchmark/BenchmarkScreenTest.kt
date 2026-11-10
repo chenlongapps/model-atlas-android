@@ -34,6 +34,8 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -47,6 +49,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.LabLogoTag
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import io.github.chenlongapps.modelatlas.testing.saveRegressionScreenshot
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -265,9 +268,11 @@ class BenchmarkScreenTest {
             val bounds = info.fetchSemanticsNode().boundsInRoot
             assertTrue(bounds.width >= 48f * pixelsPerDp - 1f)
             assertTrue(bounds.height >= 48f * pixelsPerDp - 1f)
+            saveRegressionScreenshot("leaderboard-intro-${if (isDark) "dark" else "light"}")
             info.performClick()
             compose.onNodeWithTag("benchmark-description").assertIsDisplayed()
             compose.onNodeWithText(description).assertIsDisplayed()
+            saveRegressionScreenshot("leaderboard-dialog-${if (isDark) "dark" else "light"}")
             compose.onNodeWithText("关闭").performClick()
             compose.onNodeWithText(description).assertDoesNotExist()
             compose.onNodeWithTag("benchmark-bar:deepseek/a", useUnmergedTree = true).assertIsDisplayed()
@@ -275,14 +280,23 @@ class BenchmarkScreenTest {
     }
 
     @Test fun descriptionDialogRestoresAndSystemBackDismissesWithoutLeavingLeaderboard() {
-        val described = board.copy(description = "完整说明。".repeat(200))
+        val described = board.copy(description = "完整说明。".repeat(200) + "说明末尾唯一标记")
         val restore = StateRestorationTester(compose)
         var backCount = 0
         restore.setContent { ModelAtlasTheme(dynamicColor = false) {
             BenchmarkLeaderboardScreen(ready.copy(boards = listOf(described)), described.id, { backCount++ })
         } }
+        compose.onNodeWithTag("benchmark-leaderboard-list").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 24f) }
         val before = compose.onNodeWithTag("benchmark-result:a").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithContentDescription("查看评测说明").performClick()
+        compose.onNodeWithTag("benchmark-description").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, Float.MAX_VALUE) }
+        val range = compose.onNodeWithTag("benchmark-description").fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange]
+        assertTrue("长说明必须实际滚到末尾", range.maxValue() > 0f && range.value() == range.maxValue())
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithTag("benchmark-description").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(described.description!!.length, layouts.single().getLineEnd(layouts.single().lineCount - 1))
+        saveRegressionScreenshot("leaderboard-long-description-end")
         restore.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("benchmark-description").assertIsDisplayed()
         compose.onNodeWithTag("benchmark-description").assert(SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollBy))
@@ -294,6 +308,56 @@ class BenchmarkScreenTest {
         assertEquals(before, compose.onNodeWithTag("benchmark-result:a").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithContentDescription("返回").performClick()
         assertEquals(1, backCount)
+    }
+
+    @Test fun descriptionDoesNotLeakAcrossBoardsOrIntoLoadingErrorRemovedAndBlankStates() {
+        val first = board.copy(description = "只属于榜单 A 的说明")
+        val second = board.copy(id = "second", name = "榜单 B", description = "只属于榜单 B 的说明")
+        val state = mutableStateOf(ready.copy(boards = listOf(first, second)))
+        val selected = mutableStateOf(first.id)
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            BenchmarkLeaderboardScreen(state.value, selected.value, {})
+        } }
+        compose.onNodeWithContentDescription("查看评测说明").performClick()
+        compose.onNodeWithText(first.description!!).assertIsDisplayed()
+        compose.runOnIdle { selected.value = second.id }
+        compose.onNodeWithTag("benchmark-description").assertDoesNotExist()
+        compose.onNodeWithContentDescription("查看评测说明").performClick()
+        compose.onNodeWithText(second.description!!).assertIsDisplayed()
+        compose.onNodeWithText(first.description).assertDoesNotExist()
+        for (unavailable in listOf(
+            BenchmarkUiState(), BenchmarkUiState(isLoading = false, hasError = true),
+            BenchmarkUiState(isLoading = false),
+            ready.copy(boards = listOf(second.copy(description = " \n "))),
+        )) {
+            compose.runOnIdle { state.value = unavailable }
+            compose.onNodeWithTag("benchmark-description").assertDoesNotExist()
+            compose.onNodeWithText(second.description).assertDoesNotExist()
+        }
+    }
+
+    @Test fun tappingOutsideDescriptionDismissesOnlyTheDialog() {
+        val described = board.copy(description = "遮罩关闭不退出排行榜")
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            BenchmarkLeaderboardScreen(ready.copy(boards = listOf(described)), described.id, { fail("不能返回总览") })
+        } }
+        compose.onNodeWithContentDescription("查看评测说明").performClick()
+        // Compose 的 root 触摸直达 View，不经过 Dialog.onTouchEvent；遮罩需系统级事件。
+        // 语义树已出现不等于窗口已绘制，先同步独立窗口，避免事件落到背景信息按钮。
+        compose.onNode(isDialog()).captureToImage()
+        saveRegressionScreenshot("leaderboard-mask-before")
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val metrics = instrumentation.targetContext.resources.displayMetrics
+        val time = android.os.SystemClock.uptimeMillis()
+        for (action in listOf(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_UP)) {
+            val event = android.view.MotionEvent.obtain(time, time, action,
+                metrics.widthPixels / 2f, 96f * metrics.density, 0).apply { source = android.view.InputDevice.SOURCE_TOUCHSCREEN }
+            try { instrumentation.sendPointerSync(event) } finally { event.recycle() }
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("benchmark-description").fetchSemanticsNodes().isEmpty() }
+        saveRegressionScreenshot("leaderboard-mask-after")
+        compose.onNodeWithTag("benchmark-description").assertDoesNotExist()
+        compose.onNodeWithTag("benchmark-leaderboard").assertIsDisplayed()
     }
 
     @Test fun missingOrBlankDescriptionDoesNotOfferAnEmptyInfoAction() {
@@ -326,13 +390,14 @@ class BenchmarkScreenTest {
         }
         val intro = compose.onNodeWithTag("benchmark-introduction").fetchSemanticsNode().boundsInRoot
         assertTrue(intro.height > 64f * pixelsPerDp)
+        saveRegressionScreenshot("leaderboard-narrow-double-font-rtl")
         for (text in listOf(long.name, "版本：${long.version}", "编程")) {
             compose.onNodeWithText(text).assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val layout = layouts.single()
             assertFalse(layout.didOverflowHeight)
-            assertFalse(layout.didOverflowWidth)
+            assertFalse("$text 横向溢出，size=${layout.size}, lines=${layout.lineCount}", layout.didOverflowWidth)
             assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1))
         }
         compose.onNodeWithText(long.description!!).assertDoesNotExist()
