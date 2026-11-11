@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeDown
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -21,6 +22,7 @@ import androidx.test.espresso.Espresso.pressBack
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoard
 import io.github.chenlongapps.modelatlas.data.repository.BenchmarkRepository
+import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
@@ -41,6 +43,8 @@ class BenchmarkReentryTest {
     private val store = ViewModelStore()
     private val reads = AtomicInteger()
     private val active = AtomicInteger()
+    private val refreshes = AtomicInteger()
+    private var refreshGate: CompletableDeferred<Unit>? = null
     private val pending = ConcurrentLinkedQueue<CompletableDeferred<List<BenchmarkBoard>>>()
     private val boards = List(12) { benchmarkPreviewBoard().copy(id = "board-$it", name = "评测 $it") }
     private lateinit var lifecycle: LifecycleRegistry
@@ -127,6 +131,31 @@ class BenchmarkReentryTest {
         }
     }
 
+    @Test fun explicitPullRefreshWaitsForCommittedReadAndKeepsLeaderboardReturnSubscription() {
+        refreshGate = CompletableDeferred()
+        enterReady()
+        compose.onNodeWithTag("benchmark-list").performTouchInput {
+            swipeDown(startY = height * 0.2f, endY = height * 0.9f, durationMillis = 600)
+        }
+        compose.waitUntil(5_000) { refreshes.get() == 1 }
+        compose.onNodeWithText("评测 0").assertIsDisplayed()
+        compose.onNodeWithText("正在读取评测…").assertDoesNotExist()
+        compose.onNodeWithTag("benchmark-list").performTouchInput { swipeDown() }
+        assertEquals(1, refreshes.get())
+        refreshGate!!.complete(Unit)
+        nextRead().complete(boards.mapIndexed { index, board -> if (index == 0) board.copy(name = "刷新的评测") else board })
+        compose.waitForIdle()
+        compose.onNodeWithText("刷新的评测").assertIsDisplayed()
+        assertEquals(1, active.get())
+        compose.onNodeWithTag("benchmark-card:board-0").performClick()
+        compose.onNodeWithTag("benchmark-leaderboard").assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithText("刷新的评测").assertIsDisplayed()
+        assertEquals(2, reads.get())
+        assertEquals(1, active.get())
+        assertEquals(1, refreshes.get())
+    }
+
     private fun show() {
         lateinit var owner: LifecycleOwner
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
@@ -145,6 +174,16 @@ class BenchmarkReentryTest {
                         emit(read.await())
                         awaitCancellation()
                     } finally { active.decrementAndGet() }
+                }
+            }, object : ModelRepository {
+                override fun observeModels() = error("No model observation")
+                override fun observeModelDetail(id: String) = error("No detail observation")
+                override suspend fun hasLocalCatalog() = error("No startup sync")
+                override suspend fun refresh(): Boolean {
+                    val gate = refreshGate ?: error("Reentry must not request network")
+                    refreshes.incrementAndGet()
+                    gate.await()
+                    return true
                 }
             })
             store.put("benchmark", viewModel)

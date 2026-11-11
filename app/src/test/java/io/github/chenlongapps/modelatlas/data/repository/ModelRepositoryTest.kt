@@ -24,11 +24,14 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceUntilIdle
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -81,6 +84,81 @@ class ModelRepositoryTest {
             assertEquals(1, store.writes)
             assertEquals(previous, store.snapshot)
         }
+    }
+
+    @Test fun concurrentRefreshesShareOneFetchAndCommittedResultThenNextRefreshFetchesAgain() = runTest {
+        api.providerGate = CompletableDeferred()
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        val startup = async { repository.refresh() }
+        advanceUntilIdle()
+        val benchmark = async { repository.refresh() }
+        val debug = async { repository.refresh() }
+        advanceUntilIdle()
+        assertEquals(1, api.providerRequests)
+        assertEquals(0, store.writes)
+        api.providerGate!!.complete(Unit)
+        assertTrue(startup.await())
+        assertTrue(benchmark.await())
+        assertTrue(debug.await())
+        assertEquals(1, api.providerRequests)
+        assertEquals(1, store.writes)
+        assertEquals(false, repository.refresh())
+        assertEquals(2, api.providerRequests)
+    }
+
+    @Test fun concurrentFailureIsSharedWithoutExtraRequestsAndNextRefreshCanRetry() = runTest {
+        api.providerGate = CompletableDeferred()
+        api.providerFailure = IOException("offline")
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        val startup = async { runCatching { repository.refresh() } }
+        advanceUntilIdle()
+        val benchmark = async { runCatching { repository.refresh() } }
+        advanceUntilIdle()
+        api.providerGate!!.complete(Unit)
+        assertTrue(startup.await().exceptionOrNull() is IOException)
+        // await 的协程栈恢复可能复制异常对象；验证类型／原因而非对象身份。
+        assertEquals(startup.await().exceptionOrNull()?.javaClass, benchmark.await().exceptionOrNull()?.javaClass)
+        assertEquals(startup.await().exceptionOrNull()?.message, benchmark.await().exceptionOrNull()?.message)
+        assertEquals(1, api.providerRequests)
+        assertEquals(0, store.writes)
+        api.providerFailure = null
+        assertTrue(repository.refresh())
+        assertEquals(2, api.providerRequests)
+    }
+
+    @Test fun cancellingRefreshWaiterDoesNotCancelOwnerOrOtherWaiters() = runTest {
+        api.providerGate = CompletableDeferred()
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        val owner = async { repository.refresh() }
+        advanceUntilIdle()
+        val cancelled = async { repository.refresh() }
+        val waiting = async { repository.refresh() }
+        advanceUntilIdle()
+        cancelled.cancel()
+        advanceUntilIdle()
+        assertTrue(owner.isActive)
+        api.providerGate!!.complete(Unit)
+        assertTrue(owner.await())
+        assertTrue(waiting.await())
+        assertEquals(1, api.providerRequests)
+        assertEquals(1, store.writes)
+    }
+
+    @Test fun cancellingRefreshOwnerReleasesWaitersWithoutPartialCommitAndAllowsRetry() = runTest {
+        api.providerGate = CompletableDeferred()
+        val repository = repository(StandardTestDispatcher(testScheduler))
+        val owner = async { repository.refresh() }
+        advanceUntilIdle()
+        val waiting = async { runCatching { repository.refresh() } }
+        advanceUntilIdle()
+        owner.cancel()
+        advanceUntilIdle()
+        assertTrue(waiting.await().exceptionOrNull() is CancellationException)
+        assertEquals(0, store.writes)
+        api.providerGate!!.complete(Unit)
+        assertTrue(repository.refresh())
+        assertEquals(2, api.providerRequests)
+        assertEquals(1, store.writes)
     }
 
     @Test fun cancellationIsNotSwallowedOrWrittenAsEmptyData() = runTest {
@@ -456,9 +534,11 @@ class ModelRepositoryTest {
             "offering-key" to ModelOfferingDto("remote-offering", "Model"),
         )))
         var providerFailure: Exception? = null
+        var providerGate: CompletableDeferred<Unit>? = null
         var providerRequests = 0
         override suspend fun getProviders(): Map<String, ProviderDto> {
             providerRequests++
+            providerGate?.await()
             providerFailure?.let { throw it }
             return providers
         }

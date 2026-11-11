@@ -29,12 +29,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,10 +49,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -61,7 +69,10 @@ import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoard
 import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoardEntry
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
+import io.github.chenlongapps.modelatlas.ui.modellist.AnimatedCatalogStatusNotice
+import io.github.chenlongapps.modelatlas.ui.modellist.CatalogNotice
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun BenchmarkRoute(
@@ -81,7 +92,8 @@ internal fun BenchmarkRoute(
         viewModel.setActive(isVisible && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         onDispose { lifecycle.removeObserver(observer); viewModel.setActive(false) }
     }
-    BenchmarkScreen(state, onOpen, bottomOverlayPadding = bottomOverlayPadding, onRetry = viewModel::retry)
+    BenchmarkScreen(state, onOpen, bottomOverlayPadding = bottomOverlayPadding, onRetry = viewModel::retry,
+        onRefresh = viewModel::refresh, onDismissNotice = viewModel::clearMessage)
 }
 
 @Composable
@@ -97,12 +109,33 @@ internal fun BenchmarkScreen(
     modifier: Modifier = Modifier,
     bottomOverlayPadding: Dp = 0.dp,
     onRetry: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onDismissNotice: () -> Unit = {},
 ) {
     val contentState = rememberLazyListState()
     val placeholderState = rememberLazyListState()
     val direction = LocalLayoutDirection.current
     val insets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
+    val pullState = rememberPullToRefreshState()
+    val refreshLabel = stringResource(R.string.benchmark_refresh)
+    val accessibilityManager = LocalAccessibilityManager.current
+    val dismissNotice by rememberUpdatedState(onDismissNotice)
+    val notice = if (!uiState.isLoading && !uiState.isRefreshing &&
+        (uiState.message != null || uiState.refreshError != null)) {
+        CatalogNotice(uiState.refreshError, uiState.message)
+    } else null
+    val transientMessage = notice?.message.takeIf { notice?.refreshError == null }
+    // 计时在列表条目外，滚动回收不重置；与模型页使用同一无障碍建议时长。
+    LaunchedEffect(transientMessage, accessibilityManager) {
+        if (transientMessage != null) {
+            val timeout = accessibilityManager?.calculateRecommendedTimeoutMillis(
+                originalTimeoutMillis = 3_000L, containsIcons = true, containsText = true, containsControls = false,
+            ) ?: 3_000L
+            delay(timeout)
+            dismissNotice()
+        }
+    }
     val repeatedNames = remember(uiState.boards) {
         uiState.boards.groupingBy { it.name.trim().lowercase(Locale.ROOT) }.eachCount().filterValues { it > 1 }.keys
     }
@@ -117,32 +150,58 @@ internal fun BenchmarkScreen(
         },
         containerColor = background, contentWindowInsets = insets,
     ) { padding ->
-        LazyColumn(
-            state = if (uiState.isLoading || uiState.hasError) placeholderState else contentState,
-            modifier = Modifier.fillMaxSize().consumeWindowInsets(padding).testTag("benchmark-list"),
-            contentPadding = PaddingValues(
-                start = padding.calculateStartPadding(direction) + 16.dp,
-                end = padding.calculateEndPadding(direction) + 16.dp,
-                top = padding.calculateTopPadding() + 28.dp,
-                bottom = padding.calculateBottomPadding() + bottomOverlayPadding + 16.dp,
-            ), verticalArrangement = Arrangement.spacedBy(16.dp),
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { if (!uiState.isLoading && !uiState.isRefreshing) onRefresh() },
+            state = pullState,
+            modifier = Modifier.fillMaxSize(),
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullState, isRefreshing = uiState.isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = padding.calculateTopPadding())
+                        .testTag("benchmark-refresh-indicator"),
+                )
+            },
         ) {
-            item("title") {
-                Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(stringResource(R.string.benchmark_page_title), style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.semantics { heading() })
-                    Text(stringResource(R.string.benchmark_overview_notice), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LazyColumn(
+                state = if (uiState.isLoading || uiState.hasError) placeholderState else contentState,
+                modifier = Modifier.fillMaxSize().consumeWindowInsets(padding).testTag("benchmark-list")
+                    .semantics {
+                        customActions = listOf(CustomAccessibilityAction(refreshLabel) {
+                            if (uiState.isLoading || uiState.isRefreshing) false else {
+                                onRefresh()
+                                true
+                            }
+                        })
+                    },
+                contentPadding = PaddingValues(
+                    start = padding.calculateStartPadding(direction) + 16.dp,
+                    end = padding.calculateEndPadding(direction) + 16.dp,
+                    top = padding.calculateTopPadding() + 28.dp,
+                    bottom = padding.calculateBottomPadding() + bottomOverlayPadding + 16.dp,
+                ), verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item("title") {
+                    Column {
+                        Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(stringResource(R.string.benchmark_page_title), style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier.semantics { heading() })
+                            Text(stringResource(R.string.benchmark_overview_notice), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        AnimatedCatalogStatusNotice(notice, onRefresh, onDismissNotice,
+                            updatedMessage = stringResource(R.string.benchmark_updated))
+                    }
                 }
-            }
-            when {
-                uiState.isLoading -> item("loading") { BenchmarkMessage(loading = true) }
-                uiState.hasError -> item("error") { BenchmarkMessage(stringResource(R.string.benchmark_read_error), onRetry = onRetry) }
-                uiState.boards.isEmpty() -> item("empty") { BenchmarkMessage(stringResource(R.string.benchmark_empty)) }
-                else -> {
-                    items(uiState.boards, key = { it.id }, contentType = { "benchmark" }) { board ->
-                        BenchmarkCard(board, onClick = { onOpen(board.id) },
-                            showVersion = board.name.trim().lowercase(Locale.ROOT) in repeatedNames)
+                when {
+                    uiState.isLoading -> item("loading") { BenchmarkMessage(loading = true) }
+                    uiState.hasError -> item("error") { BenchmarkMessage(stringResource(R.string.benchmark_read_error), onRetry = onRetry) }
+                    uiState.boards.isEmpty() -> item("empty") { BenchmarkMessage(stringResource(R.string.benchmark_empty)) }
+                    else -> {
+                        items(uiState.boards, key = { it.id }, contentType = { "benchmark" }) { board ->
+                            BenchmarkCard(board, onClick = { onOpen(board.id) },
+                                showVersion = board.name.trim().lowercase(Locale.ROOT) in repeatedNames)
+                        }
                     }
                 }
             }

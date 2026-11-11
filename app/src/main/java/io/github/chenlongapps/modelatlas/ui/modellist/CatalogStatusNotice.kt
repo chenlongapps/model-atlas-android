@@ -55,6 +55,7 @@ internal fun AnimatedCatalogStatusNotice(
     notice: CatalogNotice?,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
+    updatedMessage: String = stringResource(R.string.model_list_updated),
 ) {
     AnimatedContent(
         targetState = notice,
@@ -80,6 +81,7 @@ internal fun AnimatedCatalogStatusNotice(
                     onRefresh = onRefresh,
                     onDismiss = onDismiss,
                     enabled = active,
+                    updatedMessage = updatedMessage,
                     modifier = if (active) Modifier else Modifier.clearAndSetSemantics {},
                 )
             }
@@ -95,15 +97,15 @@ internal fun CatalogStatusNotice(
     onDismiss: () -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    updatedMessage: String = stringResource(R.string.model_list_updated),
 ) {
     val failed = notice.refreshError != null
     val colors = MaterialTheme.colorScheme
     val accent = if (failed) colors.error else colors.primary
     val message = when {
-        notice.refreshError != null -> notice.refreshError.messageResource()
-        notice.message == ModelListMessage.UPDATED -> R.string.model_list_updated
-        notice.message == ModelListMessage.UP_TO_DATE -> R.string.model_list_up_to_date
-        else -> R.string.model_list_up_to_date
+        notice.refreshError != null -> stringResource(notice.refreshError.messageResource())
+        notice.message == ModelListMessage.UPDATED -> updatedMessage
+        else -> stringResource(R.string.model_list_up_to_date)
     }
 
     Surface(
@@ -132,7 +134,7 @@ internal fun CatalogStatusNotice(
                     modifier = Modifier.size(24.dp),
                 )
                 Text(
-                    text = stringResource(message),
+                    text = message,
                     modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.bodyMedium,
                 )

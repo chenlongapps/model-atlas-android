@@ -10,6 +10,6 @@ interface ModelRepository {
 
     suspend fun hasLocalCatalog(): Boolean
 
-    /** 主动获取最新目录并在内容变化时原子提交；返回是否更新，失败不写入部分数据。 */
+    /** 主动获取最新目录并在内容变化时原子提交；并发调用共用在途结果，返回是否更新，失败不写入部分数据。 */
     suspend fun refresh(): Boolean
 }

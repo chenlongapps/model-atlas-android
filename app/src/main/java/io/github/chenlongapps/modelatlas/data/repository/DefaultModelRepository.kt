@@ -16,6 +16,7 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
@@ -41,6 +42,8 @@ class DefaultModelRepository @Inject constructor(
     private val atlas: AtlasDataSource,
 ) : ModelRepository {
     private val refreshMutex = Mutex()
+    private val refreshLock = Any()
+    private var inFlightRefresh: CompletableDeferred<Boolean>? = null
     private var retryNotBefore = 0L
 
     override suspend fun hasLocalCatalog() = refreshMutex.withLock {
@@ -65,12 +68,30 @@ class DefaultModelRepository @Inject constructor(
         .distinctUntilChanged()
         .flowOn(ioDispatcher)
 
-    override suspend fun refresh(): Boolean = refreshMutex.withLock {
-        withContext(ioDispatcher) {
-            val snapshot = fetchCatalog()
-            val changed = !snapshot.hasSameContentAs(store.readCatalog())
-            if (changed) store.replaceCatalog(snapshot)
-            changed
+    override suspend fun refresh(): Boolean {
+        // 模型启动同步、评测下拉和 Debug 操作共享在途结果，不排队重复联网。
+        // 请求仍属于发起者的协程；等待者取消不会中断发起者，发起者取消则共同结束。
+        val (request, owner) = synchronized(refreshLock) {
+            inFlightRefresh?.let { it to false }
+                ?: (CompletableDeferred<Boolean>().also { inFlightRefresh = it } to true)
+        }
+        if (!owner) return request.await()
+        try {
+            val changed = refreshMutex.withLock {
+                withContext(ioDispatcher) {
+                    val snapshot = fetchCatalog()
+                    val changed = !snapshot.hasSameContentAs(store.readCatalog())
+                    if (changed) store.replaceCatalog(snapshot)
+                    changed
+                }
+            }
+            request.complete(changed)
+            return changed
+        } catch (error: Throwable) {
+            request.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(refreshLock) { if (inFlightRefresh === request) inFlightRefresh = null }
         }
     }
 

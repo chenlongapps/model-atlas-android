@@ -20,7 +20,7 @@
 | Atlas 发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest` | `AtlasCatalogIntegrationTest`，共享存储加 Catalog／Favorite／Debug DB，来源页与返回 |
 | MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、相关 Query／ViewModel | 真实字节经生产映射覆盖列表／详情／对比／筛选；Atlas 集成验证缓存／收藏无须联网或改原值 |
 | 参数量 | `AtlasParametersTest`、`ModelParameterFormattingTest`、详情 Mapper、`CatalogTypeConvertersTest`、快照／仓库／Debug Schema | `ModelParametersScreenTest`、Atlas／Catalog／Favorite／Debug DB、详情／对比及返回 |
-| 榜单 | `BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkResultPresentationTest`、`BenchmarkViewModelTest` | `BenchmarkRankingDatabaseTest`、`BenchmarkScreenTest`、`BenchmarkReentryTest`、`BenchmarkSharedTransitionTest`／`BenchmarkSharedTransitionReducedMotionTest`；入口或底栏变化加外壳／导航／详情返回 |
+| 榜单 | `BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkResultPresentationTest`、`BenchmarkViewModelTest` | `BenchmarkRankingDatabaseTest`、`BenchmarkScreenTest`、`BenchmarkRefreshTest`、`BenchmarkReentryTest`、`BenchmarkSharedTransitionTest`／`BenchmarkSharedTransitionReducedMotionTest`；刷新协调加 `ModelRepositoryTest`／模型列表 ViewModel，共用提醒加 `CatalogStatusNoticeTest`；入口或底栏变化加外壳／导航／详情返回 |
 | 导航／共享转场 | `NavigationGeometryTest`、`NavigationScrollBehaviorTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest`、`ModelAtlasAppTest` | `ModelDetailNavigationTest`、`ModelSharedTransitionTest`／`ModelSharedTransitionReducedMotionTest`、`ModelSeekableTransitionTest`，按影响加收藏／RTL／恢复 |
 | Debug 数据库／双版本 | `DebugDatabaseSchemaTest`、`DebugDatabaseViewModelTest`、`DebugDatabaseStoreTest`、`DebugDatabaseScreenTest`、`DebugFeatureTest` | 外壳、真实 Room 冲突／级联／重开；构建隔离／安装变化按[双版本说明](debug-release-coexistence.md)检查 Release |
 | 旧评测协议 | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`、`BenchmarkIntegrationTest` | 仅兼容路径变动时运行，不作为当前 Atlas／榜单固定套件，见[旧契约](archive/legacy-benchmarks.md) |
@@ -33,6 +33,7 @@
 - 榜单：同实际版本／指标／单位、每模型最高原值、同分并列、下架／非 LLM／未匹配过滤；文本／未知方向／低分更优不在榜单展示但详情原记录仍保留；局部轴边界、品牌色、pts／完整单位读屏、模型名后档位。
 - 评测热度：`popularity` 数字／0／缺失／null 的解析与存储往返、错误类型及非有限值整包拒绝；降序、缺失最后、同值稳定兜底，兼容实际版本继承热度；仅热度变化须更新快照及卡片顺序，模型排名及榜单 ID 不变，文件重开仍保留。
 - 榜单恢复：用延迟首个结果的 Repository 和真实 Route／ViewModel，检查双向滑入、底栏切换、连续往返及生命周期恢复期间不插入 loading、不丢卡片／阅读位置，随后应用最新本地结果；成功空榜单不退回 loading，失败清旧数据、重试显示加载，离屏无订阅，完整榜单按钮／系统返回不重建订阅。
+- 评测刷新：真实下拉／读屏动作、首次读取与重复刷新防重入，刷新不换 loading／不主动回顶；成功等提交后本地读完成，覆盖有变化／无变化／空结果，网络或主动读取失败保留内容，失败重试／关闭、浅深提示、无障碍超时及旧计时不清新错误。模型启动同步／评测／Debug 并发只请求一轮，共享成功及失败；等待者取消不影响发起者，发起者取消释放等待者且可重试。真实 Route 刷新后进入／返回榜单不重建持续订阅。
 - 完整榜单简介／弹窗：浅深约 64dp 简介与完整名称，信息按钮至少 48dp，说明默认不占正文、空白无入口、长说明可滚、重建／系统返回仅关弹窗、阅读不变，320dp 双倍字号 RTL，整卡进入／返回。
 - 评测共享转场：整卡中间帧及背景不淡出、Logo／名称以完整榜单 ID 隔离、宽字标等比、入场中返回、左右边缘预测性暂停／取消／100% 确认、零动画。滚动后停身份匹配、退出不强制回顶；重建及返回取消保留榜单位置，完整退出交接后清理，按钮／系统／预测性确认退出后再次打开均从顶部共享进入，总览位置不变；覆盖轻微偏移与深滚动、成绩共享中间帧。来源移除退化淡出、错误不留旧成绩。公共控制器变化同时回归模型共享转场；dispatcher 注入不替代系统边缘手势验收。
 - 成绩共享：前三名的名称／分数／轨道／填充按榜单＋模型 ID＋角色隔离，同名／并列不串动画；加入第四名改变坐标轴的样本，按品牌色像素验证填充的真实端点及中间帧边界、轨道可见性、6→8dp 条高、暂停／取消及返回归位。保持原始分数／各页轴与 `pts`／`points` 端点格式，零长度填充不补造值；窄屏大字 RTL 换行、真实段落宽高不超过文字布局、滚动后停匹配及第四名不共享。检查原有柱条颜色／读屏／卡片点击语义不回退。

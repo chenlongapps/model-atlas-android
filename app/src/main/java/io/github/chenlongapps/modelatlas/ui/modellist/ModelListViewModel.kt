@@ -177,7 +177,7 @@ class ModelListViewModel @Inject constructor(
     }
 }
 
-private fun Exception.toListError() = when (this) {
+internal fun Exception.toListError() = when (this) {
     is CatalogRateLimitException -> ModelListError.RATE_LIMITED
     is SerializationException -> ModelListError.INVALID_DATA
     is HttpException -> ModelListError.SERVER

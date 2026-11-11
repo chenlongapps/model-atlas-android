@@ -5,6 +5,14 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 评测总览下拉刷新
+
+- 范围：评测总览增加与模型页一致的下拉指示器、读屏刷新动作及内联反馈；主动联网复用完整目录事务，等提交后的榜单读取完成才结束刷新，失败保留内容并可重试／关闭，不主动回顶。保持本地可见性订阅、完整榜单无下拉入口及模型页展示快照策略。统一仓库并发刷新共享在途请求／结果，不另建评测同步或脱离调用方的后台任务；共用提醒仅增加评测成功文案参数，模型默认文案不变。
+- 单元：定向 3 类／77 项最终全部通过，0 失败／错误／忽略：`ModelRepositoryTest` 29、`BenchmarkViewModelTest` 16、`ModelListViewModelTest` 32。首轮 77 项有 1 项测试断言失败：协程栈恢复会复制 `IOException`，不应按对象身份比较；改为校验异常类型与原因，并保留单轮请求／无半份提交及重试断言，后续 77 项复跑通过。覆盖并发共享成功／失败、发起者及等待者取消、提交后读取、防重入、无变化／空结果、失败保留／重试、离屏及原本地重试行为。
+- 构建与静态检查：Debug 应用／测试 APK、Debug Lint 和 `git diff --check` 通过；SARIF 为 73 条 warning、无 error。报告位于 `app/build/reports/tests/testDebugUnitTest/` 与 `app/build/reports/lint-results-debug.html`。
+- 设备：复用原 AVD，API 37／`emulator-5554`，一次构建安装后显式 runner 实际 `numtests=67`、`OK (67 tests)`，9 类全部完成、无失败／忽略：`BenchmarkRefreshTest` 6、`BenchmarkReentryTest` 5、`BenchmarkScreenTest` 22、`BenchmarkSharedTransitionTest` 19、`BenchmarkSharedTransitionReducedMotionTest` 1、`CatalogStatusNoticeTest` 6、`CatalogNoticeAnimationTest` 4、`CatalogNoticeReducedMotionTest` 1、`SilentCatalogUpdateTest` 3。覆盖实际下拉与读屏动作、浅深反馈及超时、失败保留／重试、正文位置、真实 Route 刷新后进入／返回、切页恢复，以及共享转场／预测性取消像素与零动画回归。显式 runner 结果不冒充 Gradle connected 报告。
+- 边界：本轮未清应用数据、卸载或重建模拟器；未执行 Release、全量 instrumentation、线上整链 HTTPS、真机视觉或真实 TalkBack 验收，既有待验收项保留。
+
 ### 2026-11-11 评测总览按来源热度排序
 
 - 范围：接入 `benchmarks.json` 可选数值 `popularity`，通过 DTO／Entity／榜单模型分层传递，保存为定义表可空 REAL 列，参与完整目录比较及原子更新。总览降序、缺失最后，同值按名称（忽略大小写）／实际版本／榜单 ID 兜底；不改变榜内模型排名、榜单 ID 或详情评测排序，不新增请求。随包原字节未更新，线上目录同步成功后应用热度。
