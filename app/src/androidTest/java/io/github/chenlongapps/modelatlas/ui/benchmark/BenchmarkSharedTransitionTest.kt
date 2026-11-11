@@ -335,24 +335,87 @@ class BenchmarkSharedTransitionTest {
         assertReturned()
     }
 
-    @Test fun scrollingDisablesIdentityMatchingAndBothReadingPositionsSurviveReentry() {
+    @Test fun scrolledLeaderboardReopensAtTopWhileOverviewPositionSurvivesBothBackActions() {
         val boards = List(10) { board.copy(id = "board-$it", name = "评测 $it") }
         state.value = state.value.copy(boards = boards)
         show()
         compose.onNodeWithTag("benchmark-list").performScrollToIndex(5)
         val tag = "benchmark-card:board-4"
         val source = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithTag(tag).performClick()
-        compose.onNodeWithTag("benchmark-leaderboard-list").performScrollToIndex(12)
-        val saved = compose.onNodeWithTag("benchmark-result:score-11", true).fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithTag("benchmark-shared:board-4:LOGO", true).assertDoesNotExist()
-        pressBack()
-        assertEquals(source, compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
-        compose.onNodeWithTag(tag).performClick()
-        assertEquals(saved, compose.onNodeWithTag("benchmark-result:score-11", true).fetchSemanticsNode().boundsInRoot)
-        pressBack()
+        repeat(2) { index ->
+            compose.onNodeWithTag(tag).performClick()
+            compose.onNodeWithTag("benchmark-leaderboard-list").performScrollToIndex(12)
+            compose.onNodeWithTag("benchmark-shared:board-4:LOGO", true).assertDoesNotExist()
+            if (index == 0) compose.onNodeWithContentDescription("返回").performClick() else pressBack()
+            compose.onNodeWithTag("benchmark-leaderboard").assertDoesNotExist()
+            assertEquals(source, compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
+            compose.onNodeWithTag(tag).performClick()
+            compose.onNode(hasTestTag("benchmark-shared:board-4:LOGO") and
+                hasAnyAncestor(hasTestTag("benchmark-leaderboard")), true).assertIsDisplayed()
+            compose.onNode(hasTestTag("benchmark-shared-result:board-4:model-0:NAME") and
+                hasAnyAncestor(hasTestTag("benchmark-leaderboard")), true).assertIsDisplayed()
+            pressBack()
+        }
         compose.onNodeWithTag("benchmark-leaderboard").assertDoesNotExist()
         compose.runOnIdle { assertEquals(0, overviewDisposals) }
+    }
+
+    @Test fun reopeningAfterASmallScrollSharesIdentityAndResultsAgain() {
+        val changed = configureDifferentRange()
+        show()
+        val sourceImage = pixels()
+        val source = changed.rankings.take(3).map { resultGeometry(it.modelId, sourceImage, "benchmark-screen") }
+        open()
+        val targetImage = pixels()
+        val target = changed.rankings.take(3).map { resultGeometry(it.modelId, targetImage, "benchmark-leaderboard") }
+        val logo = sharedNode(BenchmarkIdentityRole.LOGO).fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("benchmark-leaderboard-list").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 24f) }
+        sharedNode(BenchmarkIdentityRole.LOGO).assertDoesNotExist()
+        compose.onNodeWithContentDescription("返回").performClick()
+        assertReturned()
+
+        compose.mainClock.autoAdvance = false
+        open()
+        compose.mainClock.advanceTimeBy(176)
+        val middle = pixels()
+        val expansion = transition.expansionProgress()
+        assertTrue(expansion > 0f && expansion < 1f)
+        changed.rankings.take(3).forEachIndexed { index, entry ->
+            assertResultNear(source[index], target[index], middle, expansion, entry.modelId)
+        }
+        compose.mainClock.advanceTimeBy(650)
+        compose.mainClock.autoAdvance = true
+        assertEquals(logo, sharedNode(BenchmarkIdentityRole.LOGO).fetchSemanticsNode().boundsInRoot)
+        resultNode("model-0", BenchmarkResultRole.NAME).assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithTag("benchmark-leaderboard").assertDoesNotExist()
+    }
+
+    @Test fun scrolledPredictiveBackKeepsPositionOnCancelButResetsAfterCommit() {
+        show()
+        open()
+        compose.onNodeWithTag("benchmark-leaderboard-list").performScrollToIndex(12)
+        val saved = compose.onNodeWithTag("benchmark-result:score-11", true).fetchSemanticsNode().boundsInRoot
+        compose.mainClock.autoAdvance = false
+        startBack(.55f)
+        compose.runOnIdle { input.cancel() }
+        compose.mainClock.advanceTimeBy(700)
+        compose.mainClock.autoAdvance = true
+        assertEquals(saved, compose.onNodeWithTag("benchmark-result:score-11", true).fetchSemanticsNode().boundsInRoot)
+        sharedNode(BenchmarkIdentityRole.LOGO).assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, leaderboardDisposals) }
+
+        compose.mainClock.autoAdvance = false
+        startBack(1f)
+        compose.runOnIdle { input.complete() }
+        compose.mainClock.advanceTimeBy(700)
+        compose.mainClock.autoAdvance = true
+        assertReturned()
+        open()
+        sharedNode(BenchmarkIdentityRole.LOGO).assertIsDisplayed()
+        resultNode("model-0", BenchmarkResultRole.NAME).assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithTag("benchmark-leaderboard").assertDoesNotExist()
     }
 
     @Test fun descriptionDialogConsumesBackWithoutStartingPageReturn() {

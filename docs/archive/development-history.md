@@ -72,6 +72,15 @@
 - 模型转场回归（公共共享层未改，仅作回归）：`ModelSharedTransitionTest` 等 4 类显式 `numtests=26`，25 项通过、1 项 `lightPredictiveReturnDuringEntryDoesNotFlashAtTheRewoundEndpoint` 因 `Failed waiting for PixelCopy!` 截图超时失败，非断言失败；该方法定向复跑 1 次及浅／深两项合跑 2 次均通过（`OK (1 test)`、`OK (2 tests)`）。按既有记录，截图超时不能当作 Logo 缺失，本轮未修改模型共享转场代码，也未据此宣布修复。
 - 验证边界：本轮未新增网络／数据库行为，未执行 Release、全量单元或全量 instrumentation；未 clean、清数据、卸载或重建模拟器。模拟器截图与 dispatcher 手势注入不等于真机、TalkBack 或 Android 系统边缘触摸端到端验收；评测共享转场真机待验收保留在当前 TODO。
 
+### 2026-11-11 完整榜单退出后重进恢复共享动画
+
+- 根因：外壳按榜单 ID 跨次打开保留 `LazyListState`，重进直接恢复非零位置；全榜仅在列表完全置顶时注册身份及前三名成绩共享元素，因此这些共享动画不再匹配。修复前新增深滚动重进回归实际 `numtests=1`，在重进 Logo 共享元素不可见处失败，确认可复现。
+- 修复：沿用既有退出收尾，在确认退出且共享层交接完成后对本次榜单调用 `SaveableStateHolder.removeState()`，再清理保留 ID。退出中不回顶，总览位置不变；配置重建及预测性返回取消仍保留本次阅读状态。不改公共时间轴、ViewModel、订阅或数据层。同步架构／测试规范及 AGENTS，真机复验继续列在 TODO。
+- 构建／单元：Debug 应用与测试 APK 构建通过；`BenchmarkViewModelTest` 8 项通过，0 失败／错误／忽略；Debug Lint 通过（0 Error、71 Warning、2 Hint），`git diff --check` 及修改专题的相对链接检查通过。
+- 修复后定向：API 37／`emulator-5554`，显式 runner 实际 `numtests=4`、`OK (4 tests)`，覆盖深滚动后按钮／系统退出重进与总览位置、24px 轻微偏移后重进的前三名柱条中间帧像素、滚动后预测性取消保位／确认后重进回顶、配置重建保位。
+- 完整相关类回归：复用同轮 APK，显式 runner 实际 `numtests=48`、`OK (48 tests)`，无失败／忽略／未结束项；核对 `BenchmarkSharedTransitionTest` 19、`BenchmarkSharedTransitionReducedMotionTest` 1、`BenchmarkScreenTest` 21、`BenchmarkReentryTest` 4、`ModelDetailNavigationTest` 3，覆盖共享中间帧、零动画、榜单恢复／订阅及受影响外壳的模型详情返回链路。
+- 产物：应用 APK SHA-256 为 `2bcbde64b723b5f7681e4896fb5ede5125fbe41db33d16bc720b2cf6a60c3909`，测试 APK 为 `ed7fe9f651f08fe4cec22e8ce0437961d67a0a32c51a1f02376b6a1548722c3f`。不改动任务开始前已有的 Release 映射／输出元数据修改，未 clean、清数据、卸载或重建模拟器；未执行 Release、全量单元或全量 instrumentation，不将自动化等同于真机／TalkBack／系统边缘手势验收。
+
 ## 原 TODO（以下保留原文）
 
 ## 产品目标与当前状态

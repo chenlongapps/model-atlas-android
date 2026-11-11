@@ -248,6 +248,8 @@ internal fun ModelAtlasScaffold(
         LaunchedEffect(selectedBenchmarkId, benchmarkTransitioning, leaderboardVisibility.transition.currentState) {
             if (selectedBenchmarkId == null && !benchmarkTransitioning &&
                 leaderboardVisibility.transition.currentState == EnterExitState.PostExit) {
+                // 交接后丢弃本次阅读状态；不在退出中回顶，重建／返回取消仍保留位置。
+                retainedBenchmarkId?.let(leaderboardStates::removeState)
                 retainedBenchmarkId = null
             }
         }
