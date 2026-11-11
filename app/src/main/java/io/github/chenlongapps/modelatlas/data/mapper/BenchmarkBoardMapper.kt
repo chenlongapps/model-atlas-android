@@ -6,16 +6,18 @@ import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoard
 import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoardEntry
 import io.github.chenlongapps.modelatlas.data.model.LlmInclusionPolicy
 
-/** 只对同版本/指标/单位的有限数值取每模型最高分；配置不合并成所谓「相同配置」。 */
+/** 明确版本隔离，unspecified 定义不按成绩版本拆榜；不宣称配置相同或可比。 */
 internal fun List<BenchmarkRankingRecord>.toBenchmarkBoards(): List<BenchmarkBoard> = flatMap { record ->
     val definition = record.definition
     val eligible = record.scores.filter { (score, model) ->
         model != null && LlmInclusionPolicy.includes(model.type, model.inputModalities, model.outputModalities) &&
             score.benchmarkId == definition.id && score.metric == definition.metric &&
-            (score.version == definition.version || score.version in definition.compatibleVersions.orEmpty()) &&
+            definition.acceptsVersion(score.version) &&
             score.unit == definition.unit && score.higherIsBetter == definition.higherIsBetter
     }
-    val groups = eligible.groupBy { it.score.version!! }.ifEmpty { mapOf(definition.version to emptyList()) }
+    val groups = eligible.groupBy {
+        if (definition.version == "unspecified") definition.version else requireNotNull(it.score.version)
+    }.ifEmpty { mapOf(definition.version to emptyList()) }
     groups.map { (version, records) ->
         val entries = records.sortedBy { it.score.id }.map(BenchmarkRankingScoreRecord::toBoardEntry)
         val canRank = definition.higherIsBetter == true

@@ -104,6 +104,79 @@ class BenchmarkRankingDatabaseTest {
         } finally { context.deleteDatabase(name) }
     }
 
+    private fun oldUnspecifiedSnapshot(): CatalogSnapshot {
+        val initial = snapshot("cached", 10.0)
+        val original = initial.scores!!.single().copy(id = "atlas:lab/a:000000", benchmarkId = "unmapped:old",
+            name = definition.name, version = null, unit = null, higherIsBetter = null,
+            variant = "no tools", harness = "runner", subset = "original subset", reasoningEffort = "high",
+            sourceUrl = "https://example.org/result")
+        return initial.copy(
+            definitions = listOf(definition.copy(version = "unspecified"),
+                definition.copy(id = "strict", name = "Versioned"),
+                definition.copy(id = "ambiguous-a", name = "Ambiguous", version = "unspecified"),
+                definition.copy(id = "ambiguous-b", name = "Ambiguous", version = "unspecified")),
+            scores = listOf(original,
+                original.copy(id = "atlas:lab/a:000001", version = "2", score = 30.0),
+                original.copy(id = "atlas:lab/a:000002", version = "unspecified", score = 20.0),
+                original.copy(id = "manual"),
+                original.copy(id = "atlas:lab/a:000003", metric = "other"),
+                original.copy(id = "atlas:lab/a:000004", name = "Versioned"),
+                original.copy(id = "atlas:lab/a:000005", name = "Ambiguous")),
+        )
+    }
+
+    @Test fun boardObservationRepairsOldCacheOfflineAndFileReopenRetainsRawVersions() = runBlocking {
+        val name = "benchmark-unspecified-${UUID.randomUUID()}.db"
+        fun open() = Room.databaseBuilder<CatalogDatabase>(context, name).setDriver(AndroidSQLiteDriver()).build()
+        val initial = oldUnspecifiedSnapshot()
+        try {
+            open().let { fileDb -> try {
+                fileDb.catalogDao().replaceCatalog(initial)
+                fileDb.favoriteDao().add("lab/a", 123)
+            } finally { fileDb.close() } }
+            open().let { fileDb -> try {
+                val fileDao = fileDb.catalogDao()
+                assertTrue(initial.hasSameContentAs(fileDao.readCatalog()))
+                val board = RoomBenchmarkRepository(fileDao, Dispatchers.IO).observeBoards().first().single { it.benchmarkId == "test" }
+                assertEquals("unspecified", board.version)
+                assertEquals(30.0, board.rankings.single().score!!, 0.0)
+                val after = fileDao.readCatalog()
+                assertEquals(initial.release, after.release)
+                assertEquals(initial.models, after.models)
+                val beforeById = initial.scores!!.associateBy { it.id }
+                after.scores!!.forEach { score ->
+                    val before = beforeById.getValue(score.id)
+                    if (score.id in listOf("atlas:lab/a:000000", "atlas:lab/a:000001", "atlas:lab/a:000002")) {
+                        assertEquals(before.copy(benchmarkId = "test", unit = "percent", higherIsBetter = true), score)
+                    } else if (before.name == "Ambiguous") {
+                        assertTrue(score.benchmarkId.startsWith("unmapped:"))
+                        assertEquals(before.copy(benchmarkId = score.benchmarkId), score)
+                    } else assertEquals(before, score)
+                }
+                fileDao.reconcileUnspecifiedBenchmarkScores()
+                assertEquals(after, fileDao.readCatalog())
+                assertEquals(123L, fileDb.favoriteDao().observeFavorite("lab/a").first()!!.favoritedAtEpochMillis)
+            } finally { fileDb.close() } }
+            open().let { fileDb -> try {
+                val scores = fileDb.catalogDao().readCatalog().scores!!.associateBy { it.id }
+                assertNull(scores.getValue("atlas:lab/a:000000").version)
+                assertEquals("2", scores.getValue("atlas:lab/a:000001").version)
+                assertEquals("test", scores.getValue("atlas:lab/a:000001").benchmarkId)
+            } finally { fileDb.close() } }
+        } finally { context.deleteDatabase(name) }
+    }
+
+    @Test fun detailObservationRepairsOldCacheWithoutOpeningBenchmarkPage() = runBlocking {
+        dao.replaceCatalog(oldUnspecifiedSnapshot())
+        val detail = RoomCatalogStore(dao, db.benchmarkScoreDao()).observeModelDetail("lab/a").first()!!
+        val scores = detail.scores.associateBy { it.score.id }
+        val missingVersion = scores.getValue("atlas:lab/a:000000")
+        assertEquals("test", missingVersion.definition!!.id)
+        assertNull(missingVersion.score.version)
+        assertEquals("2", scores.getValue("atlas:lab/a:000001").score.version)
+        assertNull(scores.getValue("manual").definition)
+    }
+
     @Test fun actualBundledReleaseProducesOnlyMatchedLlmBoards() = runBlocking {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { requests++; error("Must remain offline") }.build()
@@ -122,11 +195,12 @@ class BenchmarkRankingDatabaseTest {
             board.rankings.forEach { entry ->
                 assertTrue(entry.modelId in models)
                 val source = scores.getValue(entry.scoreId)
-                assertEquals(source.version, board.version)
+                if (board.version != "unspecified") assertEquals(source.version, board.version)
                 assertEquals(source.score, entry.score)
                 assertEquals(source.scoreText, entry.scoreText)
             }
         }
+        assertEquals(84, boards.single { it.benchmarkId == "humanitys-last-exam" }.rankings.size)
         assertEquals(0, requests)
         assertTrue(snapshot.hasSameContentAs(dao.readCatalog()))
     }

@@ -3,6 +3,9 @@ package io.github.chenlongapps.modelatlas.data.mapper
 import io.github.chenlongapps.modelatlas.data.local.ModelBenchmarkRecord
 import io.github.chenlongapps.modelatlas.data.local.ModelDetailRecord
 import io.github.chenlongapps.modelatlas.data.local.ModelListRow
+import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingRecord
+import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingScoreRecord
+import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingModel
 import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasReleaseLoader
 import java.io.File
 import io.github.chenlongapps.modelatlas.data.remote.atlas.atlasFiles
@@ -13,6 +16,75 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AtlasCatalogMapperTest {
+    @Test fun unspecifiedDefinitionAcceptsAnyScoreVersionWithoutChangingRawRecords() = runTest {
+        val base = atlasRelease()
+        val model = base.models.values.single()
+        val score = model.benchmarks!!.single()
+        val versions = listOf(null, "unspecified", "1.0", "2.0")
+        val snapshot = CatalogMapper().mapAtlas(base.copy(
+            models = mapOf("lab/model" to model.copy(benchmarks = versions.map { score.copy(version = it) } +
+                listOf(score.copy(name = "Other"), score.copy(metric = "score")))),
+            benchmarks = base.benchmarks.mapValues { (_, b) -> b.copy(version = "unspecified", compatibleVersions = null) },
+        ), emptyMap(), 1, 1)
+        val matched = snapshot.scores!!.take(versions.size)
+        assertEquals(versions, matched.map { it.version })
+        matched.forEach {
+            assertEquals("bench-v1", it.benchmarkId)
+            assertEquals("percent", it.unit)
+            assertEquals(true, it.higherIsBetter)
+            assertEquals(score.variant, it.variant)
+            assertEquals(score.dataset, it.subset)
+            assertEquals(score.harness, it.harness)
+            assertEquals(score.source, it.sourceUrl)
+            assertEquals(42.125, it.score!!, 0.0)
+        }
+        snapshot.scores.drop(versions.size).forEach {
+            assertTrue(it.benchmarkId.startsWith("unmapped:"))
+            assertNull(it.unit)
+            assertNull(it.higherIsBetter)
+        }
+    }
+
+    @Test fun unspecifiedDefinitionDoesNotResolveAmbiguousNameAndMetricCandidates() = runTest {
+        val base = atlasRelease()
+        val definition = base.benchmarks.values.single()
+        val snapshot = CatalogMapper().mapAtlas(base.copy(benchmarks = base.benchmarks +
+            ("relaxed" to definition.copy(version = "unspecified", compatibleVersions = null))), emptyMap(), 1, 1)
+        val score = snapshot.scores!!.single()
+        assertTrue(score.benchmarkId.startsWith("unmapped:"))
+        assertNull(score.unit)
+        assertNull(score.higherIsBetter)
+    }
+
+    @Test fun specifiedDefinitionStillRequiresExplicitOrCompatibleVersion() = runTest {
+        val base = atlasRelease()
+        val model = base.models.values.single()
+        val original = model.benchmarks!!.single()
+        val versions = listOf(null, "unspecified", "2.0", "1.0", "1.1")
+        val snapshot = CatalogMapper().mapAtlas(base.copy(models = mapOf("lab/model" to model.copy(
+            benchmarks = versions.map { original.copy(version = it) },
+        ))), emptyMap(), 1, 1)
+        assertEquals(versions, snapshot.scores!!.map { it.version })
+        assertTrue(snapshot.scores.take(3).all { it.benchmarkId.startsWith("unmapped:") && it.unit == null })
+        assertEquals(listOf("bench-v1", "bench-v1"), snapshot.scores.drop(3).map { it.benchmarkId })
+    }
+
+    @Test fun bundledHleIncludesUnversionedNumericModelsInOneReferenceBoard() = runTest {
+        val release = AtlasReleaseLoader { path, _ -> File("src/main/assets/atlas/$path").readBytes() }.load()
+        val snapshot = CatalogMapper().mapAtlas(release, emptyMap(), 1, 1)
+        val models = snapshot.models.associateBy { it.id }
+        val boards = snapshot.definitions!!.map { definition -> BenchmarkRankingRecord(definition,
+            snapshot.scores!!.filter { it.benchmarkId == definition.id }.map { score ->
+                val model = models.getValue(score.modelId)
+                BenchmarkRankingScoreRecord(score, BenchmarkRankingModel(model.id, model.name, model.type,
+                    model.inputModalities, model.outputModalities))
+            }) }.toBenchmarkBoards()
+        val hle = boards.filter { it.benchmarkId == "humanitys-last-exam" }.single()
+        assertEquals("unspecified", hle.version)
+        assertEquals(84, hle.rankings.size)
+        assertTrue(hle.rankings.any { entry -> snapshot.scores!!.single { it.id == entry.scoreId }.version == null })
+    }
+
     @Test fun popularityIsMappedAndParticipatesInCatalogContentComparison() = runTest {
         val base = atlasRelease()
         val original = CatalogMapper().mapAtlas(base, emptyMap(), 1, 1)

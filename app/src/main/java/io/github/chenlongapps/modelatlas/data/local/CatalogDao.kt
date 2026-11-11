@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Upsert
+import androidx.room3.Update
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ProviderEntity
@@ -12,6 +13,7 @@ import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEn
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.CatalogReleaseEntity
 import io.github.chenlongapps.modelatlas.data.model.LlmInclusionPolicy
+import io.github.chenlongapps.modelatlas.data.mapper.withAtlasBenchmarkDefinition
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -125,6 +127,21 @@ abstract class CatalogDao {
 
     @Insert
     protected abstract suspend fun insertScores(scores: List<BenchmarkScoreEntity>)
+
+    @Update
+    protected abstract suspend fun updateScores(scores: List<BenchmarkScoreEntity>)
+
+    /** 离线修复旧 Atlas 缓存的派生关联，不换发布、不重写原始版本、不触碰手工成绩。 */
+    @Transaction
+    open suspend fun reconcileUnspecifiedBenchmarkScores() {
+        if (readRelease() == null) return
+        val definitions = readDefinitions()
+        val relaxedKeys = definitions.filter { it.version == "unspecified" }.map { it.name to it.metric }.toSet()
+        if (relaxedKeys.isEmpty()) return
+        val changed = readScores().filter { it.id.startsWith("atlas:") && (it.name to it.metric) in relaxedKeys }
+            .mapNotNull { score -> score.withAtlasBenchmarkDefinition(definitions).takeIf { it != score } }
+        if (changed.isNotEmpty()) updateScores(changed)
+    }
 
     @Insert
     protected abstract suspend fun insertDefinitions(definitions: List<BenchmarkDefinitionEntity>)

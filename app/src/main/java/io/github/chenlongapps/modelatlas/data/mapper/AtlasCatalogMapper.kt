@@ -7,11 +7,8 @@ import io.github.chenlongapps.modelatlas.data.local.entity.CatalogReleaseEntity
 import io.github.chenlongapps.modelatlas.data.local.model.ModelParametersLocal
 import io.github.chenlongapps.modelatlas.data.local.model.ModelParameterComponentLocal
 import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasRelease
-import io.github.chenlongapps.modelatlas.data.remote.atlas.sha256
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ProviderDto
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.doubleOrNull
 
 /** 模型/成绩/翻译取自同一 Atlas 发布；服务商只提供报价，不补齐规范模型字段。 */
@@ -39,21 +36,15 @@ fun CatalogMapper.mapAtlas(
     }
     val scores = release.models.flatMap { (modelId, model) ->
         model.benchmarks.orEmpty().mapIndexed { index, score ->
-            // 只允许显式名称、指标及版本匹配；兼容版本必须由定义明确列出。
-            val definition = definitions.filter {
-                it.name == score.name && it.metric == score.metric && score.version != null &&
-                    (it.version == score.version || score.version in it.compatibleVersions.orEmpty())
-            }.singleOrNull()
-            val unmatchedKey = Json.encodeToString(listOf(score.name, score.version, score.metric)).toByteArray().sha256()
             BenchmarkScoreEntity(
                 id = "atlas:$modelId:${index.toString().padStart(6, '0')}",
-                modelId = modelId, benchmarkId = definition?.id ?: "unmapped:$unmatchedKey",
-                score = if (score.score.isString) null else score.score.doubleOrNull, metric = score.metric, unit = definition?.unit,
-                higherIsBetter = definition?.higherIsBetter, subset = score.dataset, harness = score.harness,
+                modelId = modelId, benchmarkId = "",
+                score = if (score.score.isString) null else score.score.doubleOrNull, metric = score.metric,
+                subset = score.dataset, harness = score.harness,
                 reasoningEffort = score.effort, sourceUrl = score.source, evaluatedAt = score.date,
                 name = score.name, version = score.version, variant = score.variant,
                 scoreText = score.score.takeIf { it.isString }?.content,
-            )
+            ).withAtlasBenchmarkDefinition(definitions)
         }
     }
     return catalog.copy(

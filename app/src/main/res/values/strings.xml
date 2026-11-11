@@ -124,7 +124,7 @@
     <string name="detail_metric_tokens">%1$s · tokens</string>
     <string name="detail_benchmarks_notice">不同来源和配置的结果不一定可以直接比较。</string>
     <string name="benchmark_data_source_title">Benchmark 数据来源与许可</string>
-    <string name="benchmark_data_source_notice">评测成绩来自 ModelAtlas Data 的模型档案，评测定义与中文描述分别来自 benchmarks.json 和 i18n/zh-CN.json，不是本应用测得，也不代表评测机构或模型开发商。每条保留原始名称、版本、指标、推理档位、测试配置与出处，不补造未知条件、不合并成绩、不生成排名。仅在名称、显式版本（含定义声明的兼容版本）及指标唯一匹配时关联定义；未匹配时仍展示原始成绩。中文描述缺失时回退原文。模型、成绩、定义和翻译在整包摘要校验后事务替换，网络失败保留本地数据。文档许可不等于模型权重或原始评测数据集许可；以下保留此前随包 DeepSeek 摘录的归属与 MIT 声明。</string>
+    <string name="benchmark_data_source_notice">评测成绩来自 ModelAtlas Data 的模型档案，评测定义与中文描述分别来自 benchmarks.json 和 i18n/zh-CN.json，不是本应用测得，也不代表评测机构或模型开发商。每条保留原始名称、版本、指标、推理档位、测试配置与出处，不补造未知条件；详情保留全部成绩，榜单取每模型最高数值，不代表版本或配置相同。名称及指标须唯一匹配定义；定义版本为 unspecified 时不校验成绩版本并合为同榜，其他定义须匹配显式版本或声明的兼容版本，且按成绩实际版本分榜。未匹配时仍展示原始成绩。中文描述缺失时回退原文。模型、成绩、定义和翻译在整包摘要校验后事务替换，网络失败保留本地数据。文档许可不等于模型权重或原始评测数据集许可；以下保留此前随包 DeepSeek 摘录的归属与 MIT 声明。</string>
     <string name="detail_benchmark_test_notice">以下包含虚构测试数据，不代表真实评测成绩。</string>
     <string name="detail_benchmark_unit">单位</string>
     <string name="detail_benchmark_direction">分数方向</string>

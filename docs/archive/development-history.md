@@ -5,6 +5,16 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 unspecified 评测定义放宽成绩版本
+
+- 范围：定义版本为 `unspecified` 时，名称／指标唯一匹配后接受缺失或任意明确的成绩版本，合并为同一参考榜单；其他定义保留显式／兼容版本校验与实际版本分榜，单位／方向／LLM／有限数值等过滤不变。原始版本及全部配置不改写，每模型仍取最高原始数值；总览提示版本／配置可能不同，来源说明同步更新。
+- 缓存：榜单／详情仓库开始本地观察前，同事务重算受影响 Atlas 成绩的派生关联；不联网、不换 release、不清数据、不改 Schema，不处理手工／旧协议 ID，修复后无改变不写库。
+- 单元：定向 5 类／79 项通过，0 失败／错误／忽略：`AtlasCatalogMapperTest` 11、`BenchmarkBoardMapperTest` 11、`ModelDetailMapperTest` 12、`ModelRepositoryTest` 29、`BenchmarkViewModelTest` 16。真实随包 HLE 从原规则的 11 个扩大为 84 个有数值成绩的 LLM 模型（当前快照）；覆盖缺失／明确版本、同榜取优、严格版本不放宽、歧义不关联与原始字段保留。
+- 构建与静态检查：Debug 应用／测试 APK、Debug Lint 通过，SARIF 为 73 条 warning、无 error；本地文档链接及 `git diff --check` 通过。报告见 `app/build/reports/tests/testDebugUnitTest/` 与 `app/build/reports/lint-results-debug.html`。
+- 设备首批：API 37／`emulator-5554`，同轮 APK 安装后显式 runner 计划 `numtests=40`，宿主命令在 120 秒超时中断；仅记明确结束的 36 项通过，包括 `BenchmarkRankingDatabaseTest` 7、`AtlasCatalogIntegrationTest` 6、`BenchmarkScreenTest` 22 全类及 `BenchmarkReentryTest` 首项。第 37 项仅有开始状态，没有最终结果，整批不记为通过；复用本轮 APK 定向补跑最后一类。
+- 设备补跑：相同 APK／设备单独执行 `BenchmarkReentryTest` 全类，实际 `numtests=5`、最终 `OK (5 tests)`。两批合计覆盖所选 4 类的 40 个不同用例，全部有通过结果，无明确失败／忽略；包含离线旧缓存修复／文件重开、真实随包 84 模型、原始版本与收藏保留，以及窄屏大字 RTL、切页／生命周期恢复、完整榜单按钮／系统返回。显式 runner 结果不冒充 Gradle connected 报告，首批超时事实保留；未清数据、卸载或重建模拟器，仅删除测试自建 UUID 数据库。
+- 边界：未执行 Release、全量单元／instrumentation、线上整链 HTTPS 或真机／真实 TalkBack 验收；已有待验收项保持不变。
+
 ### 2026-11-11 评测总览下拉刷新
 
 - 范围：评测总览增加与模型页一致的下拉指示器、读屏刷新动作及内联反馈；主动联网复用完整目录事务，等提交后的榜单读取完成才结束刷新，失败保留内容并可重试／关闭，不主动回顶。保持本地可见性订阅、完整榜单无下拉入口及模型页展示快照策略。统一仓库并发刷新共享在途请求／结果，不另建评测同步或脱离调用方的后台任务；共用提醒仅增加评测成功文案参数，模型默认文案不变。

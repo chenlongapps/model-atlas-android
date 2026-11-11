@@ -160,7 +160,7 @@ class BenchmarkScreenTest {
         compose.onNodeWithText("Terminal-Bench").assertIsDisplayed()
         compose.onNodeWithContentDescription("第 1 名，模型 A，分数 72.4%", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithContentDescription("图表范围 55% 至 75%；柱长按局部刻度绘制，不代表绝对比例", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithText("各模型最高成绩 · 配置可能不同 · 柱条使用局部刻度").assertIsDisplayed()
+        compose.onNodeWithText("各模型最高成绩 · 版本／配置可能不同 · 柱条使用局部刻度").assertIsDisplayed()
         for (text in listOf("Top 3", "查看完整排行榜", "版本：4.0.0", "编程", board.metric, "55%", "75%", "1", "2", "3")) {
             compose.onNodeWithText(text, useUnmergedTree = true).assertDoesNotExist()
         }
@@ -258,7 +258,7 @@ class BenchmarkScreenTest {
             compose.onNodeWithText("Terminal-Bench").assertIsDisplayed()
             compose.onNodeWithText("版本：4.0.0").assertIsDisplayed()
             compose.onNodeWithTag("benchmark-scale", useUnmergedTree = true).assertDoesNotExist()
-            for (text in listOf("指标：${board.metric}", "各模型最高成绩 · 配置可能不同", "仅浏览成绩，不生成最高分排名", "55%", "75%", "局部刻度 · 非零起点")) {
+            for (text in listOf("指标：${board.metric}", "各模型最高成绩 · 版本／配置可能不同", "仅浏览成绩，不生成最高分排名", "55%", "75%", "局部刻度 · 非零起点")) {
                 compose.onNodeWithText(text, useUnmergedTree = true).assertDoesNotExist()
             }
             compose.onNodeWithTag("benchmark-bar:deepseek/a", useUnmergedTree = true).assertIsDisplayed()

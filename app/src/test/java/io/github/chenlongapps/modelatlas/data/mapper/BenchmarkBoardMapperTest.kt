@@ -78,6 +78,36 @@ class BenchmarkBoardMapperTest {
         assertEquals(listOf(80.0, 99.0), boards.map { it.rankings.single().score })
     }
 
+    @Test fun unspecifiedDefinitionCombinesMissingAndExplicitVersionsAndTakesHighestPerModel() {
+        val initial = result("a", "lab/a", 80.0)
+        val rows = listOf(initial.copy(score = initial.score.copy(version = null)),
+            initial.copy(score = initial.score.copy(id = "b", version = "2", score = 99.0)),
+            result("c", "lab/b", 90.0).let { it.copy(score = it.score.copy(version = "unspecified")) },
+            result("d", "lab/c", 85.0),
+            result("text", "lab/d", null, "100%"),
+            initial.copy(score = initial.score.copy(id = "metric", metric = "different", score = 101.0)),
+            initial.copy(score = initial.score.copy(id = "unit", unit = "points", score = 102.0)),
+            initial.copy(score = initial.score.copy(id = "unmapped", benchmarkId = "unmapped:test", score = 103.0)))
+        val record = BenchmarkRankingRecord(definition.copy(version = "unspecified"), rows)
+        val board = listOf(record).toBenchmarkBoards().single()
+        assertEquals("unspecified", board.version)
+        assertEquals(listOf("lab/a", "lab/b", "lab/c"), board.rankings.map { it.modelId })
+        assertEquals(listOf(99.0, 90.0, 85.0), board.rankings.map { it.score })
+        assertEquals("b", board.rankings.first().scoreId)
+        assertEquals(listOf(record.copy(scores = rows.reversed())).toBenchmarkBoards().single(), board)
+        assertEquals(board.id, listOf(record.copy(scores = emptyList())).toBenchmarkBoards().single().id)
+        assertNull(rows.first().score.version)
+        assertEquals("2", rows[1].score.version)
+    }
+
+    @Test fun specifiedDefinitionStillRejectsMissingUnspecifiedAndUnknownVersions() {
+        val row = result("a", "lab/a", 80.0)
+        val rows = listOf(null, "unspecified", "2").mapIndexed { index, version ->
+            row.copy(score = row.score.copy(id = "$index", version = version))
+        }
+        assertTrue(listOf(BenchmarkRankingRecord(definition, rows)).toBenchmarkBoards().single().rankings.isEmpty())
+    }
+
     @Test fun textConfidenceIntervalsAndMissingNonFiniteScoresNeverEnterRankings() {
         val rows = listOf(result("a", "lab/a", null, "899 ± 18"), result("b", "lab/b", 100.0, "2% (rounded display)"),
             result("c", "lab/c", Double.NaN), result("d", "lab/d", Double.POSITIVE_INFINITY))

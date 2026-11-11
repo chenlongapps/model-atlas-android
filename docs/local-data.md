@@ -60,7 +60,8 @@
 - `benchmark_scores` 的 `modelId`／`benchmarkId` 非空，无模型外键，分别建索引；一个模型／评测允许多个配置，ID 按模型路径＋来源数组下标生成，保留原身份。
 - 原数值 `score` 为可空 REAL／Double，文本 `scoreText` 原样保存、导入二选一；不提取文本中心值或补零。Debug 至少填写一种，有限数值才合法。
 - 可空元数据：`name`、`version`、`variant`、`cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。cost 为 REAL／Double、口径与币种未定，不计算或显示；未知布尔／日期保留，不推断可比性。
-- 新成绩名称取 name、旧记录回退 benchmarkId；唯一精确匹配才关联定义，否则 `unmapped:` 隔离，不套单位／方向／中文。匹配规则见[接入契约](atlas-data.md#成绩及本地化)。
+- 新成绩名称取 name、旧记录回退 benchmarkId；唯一匹配才关联定义，否则 `unmapped:` 隔离，不套单位／方向／中文。定义为 `unspecified` 的版本例外及其余匹配规则见[接入契约](atlas-data.md#成绩及本地化)。
+- `reconcileUnspecifiedBenchmarkScores()` 在有正式 release 时，同事务读取定义与成绩；仅对 `atlas:` ID 且名称／指标命中 `unspecified` 定义的成绩重算唯一关联，只写改变的 `benchmarkId`／`unit`／`higherIsBetter` 派生值。原始成绩／版本／配置、定义、目录、收藏及发布身份不改；手工及旧协议成绩不处理，无改变不写库。榜单或详情仓库开始观察时调用，因此旧缓存离线也可恢复关联；不改 Schema、不清数据。
 - 成绩／定义／release 正式同事务替换，详情同事务关联；旧 `models.benchmarks` 已移除，旧版本表仅兼容回归，不复用其递增版本逻辑。
 
 ## 列与本地 JSON

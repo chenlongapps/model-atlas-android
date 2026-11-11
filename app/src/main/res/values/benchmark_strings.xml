@@ -1,9 +1,9 @@
 <resources>
     <string name="nav_benchmarks">评测</string>
     <string name="benchmark_page_title">评测</string>
-    <string name="benchmark_overview_notice">各模型最高成绩 · 配置可能不同 · 柱条使用局部刻度</string>
+    <string name="benchmark_overview_notice">各模型最高成绩 · 版本／配置可能不同 · 柱条使用局部刻度</string>
     <string name="benchmark_name_version">%1$s · %2$s</string>
-    <string name="benchmark_ranking_notice">各模型最高成绩 · 配置可能不同</string>
+    <string name="benchmark_ranking_notice">各模型最高成绩 · 版本／配置可能不同</string>
     <string name="benchmark_browsing_notice">仅浏览成绩，不生成最高分排名</string>
     <string name="benchmark_leaderboard_title">完整排行榜</string>
     <string name="benchmark_open">查看完整排行榜</string>
