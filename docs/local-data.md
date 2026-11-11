@@ -15,7 +15,7 @@
 | `model_offerings`（`ModelOfferingEntity`） | `(providerId, id)` | 服务侧能力／限制／状态、完整报价／模式／请求覆盖 |
 | `favorites`（`FavoriteEntity`） | `modelId` | 本地用户收藏、时间与最后可用身份，独立于远端快照 |
 | `benchmark_scores`（`BenchmarkScoreEntity`） | `id` | 每条模型评测配置的数值或文本原分数与元数据 |
-| `benchmark_definitions`（`BenchmarkDefinitionEntity`） | `id` | 名称／版本／指标、双语说明、兼容版本、单位／方向／边界等定义 |
+| `benchmark_definitions`（`BenchmarkDefinitionEntity`） | `id` | 名称／版本／指标、双语说明、兼容版本、单位／方向／边界及可空 REAL 热度 `popularity` 等定义 |
 | `catalog_release`（`CatalogReleaseEntity`） | `id = 1` | 内容哈希、git 提交、发布时间，不可排序的发布身份 |
 | `benchmark_version`（`BenchmarkVersionEntity`） | `id = 1` | 旧整数版本兼容测试，不参与生产更新判断 |
 

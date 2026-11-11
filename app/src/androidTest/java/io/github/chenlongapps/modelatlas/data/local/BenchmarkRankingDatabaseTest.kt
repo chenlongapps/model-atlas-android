@@ -12,6 +12,7 @@ import io.github.chenlongapps.modelatlas.data.mapper.mapAtlas
 import io.github.chenlongapps.modelatlas.data.model.LlmInclusionPolicy
 import io.github.chenlongapps.modelatlas.data.remote.atlas.HttpAtlasDataSource
 import io.github.chenlongapps.modelatlas.data.repository.RoomBenchmarkRepository
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -60,6 +61,47 @@ class BenchmarkRankingDatabaseTest {
         dao.replaceCatalog(initial.copy(models = emptyList()))
         val board = repo.observeBoards().first().single()
         assertTrue(board.rankings.isEmpty())
+    }
+
+    @Test fun popularityUpdatesReorderBoardsAndMissingValuesClearPreviousPopularity() = runBlocking {
+        val initial = snapshot("first", 10.0).let { s -> s.copy(
+            definitions = listOf(definition.copy(name = "Zulu", popularity = 0.98),
+                definition.copy(id = "other", name = "Alpha", popularity = 0.6)),
+            scores = s.scores!! + s.scores.single().copy(id = "other-score", benchmarkId = "other"),
+        ) }
+        dao.replaceCatalog(initial)
+        val first = repo.observeBoards().first()
+        assertEquals(listOf("test", "other"), first.map { it.benchmarkId })
+        assertTrue(initial.hasSameContentAs(dao.readCatalog()))
+        val updated = initial.copy(definitions = initial.definitions!!.map {
+            it.copy(popularity = if (it.id == "other") 1.0 else it.popularity)
+        })
+        assertFalse(initial.hasSameContentAs(updated))
+        val next = async { withTimeout(10_000) { repo.observeBoards().first { it.first().benchmarkId == "other" } } }
+        dao.replaceCatalog(updated)
+        val second = next.await()
+        assertEquals(listOf("other", "test"), second.map { it.benchmarkId })
+        assertEquals(first.associate { it.id to it.rankings }, second.associate { it.id to it.rankings })
+        dao.replaceCatalog(initial.copy(definitions = initial.definitions.map { it.copy(popularity = null) }))
+        assertEquals(listOf("other", "test"), repo.observeBoards().first().map { it.benchmarkId })
+        assertTrue(dao.readCatalog().definitions!!.all { it.popularity == null })
+    }
+
+    @Test fun fileReopenRetainsPopularityAndBoardOrderWithoutNetwork() = runBlocking {
+        val name = "benchmark-popularity-${UUID.randomUUID()}.db"
+        fun open() = Room.databaseBuilder<CatalogDatabase>(context, name).setDriver(AndroidSQLiteDriver()).build()
+        val initial = snapshot("first", 10.0).copy(definitions = listOf(
+            definition.copy(name = "Zulu", popularity = 0.98), definition.copy(id = "other", name = "Alpha", popularity = 0.0),
+        ))
+        try {
+            open().let { fileDb -> try { fileDb.catalogDao().replaceCatalog(initial) } finally { fileDb.close() } }
+            open().let { fileDb -> try {
+                assertTrue(initial.hasSameContentAs(fileDb.catalogDao().readCatalog()))
+                val boards = RoomBenchmarkRepository(fileDb.catalogDao(), Dispatchers.IO).observeBoards().first()
+                assertEquals(listOf("test", "other"), boards.map { it.benchmarkId })
+                assertEquals(listOf(0.98, 0.0), boards.map { it.popularity })
+            } finally { fileDb.close() } }
+        } finally { context.deleteDatabase(name) }
     }
 
     @Test fun actualBundledReleaseProducesOnlyMatchedLlmBoards() = runBlocking {

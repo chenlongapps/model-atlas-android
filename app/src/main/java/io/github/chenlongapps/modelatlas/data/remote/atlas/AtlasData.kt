@@ -72,6 +72,7 @@ data class AtlasBenchmarkDto(
     @SerialName("min_score") val minScore: Double? = null,
     @SerialName("max_score") val maxScore: Double? = null,
     @SerialName("compatible_versions") val compatibleVersions: List<String>? = null,
+    val popularity: Double? = null,
 )
 
 @Serializable

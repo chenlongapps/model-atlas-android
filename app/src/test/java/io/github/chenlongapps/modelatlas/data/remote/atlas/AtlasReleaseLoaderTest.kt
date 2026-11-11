@@ -32,6 +32,19 @@ class AtlasReleaseLoaderTest {
         assertEquals("中文评测说明", release.translations.benchmark.description["bench-v1"])
     }
 
+    @Test fun popularityRetainsNumericValuesAndAllowsOlderDefinitionsWithoutIt() = runTest {
+        val valid = atlasFiles().getValue("benchmarks.json").decodeToString()
+        assertNull(atlasRelease().benchmarks.values.single().popularity)
+        for (value in listOf("0", "0.98", "null")) {
+            val definitions = valid.replace("\"metric\":", "\"popularity\":$value,\"metric\":")
+            assertEquals(value.toDoubleOrNull(), atlasRelease(atlasFiles(definitions = definitions)).benchmarks.values.single().popularity)
+        }
+        for (value in listOf("\"0.98\"", "true", "[]", "1e999")) {
+            val definitions = valid.replace("\"metric\":", "\"popularity\":$value,\"metric\":")
+            rejected { atlasRelease(atlasFiles(definitions = definitions)) }
+        }
+    }
+
     @Test fun rejectsByteTamperingSizeChangesAndWrongReleaseHash() = runTest {
         val original = atlasFiles()
         val header = original.getValue("manifest.json").decodeToString()

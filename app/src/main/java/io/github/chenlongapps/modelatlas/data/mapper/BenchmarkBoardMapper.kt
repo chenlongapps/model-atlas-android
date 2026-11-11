@@ -38,9 +38,11 @@ internal fun List<BenchmarkRankingRecord>.toBenchmarkBoards(): List<BenchmarkBoa
             description = definition.descriptionZhCn?.takeIf(String::isNotBlank) ?: definition.description,
             higherIsBetter = definition.higherIsBetter, minScore = definition.minScore, maxScore = definition.maxScore,
             rankings = ranked,
+            popularity = definition.popularity,
         )
     }
-}.sortedWith(compareBy<BenchmarkBoard, String>(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.version }.thenBy { it.id })
+}.sortedWith(compareByDescending<BenchmarkBoard> { it.popularity }
+    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.version }.thenBy { it.id })
 
 private fun BenchmarkRankingScoreRecord.toBoardEntry(): BenchmarkBoardEntry = BenchmarkBoardEntry(
     scoreId = score.id, modelId = model!!.id, modelName = model.name?.takeIf(String::isNotBlank) ?: model.id,

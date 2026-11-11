@@ -34,7 +34,7 @@ fun CatalogMapper.mapAtlas(
         BenchmarkDefinitionEntity(
             id, b.name, b.version, b.metric, b.description, release.translations.benchmark.description[id],
             b.compatibleVersions, b.category, b.organization, b.url, b.methodology, b.unit, b.higherIsBetter,
-            b.minScore, b.maxScore,
+            b.minScore, b.maxScore, popularity = b.popularity,
         )
     }
     val scores = release.models.flatMap { (modelId, model) ->

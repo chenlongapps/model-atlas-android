@@ -14,6 +14,7 @@ data class BenchmarkBoard(
     val minScore: Double?,
     val maxScore: Double?,
     val rankings: List<BenchmarkBoardEntry> = emptyList(),
+    val popularity: Double? = null,
 )
 
 data class BenchmarkBoardEntry(

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "35283cdf318c1dba2299bf363897464f",
+    "identityHash": "cbfe7980d3788e49d459ae03f3cddc2c",
     "entities": [
       {
         "tableName": "models",
@@ -602,7 +602,7 @@
       },
       {
         "tableName": "benchmark_definitions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `version` TEXT NOT NULL, `metric` TEXT NOT NULL, `description` TEXT, `descriptionZhCn` TEXT, `compatibleVersions` TEXT, `category` TEXT, `organization` TEXT, `url` TEXT, `methodology` TEXT, `unit` TEXT, `higherIsBetter` INTEGER, `minScore` REAL, `maxScore` REAL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `version` TEXT NOT NULL, `metric` TEXT NOT NULL, `description` TEXT, `descriptionZhCn` TEXT, `compatibleVersions` TEXT, `category` TEXT, `organization` TEXT, `url` TEXT, `methodology` TEXT, `unit` TEXT, `higherIsBetter` INTEGER, `minScore` REAL, `maxScore` REAL, `popularity` REAL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -682,6 +682,11 @@
             "fieldPath": "maxScore",
             "columnName": "maxScore",
             "affinity": "REAL"
+          },
+          {
+            "fieldPath": "popularity",
+            "columnName": "popularity",
+            "affinity": "REAL"
           }
         ],
         "primaryKey": {
@@ -730,7 +735,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '35283cdf318c1dba2299bf363897464f')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cbfe7980d3788e49d459ae03f3cddc2c')"
     ]
   }
 }

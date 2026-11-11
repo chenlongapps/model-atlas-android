@@ -5,6 +5,14 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 评测总览按来源热度排序
+
+- 范围：接入 `benchmarks.json` 可选数值 `popularity`，通过 DTO／Entity／榜单模型分层传递，保存为定义表可空 REAL 列，参与完整目录比较及原子更新。总览降序、缺失最后，同值按名称（忽略大小写）／实际版本／榜单 ID 兜底；不改变榜内模型排名、榜单 ID 或详情评测排序，不新增请求。随包原字节未更新，线上目录同步成功后应用热度。
+- 单元：定向 6 类／63 项，0 失败／错误／忽略：`AtlasReleaseLoaderTest` 8、`AtlasCatalogMapperTest` 7、`BenchmarkBoardMapperTest` 9、`CatalogSnapshotTest` 6、`ModelRepositoryTest` 25、`BenchmarkViewModelTest` 8。覆盖数字／0／null／旧包缺失、错误类型／非有限值拒绝、同值稳定排序、兼容版本继承及仅热度变化的快照比较。
+- 构建：Debug 应用／测试 APK、Debug Lint 和 `git diff --check` 通过；SARIF 为 73 条 warning、无 error。报告见 `app/build/reports/tests/testDebugUnitTest/` 与 `app/build/reports/lint-results-debug.html`。
+- 设备：API 37／`emulator-5554`，最终 APK 安装后显式 runner 实际 `numtests=14`、`OK (14 tests)`：`BenchmarkRankingDatabaseTest` 全类 5 项（含热度更新重排／缺失清旧值及文件重开）、`AtlasCatalogIntegrationTest` 全类 6 项，以及 `BenchmarkScreenTest` 的 `overviewUsesPopularityOrderRatherThanAlphabeticalOrderAndOpensCorrectBoard`、`fullRankingButtonAndSystemBackRestoreOverviewAndSavedDestination`、`overviewScrollRestoresAfterLeaderboardAndTabSwitch` 共 3 项。显式 runner 结果不冒充 Gradle connected 报告。
+- 边界：按既有未发布约定更新 Schema v1 导出基线，不迁移／清除旧开发库；旧安装可能无法打开，需开发者另行处理。本轮未清应用数据、卸载或重建模拟器；仅删除测试自建 UUID 数据库。未执行 Release、全量 instrumentation、真机／TalkBack 或线上整链 HTTPS 验收。
+
 ### 2026-11-10 文档分工与精简
 
 - 范围：仅 TODO／docs，未修改应用代码、根 README 或 AGENTS；保留工作区原有功能改动。

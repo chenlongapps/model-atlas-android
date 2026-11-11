@@ -48,6 +48,9 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelCard
 import io.github.chenlongapps.modelatlas.ui.modellist.LabLogoTag
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
+import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingRecord
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEntity
+import io.github.chenlongapps.modelatlas.data.mapper.toBenchmarkBoards
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.testing.saveRegressionScreenshot
 import org.junit.Assert.*
@@ -58,6 +61,23 @@ class BenchmarkScreenTest {
     @get:Rule val compose = createComposeRule()
     private val board = benchmarkPreviewBoard()
     private val ready = BenchmarkUiState(isLoading = false, boards = listOf(board))
+
+    @Test fun overviewUsesPopularityOrderRatherThanAlphabeticalOrderAndOpensCorrectBoard() {
+        val boards = listOf(
+            BenchmarkDefinitionEntity("alpha", "Alpha", "1", "accuracy", popularity = 0.6),
+            BenchmarkDefinitionEntity("zulu", "Zulu", "1", "accuracy", popularity = 0.98),
+        ).map { BenchmarkRankingRecord(it, emptyList()) }.toBenchmarkBoards()
+        var opened: String? = null
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            BenchmarkScreen(BenchmarkUiState(isLoading = false, boards = boards), onOpen = { opened = it })
+        } }
+        val popular = compose.onNodeWithTag("benchmark-card:${boards[0].id}")
+        val other = compose.onNodeWithTag("benchmark-card:${boards[1].id}")
+        assertEquals("zulu", boards.first().benchmarkId)
+        assertTrue(popular.fetchSemanticsNode().boundsInRoot.top < other.fetchSemanticsNode().boundsInRoot.top)
+        popular.performClick()
+        compose.runOnIdle { assertEquals(boards.first().id, opened) }
+    }
 
     @Test fun matchesModelCardSurfaceLogoInsetsAndPriceTypographyInBothThemes() {
         val dark = mutableStateOf(false)

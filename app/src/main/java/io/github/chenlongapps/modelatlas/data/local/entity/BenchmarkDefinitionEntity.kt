@@ -23,4 +23,5 @@ data class BenchmarkDefinitionEntity(
     val higherIsBetter: Boolean? = null,
     val minScore: Double? = null,
     val maxScore: Double? = null,
+    val popularity: Double? = null,
 )

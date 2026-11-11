@@ -13,6 +13,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AtlasCatalogMapperTest {
+    @Test fun popularityIsMappedAndParticipatesInCatalogContentComparison() = runTest {
+        val base = atlasRelease()
+        val original = CatalogMapper().mapAtlas(base, emptyMap(), 1, 1)
+        assertNull(original.definitions!!.single().popularity)
+        val release = base.copy(benchmarks = base.benchmarks.mapValues { (_, b) -> b.copy(popularity = 0.98) })
+        val updated = CatalogMapper().mapAtlas(release, emptyMap(), 1, 1)
+        assertEquals(0.98, updated.definitions!!.single().popularity!!, 0.0)
+        assertFalse(original.hasSameContentAs(updated))
+        assertFalse(updated.hasSameContentAs(original))
+        assertEquals(original.scores, updated.scores)
+    }
+
     @Test fun actualGeminiMimeListProjectsToFiveCategoriesButStoredFormatsAreIntact() = runTest {
         val release = AtlasReleaseLoader { path, _ -> File("src/main/assets/atlas/$path").readBytes() }.load()
         val snapshot = CatalogMapper().mapAtlas(release, emptyMap(), 1, 1)

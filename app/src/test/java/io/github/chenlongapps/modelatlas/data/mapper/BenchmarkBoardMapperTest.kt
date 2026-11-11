@@ -16,6 +16,33 @@ class BenchmarkBoardMapperTest {
         BenchmarkRankingModel(model, model, "llm", null, null),
     )
 
+    @Test fun sortsByDescendingPopularityWithMissingLastAndStableNameVersionIdTies() {
+        fun record(id: String, name: String, popularity: Double?, version: String = "1") =
+            BenchmarkRankingRecord(definition.copy(id = id, name = name, version = version, popularity = popularity), emptyList())
+        val records = listOf(
+            record("missing-z", "Zulu", null), record("zero", "Zero", 0.0),
+            record("tie-z", "alpha", 0.9, "2"), record("popular", "Zulu", 0.98),
+            record("tie-b", "Alpha", 0.9), record("tie-a", "Alpha", 0.9),
+            record("missing-a", "Alpha", null), record("lower", "Alpha", 0.6),
+        )
+        val boards = records.toBenchmarkBoards()
+        assertEquals(listOf("popular", "tie-a", "tie-b", "tie-z", "lower", "zero", "missing-a", "missing-z"),
+            boards.map { it.benchmarkId })
+        assertEquals(boards, records.reversed().toBenchmarkBoards())
+        assertEquals(listOf(0.98, 0.9, 0.9, 0.9, 0.6, 0.0, null, null), boards.map { it.popularity })
+    }
+
+    @Test fun compatibleVersionsInheritPopularityWithoutChangingModelRankings() {
+        val rows = listOf(result("a", "lab/a", 10.0), result("b", "lab/b", 20.0),
+            result("c", "lab/c", 30.0).let { it.copy(score = it.score.copy(version = "1.0")) })
+        val record = BenchmarkRankingRecord(definition.copy(compatibleVersions = listOf("1.0")), rows)
+        val original = listOf(record).toBenchmarkBoards()
+        val updated = listOf(record.copy(definition = record.definition.copy(popularity = 0.98))).toBenchmarkBoards()
+        assertEquals(listOf(0.98, 0.98), updated.map { it.popularity })
+        assertEquals(original.map { it.rankings }, updated.map { it.rankings })
+        assertEquals(original.map { it.id }, updated.map { it.id })
+    }
+
     @Test fun takesHighestRawScorePerCanonicalModelAndRetainsWinningConditions() {
         val low = result("a", "deepseek/a", 65.04)
         val high = result("b", "deepseek/a", 65.049).let { it.copy(score = it.score.copy(reasoningEffort = "Max")) }

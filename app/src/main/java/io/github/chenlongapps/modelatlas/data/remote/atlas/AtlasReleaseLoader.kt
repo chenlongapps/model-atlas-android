@@ -68,6 +68,7 @@ internal class AtlasReleaseLoader(private val read: suspend (path: String, limit
             require(id.isNotBlank() && definition.name.isNotBlank() && definition.version.isNotBlank() && definition.metric.isNotBlank())
             require(definition.minScore == null || definition.minScore.isFinite())
             require(definition.maxScore == null || definition.maxScore.isFinite())
+            require(definition.popularity == null || definition.popularity.isFinite())
         }
         require(translations.model.descriptions.keys.all { it in models })
         require(translations.benchmark.description.keys.all { it in benchmarks })
