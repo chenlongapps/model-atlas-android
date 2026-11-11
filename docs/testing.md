@@ -17,7 +17,7 @@
 | 收藏／收藏标识 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`CatalogEntriesTest`、`CatalogFavoritesTest`、`FavoritesScreenTest`、`ModelCardFavoriteLayoutTest` | 从模型目录进入详情，不使用独立收藏导航；存储加 `FavoriteDatabaseTest`，返回加共享转场／零动画 |
 | 外观／主题 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`AppearanceColorTest`、`AppearanceScreenTest`、`AppearanceNavigationTest` | 全局变化加 `ModelAtlasThemeTest` 与主要页面浅深；备份变化加 `AppearanceBackupRulesTest` |
 | Models.dev／价格 | `ModelsDevApiTest`、`ModelsDevParserTest`、`InterleavedDtoSerializerTest`、相关 Mapper／Policy／Repository | Room／事务变化加 `CatalogDatabaseTest`，共享字段覆盖所有消费者 |
-| LLM 请求 | `OpenAiCompatibleClientTest`（序列化／SSE／超时／取消／脱敏／资源关闭） | 显式配置后运行 `LlmLiveTest`，默认跳过不计线上通过；命令及密钥边界见 [LLM API](llm-api.md#测试) |
+| LLM 请求 | `OpenAiCompatibleClientTest`（序列化／SSE／超时／取消／脱敏／资源关闭）、`LlmLiveTestConfigTest`（环境／本地配置优先级） | `LlmLiveTest` 读取环境变量或 `local.properties`，必须用 `-PllmLiveTest=true` 显式开启；默认跳过不计线上通过，命令及密钥边界见 [LLM API](llm-api.md#测试) |
 | Atlas 发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest` | `AtlasCatalogIntegrationTest`，共享存储加 Catalog／Favorite／Debug DB，来源页与返回 |
 | 来源页／许可 | `ModelAtlasAppTest` 中 `settingsOpensStandaloneSourcePageWithPricesAndBundledLicense` 及三个 `sourcePage*` 方法 | 检查实际应用 assets、当前 Atlas 说明及 Models.dev MIT，按钮／系统返回、阅读位置恢复和大字 RTL |
 | MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、相关 Query／ViewModel | 真实字节经生产映射覆盖列表／详情／对比／筛选；Atlas 集成验证缓存／收藏无须联网或改原值 |

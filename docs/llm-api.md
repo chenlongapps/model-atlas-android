@@ -71,17 +71,27 @@ llmClient.stream(config, LlmRequest(nextTurn)).collect { chunk ->
   --tests 'io.github.chenlongapps.modelatlas.ai.openai.OpenAiCompatibleClientTest'
 ```
 
-`LlmLiveTest` 为显式启用的线上冒烟，执行两次可能计费的请求：普通响应，以及带上该回复的多轮流式响应。默认缺少任一环境变量即跳过；不会输出配置、提示词或响应。不要用 Gradle `-P`／命令行字面量传密钥：
+`LlmLiveTest` 为显式启用的线上冒烟，执行两次可能计费的请求：普通响应，以及带上该回复的多轮流式响应。必须指定 `-PllmLiveTest=true` 才执行，默认即使已有凭据仍跳过，避免普通单元测试意外计费。显式开启后如果缺少必要配置则失败，不把未配置误记为线上通过。不会输出配置、提示词或响应。
 
-```sh
-export LLM_TEST_BASE_URL='https://your-api.example.com/v1/'
-export LLM_TEST_MODEL_ID='your-service-model-id'
-read -r -s LLM_TEST_API_KEY
-export LLM_TEST_API_KEY
-./gradlew :app:testDebugUnitTest \
-  --tests 'io.github.chenlongapps.modelatlas.ai.openai.LlmLiveTest' \
-  --no-configuration-cache --no-daemon
-unset LLM_TEST_API_KEY
+在根目录 `local.properties` 保留已有的 `sdk.dir` 等内容，增加以下三项即可一次保存、重复使用（示例不含真实密钥）：
+
+```properties
+LLM_TEST_BASE_URL=https://your-api.example.com/v1/
+LLM_TEST_API_KEY=replace-with-your-key
+LLM_TEST_MODEL_ID=your-service-model-id
 ```
 
-在交互终端的 `read` 处输入临时密钥，不回显；关闭配置缓存并使用一次性 Gradle daemon，避免凭据随构建配置长期保留。报告中必须核对 `skipped=0`，不能把默认跳过记为线上通过。执行结果见[开发历史](archive/development-history.md#2026-11-11-llm-api-基础接入)。
+测试按字段优先读取同名环境变量，未设置或空白时回退到本地配置，便于 CI 覆盖。配置由测试进程中的 `LlmLiveTestConfig.kt` 读取，Gradle 的测试配置只传入非敏感文件路径和启用开关，不把密钥加入系统属性、任务输入或 BuildConfig；不依赖测试进程当前工作目录。未开启时不会读取配置文件。`LlmLiveTestConfigTest` 使用临时文件和假密钥，覆盖本地读取、逐字段覆盖、空白回退、配置缺失及完整环境变量不读取本地文件，不接触真实配置。
+
+保存后执行：
+
+```sh
+./gradlew :app:testDebugUnitTest \
+  --tests 'io.github.chenlongapps.modelatlas.ai.openai.LlmLiveTest' \
+  -PllmLiveTest=true \
+  --no-configuration-cache --no-daemon
+```
+
+开启线上测试时，Gradle 禁止复用测试任务的 up-to-date／构建缓存结果，每次都真实执行。命令中的 `-P` 仅传布尔开关，**不要用 Gradle `-P`／命令行字面量传密钥**。继续关闭配置缓存并使用一次性 Gradle daemon，减少构建侧凭据残留风险。
+
+`local.properties` 已被 Git 忽略，但仍是明文文件，不应提交、分享或作为应用资源打包；建议限制文件权限（macOS／Linux 可用 `chmod 600 local.properties`）。这仅是开发机测试配置，不是应用内凭据存储功能。报告中必须核对 `skipped=0`，不能把默认跳过记为线上通过。执行结果见[开发历史](archive/development-history.md#2026-11-11-线上测试支持本地配置)。

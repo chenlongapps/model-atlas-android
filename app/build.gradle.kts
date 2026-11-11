@@ -63,6 +63,18 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// 只传非敏感路径和开关；凭据由测试 JVM 读取，不进入 Gradle 配置或 APK。
+val llmLiveTestEnabled = providers.gradleProperty("llmLiveTest").map { it.toBooleanStrict() }.orElse(false)
+tasks.withType<Test>().configureEach {
+    systemProperty("modelatlas.llm.liveTest.enabled", llmLiveTestEnabled.get())
+    systemProperty("modelatlas.llm.localProperties", rootProject.file("local.properties").absolutePath)
+    if (llmLiveTestEnabled.get()) {
+        // 线上结果不可复用，且本地凭据文件不作为 Gradle 输入或缓存内容。
+        outputs.upToDateWhen { false }
+        outputs.doNotCacheIf("Live LLM requests must run explicitly each time") { true }
+    }
+}
+
 dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)

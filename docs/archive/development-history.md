@@ -5,6 +5,14 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 线上测试支持本地配置
+
+- 范围：根目录已忽略的 `local.properties` 增加调用方提供的测试端点／密钥／模型，保留已有 SDK 配置，并将本机文件权限收紧为 600；仅为开发机测试使用，不新增应用凭据持久化。`LlmLiveTest` 改为显式 `-PllmLiveTest=true` 才执行，未开启时不读取凭据、不联网；开启但配置不完整时失败。
+- 实现：测试专用 `LlmLiveTestConfig.kt` 在测试 JVM 内加载配置，按字段环境变量优先、空白回退本地文件；Gradle 只传绝对文件路径及布尔开关，不把密钥放入系统属性、任务输入或 APK。线上模式禁用测试任务 up-to-date／构建缓存，避免复用过去通过或跳过的结果；新增 6 项临时文件／假凭据的配置单元测试，文档更新为一次保存后直接运行的命令。
+- 本地验证：AI 定向 3 类／24 项，23 通过、1 默认跳过；全量单元实际 56 类／398 项，397 通过、1 默认跳过，0 失败／错误。保存有效本地凭据后，`LlmLiveTest` 在无开启开关时仍跳过，普通全量测试不会因此计费。`:app:assembleDebug`、`:app:lintDebug` 通过，报告位于既有 `app/build/reports/`。
+- 线上验证：显式移除三个 `LLM_TEST_*` 环境变量，仅通过本地文件读取端点／凭据／模型，执行 `LlmLiveTest#configuredEndpointSupportsNormalAndStreamingMultiTurnRequests`；实际 1 项通过，0 跳过／失败／错误，约 14.4 秒，覆盖普通请求与带前轮回复的流式请求。使用 `--no-configuration-cache --no-daemon`，不输出凭据及请求／响应；随后全量单元覆盖了线上独立报告，默认跳过与该次真实线上通过分别记录。
+- 边界：不修改生产 LLM 客户端、依赖、UI 或存储。未执行 instrumentation、Release 或真机验收；明文文件仍需用户妥善保管，Git 忽略不等于加密存储。
+
 ### 2026-11-11 AI 代码集中到 ai 包
 
 - 范围：在现有单 `:app` 模块内，将 LLM 接口／模型／错误集中到 `modelatlas/ai/`，OpenAI 客户端／DTO／SSE 解析迁到 `ai/openai/`，Hilt 模块迁到 `ai/di/`；两类测试同步迁到 `src/test/.../ai/openai/`。仅调整路径、package 和 import，保留现有共享网络／IO 依赖及请求行为，不新建 Gradle 模块或增加功能。
