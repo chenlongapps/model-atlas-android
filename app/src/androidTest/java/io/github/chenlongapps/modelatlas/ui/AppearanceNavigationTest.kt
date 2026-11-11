@@ -11,6 +11,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.geometry.Offset
 import androidx.test.espresso.Espresso.pressBack
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
@@ -36,6 +39,9 @@ class AppearanceNavigationTest {
     @Test fun systemBackKeepsCatalogPositionAndSourceEntryStillWorks() {
         compose.setContent { Content() }
         compose.onNodeWithTag("model-list").performScrollToNode(hasText("模型 12"))
+        // 当前底栏随向下浏览隐藏；先像用户一样反向轻滑，再记录需要恢复的位置。
+        compose.onNodeWithTag("model-list").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         val before = compose.onNodeWithText("模型 12").fetchSemanticsNode().boundsInRoot.top
         openAppearance()
         pressBack()

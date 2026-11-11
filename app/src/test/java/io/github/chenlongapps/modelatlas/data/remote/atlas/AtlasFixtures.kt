@@ -27,3 +27,8 @@ internal fun atlasFiles(
 
 internal suspend fun atlasRelease(files: Map<String, ByteArray> = atlasFiles()): AtlasRelease =
     AtlasReleaseLoader { path, _ -> files.getValue(path) }.load()
+
+/** 真实随包测试共用原字节及生产限长读取，不复制另一份发布样本。 */
+internal suspend fun bundledAtlasRelease(): AtlasRelease = AtlasReleaseLoader { path, limit ->
+    File("src/main/assets/atlas/$path").inputStream().use { it.readAtlasBytes(limit) }
+}.load()

@@ -8,7 +8,6 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.graphics.Color
 import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
@@ -30,19 +29,12 @@ class ModelAtlasThemeTest {
         assertPalette(dark = true, dynamic = false, expected = darkColorScheme())
     }
 
-    @SdkSuppress(minSdkVersion = 31)
     @Test fun usesSystemDynamicLightPalette() {
         assertPalette(false, true, dynamicLightColorScheme(InstrumentationRegistry.getInstrumentation().targetContext))
     }
 
-    @SdkSuppress(minSdkVersion = 31)
     @Test fun usesSystemDynamicDarkPalette() {
         assertPalette(true, true, dynamicDarkColorScheme(InstrumentationRegistry.getInstrumentation().targetContext))
-    }
-
-    @SdkSuppress(maxSdkVersion = 30)
-    @Test fun olderAndroidFallsBackToFixedPalette() {
-        assertPalette(dark = false, dynamic = true, expected = lightColorScheme())
     }
 
     @Test fun forcedLightStillUsesSystemDynamicColors() {

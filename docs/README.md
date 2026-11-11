@@ -22,7 +22,7 @@
 ## 历史资料（按需查阅）
 
 - [开发历史与原始验证](archive/development-history.md)：整理前 TODO 原文，含完成项、失败／复跑和历史规划，不代表当前状态。
-- [旧评测协议](archive/legacy-benchmarks.md)：仅兼容回归，不用于当前生产同步。
+- [旧评测协议](archive/legacy-benchmarks.md)：仅历史说明，相关代码、版本表及测试样本已删除。
 
 ## 维护约定
 

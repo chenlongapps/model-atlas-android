@@ -168,7 +168,7 @@ class BenchmarkRankingDatabaseTest {
 
     @Test fun detailObservationRepairsOldCacheWithoutOpeningBenchmarkPage() = runBlocking {
         dao.replaceCatalog(oldUnspecifiedSnapshot())
-        val detail = RoomCatalogStore(dao, db.benchmarkScoreDao()).observeModelDetail("lab/a").first()!!
+        val detail = RoomCatalogStore(dao).observeModelDetail("lab/a").first()!!
         val scores = detail.scores.associateBy { it.score.id }
         val missingVersion = scores.getValue("atlas:lab/a:000000")
         assertEquals("test", missingVersion.definition!!.id)

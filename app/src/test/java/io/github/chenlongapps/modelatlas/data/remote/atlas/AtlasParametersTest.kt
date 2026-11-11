@@ -4,7 +4,6 @@ import io.github.chenlongapps.modelatlas.data.local.ModelDetailRecord
 import io.github.chenlongapps.modelatlas.data.mapper.CatalogMapper
 import io.github.chenlongapps.modelatlas.data.mapper.mapAtlas
 import io.github.chenlongapps.modelatlas.data.mapper.toModelDetail
-import java.io.File
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -92,7 +91,7 @@ class AtlasParametersTest {
     }
 
     @Test fun realPublishedCountsCoverDenseMoeActiveOnlyAndComponentsOnlyWithoutInference() = runTest {
-        val release = AtlasReleaseLoader { path, _ -> File("src/main/assets/atlas/$path").readBytes() }.load()
+        val release = bundledAtlasRelease()
         val models = CatalogMapper().mapAtlas(release, emptyMap(), 1, 1).models.associateBy { it.id }
         assertEquals(373, models.values.count { it.parameters != null })
         fun detail(id: String) = ModelDetailRecord(models.getValue(id), emptyList()).toModelDetail()!!

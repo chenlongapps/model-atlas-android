@@ -8,14 +8,14 @@
 | 服务商、模型服务、价格／服务限制 | Models.dev `api.json?type=all` | 本文 |
 | 首次离线模型／评测／翻译 | 同协议 `assets/atlas/` 真实包，无价格 | [Atlas 初始化](atlas-data.md#发布校验及同步) |
 
-生产不再请求 Models.dev `models.json?type=all`，也不启动旧整数版本评测同步；旧解析器／样本只供[兼容回归](archive/legacy-benchmarks.md)。不能把当前 `benchmarks.json` 定义字典当旧成绩快照。
+仅支持 Atlas 整包与 Models.dev 服务商端点；旧整数版本评测同步、Models.dev `models.json?type=all` 解析入口及对应测试样本已删除，不再兼容这些历史协议。不能把当前 `benchmarks.json` 定义字典当旧成绩快照。
 
 规范模型、具体 API 服务不是同一对象，只按服务显式 `canonical_model_id` 关联，不以名称、ID 相似度或 LAB 猜测。参数／能力只取对应层，不用规范模型覆盖服务缺失值，不将服务能力取并集。存储标识见[本地数据](local-data.md)，展示字段见[页面字段](page-information.md)。
 
 ## 请求与解析
 
 - 当前 `api.json?type=all` 顶层为 `Map<String, ProviderDto>`，服务商下 `models` 为服务字典；不是数组。读取公开目录不需 API Key，`env` 是调用模型服务的环境变量名称，不是目录鉴权。
-- `ModelsDevApi` 负责 Retrofit 请求，`ModelsDevParser.parseProviders(apiJson)` 解析已有字符串，不自行下载；`parseModels(modelsJson)` 只保留历史模型格式入口，共用 `ModelsDevJson`。
+- `ModelsDevApi` 负责 Retrofit 请求，`ModelsDevParser.parseProviders(apiJson)` 解析已有字符串，不自行下载，共用 `ModelsDevJson`。`ModelDto` 仅为 Atlas 映射复用的规范字段载体，不是独立远程解析入口。
 - DTO 在 `data/remote/dto/`，必需 `id`／`name`、服务商 `models` 不可缺失或 null，空字典合法；顶层键、服务内键、条目内 ID 分开保留。
 - `@SerialName` 映射蛇形字段；可选字段默认 null，区分缺失／明确 false／零／空集合。忽略未知对象字段，类型／状态／模态／模式键保持开放字符串。
 - token 限制与预算使用 Long，日期保持来源字符串及精度；`reasoning_options.values` 保留 null。`interleaved` 只接受布尔或 `{"field":"reasoning_content"}`，拒绝字符串布尔或数值。
@@ -95,7 +95,7 @@ true／false／null 为支持／不支持／未知，缺失集合不是空集合
 ## 数据许可与来源署名
 
 - Models.dev 仓库为 MIT，`Copyright (c) 2025 models.dev`；分发重大部分须保留完整版权及免责文本，仅名称／链接不替代许可。`res/raw/models_dev_license.txt` 随包，设置来源子页离线可读。
-- 独立第三方说明与许可保留是两件事；MIT 不决定本项目许可证、不替代权重／服务／商标条款。Atlas 及必要历史 DeepSeek 归属见[接入契约](atlas-data.md#许可与随包维护)。
+- 独立第三方说明与许可保留是两件事；MIT 不决定本项目许可证、不替代权重／服务／商标条款。Atlas 许可与随包维护见[接入契约](atlas-data.md#许可与随包维护)。
 - LAB 素材来自 Models.dev Logos（`/logos/labs/{lab}.svg` 同图本地彩色变体），随包 `ic_lab_*.xml`，覆盖 23 个前缀；不运行时下载、不借图、不代表隶属／认可。
 - 服务商源为 `https://models.dev/logos/{provider-ID}.svg`；2026-10-27 的 232 ID 快照收录 212 ID／187 份矢量，只有原 SVG 完全相同才共用。12 个通用图 ID：`alibaba-token-plan-cn`、`chutes`、`cline-pass`、`cortecs`、`gmicloud`、`morph`、`requesty`、`sakana`、`sap-ai-core`、`sarvam`、`synthetic`、`upstage`；8 个无法完整转换 ID：`abliteration-ai`、`atomic-chat`、`hpc-ai`、`kenari`、`orcarouter`、`umans-ai`、`umans-ai-coding-plan`、`wafer.ai`。这些及未知 ID 都用独立兜底，数量不是接口保证。
 - 服务商 SVG 用构建期 Svg2Vector 转换，保留 viewBox／变换／显式颜色，固有 24dp、等比绘制，`currentColor` 固定黑配白底。`lucidquery` 超长路径先 SVGO 优化，不拆复合路径或换品牌；资源注释留地址／日期，更新须验证全部加载与图形，不要求运行时工具。

@@ -4,7 +4,7 @@
 
 ## 先选范围
 
-先列影响与拟执行类／方法，小改可选方法，功能完成补相关类及导航／返回链路；共享组件、全局主题／导航、存储、依赖或构建的大范围修改扩大回归。以下是起点，不是每次全跑的套件；测试源码为 `app/src/test/`、`src/testDebug/`、`src/androidTest/`。
+先列影响与拟执行类／方法，小改可选方法，功能完成补相关类及导航／返回链路；共享组件、全局主题／导航、存储、依赖或构建的大范围修改扩大回归。以下是起点，不是每次全跑的套件；测试源码为 `app/src/test/`、`src/testDebug/`、`src/androidTest/`、`src/androidTestDebug/`。
 
 | 改动 | 优先测试 | 按影响追加 |
 | --- | --- | --- |
@@ -18,16 +18,25 @@
 | 外观／主题 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`AppearanceColorTest`、`AppearanceScreenTest`、`AppearanceNavigationTest` | 全局变化加 `ModelAtlasThemeTest` 与主要页面浅深；备份变化加 `AppearanceBackupRulesTest` |
 | Models.dev／价格 | `ModelsDevApiTest`、`ModelsDevParserTest`、`InterleavedDtoSerializerTest`、相关 Mapper／Policy／Repository | Room／事务变化加 `CatalogDatabaseTest`，共享字段覆盖所有消费者 |
 | Atlas 发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest` | `AtlasCatalogIntegrationTest`，共享存储加 Catalog／Favorite／Debug DB，来源页与返回 |
+| 来源页／许可 | `ModelAtlasAppTest` 中 `settingsOpensStandaloneSourcePageWithPricesAndBundledLicense` 及三个 `sourcePage*` 方法 | 检查实际应用 assets、当前 Atlas 说明及 Models.dev MIT，按钮／系统返回、阅读位置恢复和大字 RTL |
 | MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、相关 Query／ViewModel | 真实字节经生产映射覆盖列表／详情／对比／筛选；Atlas 集成验证缓存／收藏无须联网或改原值 |
 | 参数量 | `AtlasParametersTest`、`ModelParameterFormattingTest`、详情 Mapper、`CatalogTypeConvertersTest`、快照／仓库／Debug Schema | `ModelParametersScreenTest`、Atlas／Catalog／Favorite／Debug DB、详情／对比及返回 |
 | 榜单 | `BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkResultPresentationTest`、`BenchmarkViewModelTest` | `BenchmarkRankingDatabaseTest`、`BenchmarkScreenTest`、`BenchmarkRefreshTest`、`BenchmarkReentryTest`、`BenchmarkSharedTransitionTest`／`BenchmarkSharedTransitionReducedMotionTest`；刷新协调加 `ModelRepositoryTest`／模型列表 ViewModel，共用提醒加 `CatalogStatusNoticeTest`；入口或底栏变化加外壳／导航／详情返回 |
 | 导航／共享转场 | `NavigationGeometryTest`、`NavigationScrollBehaviorTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest`、`ModelAtlasAppTest` | `ModelDetailNavigationTest`、`ModelSharedTransitionTest`／`ModelSharedTransitionReducedMotionTest`、`ModelSeekableTransitionTest`，按影响加收藏／RTL／恢复 |
 | Debug 数据库／双版本 | `DebugDatabaseSchemaTest`、`DebugDatabaseViewModelTest`、`DebugDatabaseStoreTest`、`DebugDatabaseScreenTest`、`DebugFeatureTest` | 外壳、真实 Room 冲突／级联／重开；构建隔离／安装变化按[双版本说明](debug-release-coexistence.md)检查 Release |
-| 旧评测协议 | `BenchmarkUpdateTest`、`BenchmarkSyncRunnerTest`、`BenchmarkHttpSourceTest`、`BenchmarkIntegrationTest` | 仅兼容路径变动时运行，不作为当前 Atlas／榜单固定套件，见[旧契约](archive/legacy-benchmarks.md) |
+
+### 测试维护边界
+
+- 沿用 JUnit4、协程虚拟时间／显式 fake、设备 Compose 语义与像素断言、真实 Room／SQLite 集成；不额外引入 Mock、Robolectric 或截图插件。Hilt 提供生产依赖，Screen 测试继续直接传状态，Route 测试使用已有工厂，不为清理改写测试架构。
+- 旧整数版本评测的三类单元、一类集成、v2/v3 样本与归属许可均已删除；Models.dev 测试只保留当前服务商接口，规范模型／成绩用 Atlas DTO 与发布包。不保留仅为废弃协议服务的辅助代码。
+- Room KSP 直接检查生产数据库；不再复制一份未使用的测试数据库或单独配置 Room 的 `kspTest`。真实事务、回滚、文件重开、收藏保留由当前 Atlas／Catalog／Favorite 集成测试覆盖。
+- 只合并同一行为的重复断言／准备逻辑；业务单元、数据库事务与设备 UI 属于不同边界，不因名称类似就删掉。当前仍使用的价格条件、查询恢复、MIME 投影、Atlas 缓存关联修正及零动画回归继续保留。
+- 不保留低于应用 minSdk、永远无法执行的设备用例。发现数量与源码不符时可用 runner 的 `-e log true` 列举实际用例并核对 SDK 过滤；该模式不运行测试，即使返回 `OK` 也不能作为通过证据。
+- 页面导航测试先满足当前可见性规则：目录向下浏览隐藏底栏后，反向轻滑唤回再点击，不通过未合并语义树命中不可见导航来绕过行为。
 
 ### 关键断言（不是执行记录）
 
-- 字段／存储：null、空、false、零不混淆；规范模型／服务分开；回滚、文件重开、并发收藏、显式关联；编译 Schema fake 不能替代真实 SQLite 测试。
+- 字段／存储：null、空、false、零不混淆；规范模型／服务分开；回滚、文件重开、并发收藏、显式关联；生产 KSP 编译不能替代真实 SQLite 测试。
 - 参数量：BigDecimal 高精度往返，真实稠密／MoE／仅激活／仅组件／未披露，不推算；非法数值／来源拒绝；UI 只显示总量／激活量，切标签／替换／恢复正确。
 - 详情评测：数值一位小数与文本原样、英文 A–Z、同名按未舍入数值降序、平分稳定、文本／缺失置后、全部配置及下标身份保留；不要把 UI 舍入值当原值。
 - 榜单：明确版本按实际版本隔离，`unspecified` 定义接受缺失／不同版本并合榜，指标／单位／唯一关联仍严格；每模型最高原值、同分并列、下架／非 LLM／未匹配过滤；文本／未知方向／低分更优不在榜单展示但详情原记录仍保留。旧 Atlas 缓存离线通过榜单或详情入口修复关联，版本／配置／收藏／release 不变、歧义不套定义、手工成绩不变及文件重开；真实随包 HLE 为 84 个数值 LLM 模型（仅当前快照）。局部轴边界、品牌色、pts／完整单位读屏、模型名后档位。

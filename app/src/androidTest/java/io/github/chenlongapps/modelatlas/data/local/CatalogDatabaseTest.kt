@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.data.local
 
 import androidx.room3.Room
+import androidx.room3.withReadTransaction
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -29,28 +30,18 @@ class CatalogDatabaseTest {
 
     @After fun close() = database.close()
 
-    @Test fun benchmarkSnapshotsAreAtomicVersionedAndDoNotOverwriteExistingOnInitialization() = runBlocking {
-        val scores = database.benchmarkScoreDao()
-        val existing = BenchmarkScoreEntity("existing", "model", "bench", 1.0)
-        scores.upsert(existing)
-        scores.initialize(1, listOf(BenchmarkScoreEntity("sample", "model", "bench", 2.0)))
-        assertEquals(0L, scores.version())
-        assertEquals(listOf(existing), scores.observeForModel("model").first())
-        assertTrue(scores.replaceIfNewer(2, emptyList()))
-        assertEquals(2L, scores.version())
-        assertTrue(scores.observeForModel("model").first().isEmpty())
-        scores.initialize(1, listOf(existing))
-        assertEquals(false, scores.replaceIfNewer(1, listOf(existing)))
-        assertTrue(scores.observeForModel("model").first().isEmpty())
-        try {
-            scores.replaceIfNewer(3, listOf(existing, existing))
-            throw AssertionError("duplicate key must fail")
-        } catch (_: android.database.sqlite.SQLiteConstraintException) { }
-        assertEquals(2L, scores.version())
-        assertTrue(scores.observeForModel("model").first().isEmpty())
+    @Test fun databaseContainsOnlyCurrentBusinessTables() = runBlocking {
+        val tables = database.withReadTransaction {
+            usePrepared("SELECT name FROM sqlite_master WHERE type = 'table' " +
+                "AND name NOT LIKE 'sqlite_%' AND name NOT IN ('room_master_table', 'android_metadata')") { statement ->
+                buildSet { while (statement.step()) add(statement.getText(0)) }
+            }
+        }
+        assertEquals(setOf("models", "providers", "model_offerings", "favorites", "benchmark_scores",
+            "benchmark_definitions", "catalog_release"), tables)
     }
 
-    @Test fun independentBenchmarkScoresSurviveCatalogReplacementAndPreserveConfigurations() = runBlocking {
+    @Test fun manualScoresSurvivePartialCatalogEditsAndPreserveConfigurations() = runBlocking {
         val scores = database.benchmarkScoreDao()
         val first = BenchmarkScoreEntity(
             id = "score-1", modelId = "model", benchmarkId = "bench-v1", score = 0.003,

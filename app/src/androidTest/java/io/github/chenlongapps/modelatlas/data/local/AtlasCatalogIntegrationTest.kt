@@ -37,7 +37,7 @@ class AtlasCatalogIntegrationTest {
     private fun database() = Room.inMemoryDatabaseBuilder<CatalogDatabase>(context).setDriver(AndroidSQLiteDriver()).build()
     private suspend fun bundled() = HttpAtlasDataSource(context, OkHttpClient(), Dispatchers.IO).bundled()
     private fun repository(db: CatalogDatabase, client: OkHttpClient) = DefaultModelRepository(
-        DataModule.api(client), RoomCatalogStore(db.catalogDao(), db.benchmarkScoreDao()),
+        DataModule.api(client), RoomCatalogStore(db.catalogDao()),
         CatalogMapper(), Clock.systemUTC(), Dispatchers.IO, HttpAtlasDataSource(context, client, Dispatchers.IO),
     )
 

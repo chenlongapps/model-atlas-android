@@ -5,6 +5,26 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 删除旧协议并整理测试
+
+- 范围：不再保留旧整数版本评测兼容。删除旧下载／清单／快照／同步实现、`benchmark_version` Entity／表及专用 DAO 接口、三类旧单元测试、一类旧集成测试、全部 v2/v3 样本和 DeepSeek 归属／MIT；旧协议说明仅作历史归档。当前 Atlas 下载共用的限长读取迁为 `readAtlasBytes`，保留空文件／精确上限／跨缓冲区／未知响应长度／不安全 URL／取消及失败测试，不因旧目录删除丢掉当前保护。
+- 测试整理：检查四个测试 source set 的入口、辅助代码、资源引用、重复行为、忽略与真实时间等待；删除未引用的重复测试数据库及 Room `kspTest`，由生产 Room KSP 与真实数据库集成测试承担校验。删除 Models.dev 废弃模型端点的解析入口／合成样本与旧内嵌成绩 DTO；共享的规范字段载体仍供 Atlas 映射使用。仓库 fake 改为直接使用 Atlas DTO，合并两项重复的内容刷新／失败重试测试；服务商 JSON、真实 Atlas 单元样本加载与设备页面样本准备分别共用辅助函数。不按名称相似度删跨层测试，保留当前查询恢复、价格条件、缓存关联修正、导航／转场及零动画回归。
+- 构建过程：首轮编译暴露生产 Atlas 对旧限长读取函数的引用，次轮暴露两份设备样本辅助代码的同类引用；迁移生产函数并合并设备样本准备后修复，不将前两轮记为测试通过。最终全量单元 53 类／374 项通过，0 失败／错误／忽略；Debug 应用／测试 APK 构建、Debug Lint（73 条 warning、无 error）、本地文档链接和 `git diff --check` 通过。单元报告见 `app/build/reports/tests/testDebugUnitTest/`，Lint 见 `app/build/reports/lint-results-debug.html`。
+- 资源／Schema：KSP 重新导出 Schema v1，业务表仅删除旧版本表，其余七表不改；检查应用和测试 APK 均无旧协议样本／归属许可，当前 Atlas 发布原字节与 Models.dev 许可不变。未启用迁移、破坏性重建或清库；旧结构开发安装可能无法直接打开，沿用既有未发布基线约定。
+- 首批设备：API 37／`emulator-5554`，显式全量 runner 实际声明 `numtests=368`；第 149 项开始后连接中断、宿主 adb 退出 255，之后设备列表为空，仅计明确结束的 148 项（145 通过、3 失败），不计整批完成。重新启动同一 AVD、未冷启动／清数据／卸载／重建，复用应用与测试 APK，定向复跑三项仍全部失败。两项为过时测试准备：`AppearanceNavigationTest#systemBackKeepsCatalogPositionAndSourceEntryStillWorks`、`DebugFeatureTest#settingsAndDebugDoubleClicksDoNotResetCatalog` 在滚动隐藏底栏后直接点击；改为真实反向轻滑后记录位置，重建测试 APK 后两项及 RTL 对应项均通过，不改导航生产逻辑。
+- 发现数核对：runner 的 `-e log true` 仅列举、不计为执行；定位到源码第 369 项 `ModelAtlasThemeTest#olderAndroidFallsBackToFixedPalette` 因限定 API ≤30 永远不满足当前 minSdk 33，删除该失效用例及冗余 API 31 下限注解，当前源码与可发现范围均为 368 项。
+- 保留失败：`DebugDatabaseScreenTest#visibleKeyboardConsumesFirstBackWithoutDiscardingDraftThenNextBackPrompts` 在原 Espresso 返回和临时替换的系统 `input keyevent KEYCODE_BACK` 下都在“第一次返回不应弹出放弃确认”处失败；恢复原测试，不删断言、不添加 Ignore，也不将其归因于注入方式。另记 TODO，应用 IME／返回行为不在本次清理中顺带更改；后三批按未完成及受影响类补跑，原失败及中断事实保留。
+- 补跑：同一应用 APK、重建后的测试 APK，三批显式 runner 分别实际完成 73 项（69 通过、4 失败）、80 项（全通过）、87 项（全通过）。第一批键盘用例在进入数据库等待处超时，未到返回断言，不能据此抹掉之前独立复跑的返回失败；其余三项均在 `DebugFeatureTest`，原 APK 定向三项全部再次失败。查明并修正测试假设：Debug 已由四栏变五栏，横滑链路漏过评测页；调试页滚动隐藏底栏后未先唤回便点击；底部避让检查在底栏已隐藏后才读取其边界。增加完整五页断言、反向轻滑及显示时的实测边界，不改生产行为、不绕过不可见语义。
+- 最终设备范围：仅为上述测试修改重建／安装测试 APK，再执行 `DebugFeatureTest` 全类，实际 `numtests=11`、`OK (11 tests)`。按当前源码的 40 类／368 个方法去重核对：首批未受影响的 13 类／128 项通过，后三批及最后 Debug 类的最新结果覆盖另外 27 类／240 项（239 通过、1 失败），合计 **367 通过、1 失败、0 未执行**；不是单次全绿，不把重复用例累加，不把显式 runner 冒充 Gradle connected 报告。末轮 Debug Lint 仍通过，原单元 53 类／374 项不受后续设备测试修改影响。
+- 边界：保留键盘返回问题待另行处理，未执行 Release、线上真实 HTTPS 或真机／真实 TalkBack 验收；本轮未操作后续连接的真机。原始 runner 输出为临时证据，不保证永久存在；已有发布待验收项不擅自勾选。
+
+### 2026-11-11 清理旧评测来源归属
+
+- 范围：正式应用移除旧 `benchmark-attributions.json`、`third_party/deepseek-r1/MIT.txt` 和来源页的 DeepSeek 历史声明／读取逻辑；当前 Atlas 发布包、模型／成绩、Models.dev MIT 与数据同步不变。旧归属原字节移至 `src/androidTest/assets/benchmark-contract-v2/`，MIT 移至测试 assets 共用目录，归属解析类型移至 `src/test/`，仅供兼容回归；文档及来源页测试同步更新。
+- 单元与构建：`BenchmarkSyncRunnerTest` 全类 6 项通过，0 失败／错误／忽略；Debug 应用／测试 APK、Debug Lint、`git diff --check` 通过。检查 APK 确认不含旧归属／DeepSeek MIT，仍含 Atlas 模型和 Models.dev 许可；迁移的归属及 MIT 与原文件字节一致。单元报告见 `app/build/reports/tests/testDebugUnitTest/`，Lint 见 `app/build/reports/lint-results-debug.html`。
+- 设备：启动已有 AVD，API 37／`emulator-5554`，同轮 APK 安装后显式 runner 实际 `numtests=4`、`OK (4 tests)`；范围为 `ModelAtlasAppTest` 的 `settingsOpensStandaloneSourcePageWithPricesAndBundledLicense`、`sourcePageSystemBackPreservesSelectedTabAndCatalogPosition`、`sourcePageAndScrollPositionSurviveStateRestoration`、`sourcePageSupportsDarkThemeLargeFontAndRtl`，覆盖资源不随正式 APK 打包、当前说明／许可可读、按钮与系统返回、列表位置／重建恢复及深色大字 RTL。显式 runner 不更新 Gradle connected 报告。
+- 边界：未清数据、卸载或重建模拟器；未执行全量回归、Release、线上 HTTPS、真机视觉或真实 TalkBack 验收，既有发布待验收项保留。
+
 ### 2026-11-11 unspecified 评测定义放宽成绩版本
 
 - 范围：定义版本为 `unspecified` 时，名称／指标唯一匹配后接受缺失或任意明确的成绩版本，合并为同一参考榜单；其他定义保留显式／兼容版本校验与实际版本分榜，单位／方向／LLM／有限数值等过滤不变。原始版本及全部配置不改写，每模型仍取最高原始数值；总览提示版本／配置可能不同，来源说明同步更新。

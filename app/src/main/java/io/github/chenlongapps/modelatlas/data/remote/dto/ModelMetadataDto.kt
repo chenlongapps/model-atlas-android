@@ -29,17 +29,3 @@ data class ModelLinkDto(
     val label: String? = null,
     val type: String? = null,
 )
-
-@Serializable
-data class ModelBenchmarkDto(
-    val name: String,
-    val score: Double,
-    val metric: String? = null,
-    val source: String? = null,
-    val date: String? = null,
-    val version: String? = null,
-    val variant: String? = null,
-    val dataset: String? = null,
-    val harness: String? = null,
-    val effort: String? = null,
-)

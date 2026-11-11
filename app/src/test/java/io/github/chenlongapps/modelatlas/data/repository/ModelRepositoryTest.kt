@@ -13,9 +13,7 @@ import io.github.chenlongapps.modelatlas.data.remote.atlas.*
 import kotlinx.serialization.json.JsonPrimitive
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevApi
 import io.github.chenlongapps.modelatlas.data.remote.dto.CostDto
-import io.github.chenlongapps.modelatlas.data.remote.dto.ModelDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelLimitDto
-import io.github.chenlongapps.modelatlas.data.remote.dto.ModelBenchmarkDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelOfferingDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ProviderDto
 import java.io.IOException
@@ -45,6 +43,7 @@ import retrofit2.Response
 @OptIn(ExperimentalCoroutinesApi::class)
 class ModelRepositoryTest {
     private val api = FakeApi()
+    private var models = mapOf("model-key" to AtlasModelDto(schema = 2, name = "Model"))
     private val store = FakeStore()
     private val clock = Clock.fixed(Instant.parse("2026-10-19T00:00:00Z"), ZoneOffset.UTC)
 
@@ -76,6 +75,7 @@ class ModelRepositoryTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
         val previous = store.snapshot
+        models = models.mapValues { (_, model) -> model.copy(name = "Updated") }
         api.providerFailure = IOException("offline")
         try {
             repository.refresh()
@@ -84,6 +84,10 @@ class ModelRepositoryTest {
             assertEquals(1, store.writes)
             assertEquals(previous, store.snapshot)
         }
+        api.providerFailure = null
+        assertTrue(repository.refresh())
+        assertEquals("Updated", store.snapshot!!.models.single().name)
+        assertEquals(2, store.writes)
     }
 
     @Test fun concurrentRefreshesShareOneFetchAndCommittedResultThenNextRefreshFetchesAgain() = runTest {
@@ -231,7 +235,7 @@ class ModelRepositoryTest {
     }
 
     @Test fun successfulEmptyResponsesAreNotErrors() = runTest {
-        api.models = emptyMap()
+        models = emptyMap()
         api.providers = emptyMap()
         assertEquals(true, repository(StandardTestDispatcher(testScheduler)).refresh())
         assertEquals(1, store.writes)
@@ -242,8 +246,8 @@ class ModelRepositoryTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         assertEquals(false, repository.hasLocalCatalog())
         repository.refresh()
-        api.models = api.models.mapValues { (_, model) -> model.copy(name = "Updated") }
-        api.models = api.models + ("new-key" to ModelDto("new", "New"))
+        models = models.mapValues { (_, model) -> model.copy(name = "Updated") }
+        models = models + ("new-key" to AtlasModelDto(2, "New"))
         assertTrue(repository.refresh())
         assertEquals(setOf("model-key", "new-key"), store.snapshot!!.models.map { it.id }.toSet())
         assertEquals("Updated", store.snapshot!!.models.first { it.id == "model-key" }.name)
@@ -268,14 +272,14 @@ class ModelRepositoryTest {
     @Test fun modelDeletionAndEqualCountReplacementAreCommittedAutomatically() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
-        val originalModels = api.models
-        listOf(emptyMap(), mapOf("replacement" to ModelDto("replacement", "Replacement"))).forEachIndexed { index, models ->
-            api.models = models
+        val originalModels = models
+        listOf(emptyMap(), mapOf("replacement" to AtlasModelDto(2, "Replacement"))).forEachIndexed { index, replacement ->
+            models = replacement
             assertTrue(repository.refresh())
-            assertEquals(models.keys, store.snapshot!!.models.map { it.id }.toSet())
+            assertEquals(replacement.keys, store.snapshot!!.models.map { it.id }.toSet())
             assertEquals(index + 2, store.writes)
         }
-        api.models = originalModels
+        models = originalModels
         assertTrue(repository.refresh())
         assertEquals(4, store.writes)
     }
@@ -283,7 +287,7 @@ class ModelRepositoryTest {
     @Test fun metadataChangesAreCommittedSilentlyWithoutPendingUpdate() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
-        api.models = api.models.mapValues { (_, model) -> model.copy(
+        models = models.mapValues { (_, model) -> model.copy(
             name = "Updated", type = "embedding", limit = ModelLimitDto(context = 200_000),
             openWeights = true, license = "MIT", lastUpdated = "2026-10-21",
         ) }
@@ -318,10 +322,10 @@ class ModelRepositoryTest {
     @Test fun consecutiveRefreshesApplyLatestFullSnapshotWithoutStagedData() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
-        val originalModels = api.models
-        api.models = api.models + ("new-key" to ModelDto("new", "New"))
+        val originalModels = models
+        models = models + ("new-key" to AtlasModelDto(2, "New"))
         assertTrue(repository.refresh())
-        api.models = originalModels.mapValues { (_, model) -> model.copy(name = "Updated") }
+        models = originalModels.mapValues { (_, model) -> model.copy(name = "Updated") }
         assertTrue(repository.refresh())
         assertEquals("Updated", store.snapshot!!.models.single().name)
         assertEquals(3, store.writes)
@@ -331,7 +335,7 @@ class ModelRepositoryTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
         val previous = store.snapshot
-        api.models = api.models.mapValues { (_, model) -> model.copy(name = "Updated") }
+        models = models.mapValues { (_, model) -> model.copy(name = "Updated") }
         listOf(IllegalStateException("disk"), CancellationException("cancelled")).forEach { failure ->
             store.writeFailure = failure
             try {
@@ -350,50 +354,16 @@ class ModelRepositoryTest {
         assertEquals(2, store.writes)
     }
 
-    @Test fun manualRefreshStillCommitsContentOnlyChanges() = runTest {
-        val repository = repository(StandardTestDispatcher(testScheduler))
-        repository.refresh()
-        api.models = api.models.mapValues { (_, model) -> model.copy(name = "Updated") }
-        assertTrue(repository.refresh())
-        assertEquals("Updated", store.snapshot!!.models.single().name)
-        assertEquals(2, store.writes)
-    }
-
     @Test fun refreshCanClearCatalog() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
-        api.models = emptyMap()
+        models = emptyMap()
         api.providers = emptyMap()
         assertTrue(repository.refresh())
         assertTrue(store.snapshot!!.isEmpty)
     }
 
-    @Test fun failedRefreshPreservesDatabaseAndCanBeRetriedAfterWriteFailure() = runTest {
-        val repository = repository(StandardTestDispatcher(testScheduler))
-        repository.refresh()
-        val previous = store.snapshot
-        api.models = mapOf("new-key" to ModelDto("new", "New"))
-        api.providerFailure = IOException("offline")
-        try {
-            repository.refresh()
-            error("Expected network failure")
-        } catch (_: IOException) {
-            assertEquals(previous, store.snapshot)
-        }
-        store.writeFailure = IllegalStateException("disk")
-        api.providerFailure = null
-        try {
-            repository.refresh()
-            error("Expected write failure")
-        } catch (_: IllegalStateException) {
-            assertEquals(previous, store.snapshot)
-        }
-        store.writeFailure = null
-        assertTrue(repository.refresh())
-        assertEquals("New", store.snapshot!!.models.single().name)
-    }
-
-    @Test fun firstLocalReadImportsRealBundleOnceWithoutNetworkAndPreservesLocalChangesOnReopen() = runTest {
+    @Test fun firstLocalReadImportsBundleOnceWithoutNetworkAndPreservesLocalChangesOnReopen() = runTest {
         var imports = 0
         val source = object : AtlasDataSource {
             override suspend fun fetch(): AtlasRelease = error("No network on local read")
@@ -412,7 +382,7 @@ class ModelRepositoryTest {
     }
 
     @Test fun committedEmptyReleaseIsAvailableOfflineAndDoesNotReimportBundle() = runTest {
-        api.models = emptyMap()
+        models = emptyMap()
         api.providers = emptyMap()
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
@@ -430,21 +400,21 @@ class ModelRepositoryTest {
     @Test fun benchmarkAndModelChangesAreCommittedTogetherWithoutConfirmation() = runTest {
         val repository = repository(StandardTestDispatcher(testScheduler))
         repository.refresh()
-        api.models = api.models.mapValues { (_, m) -> m.copy(benchmarks = listOf(
-            ModelBenchmarkDto("Bench", 1.0, version = "v1", effort = "high", variant = "no tools"),
+        models = models.mapValues { (_, m) -> m.copy(benchmarks = listOf(
+            AtlasBenchmarkScoreDto("Bench", JsonPrimitive(1.0), version = "v1", effort = "high", variant = "no tools"),
         )) }
         assertTrue(repository.refresh())
         val score = store.snapshot!!.scores!!.single()
         assertEquals("high", score.reasoningEffort)
         assertEquals("v1", score.version)
-        api.models = api.models + ("new/model" to ModelDto("id", "New"))
-        api.models = api.models.mapValues { (_, m) -> m.copy(benchmarks = m.benchmarks?.map { it.copy(score = 2.0) }) }
+        models = models + ("new/model" to AtlasModelDto(2, "New"))
+        models = models.mapValues { (_, m) -> m.copy(benchmarks = m.benchmarks?.map { it.copy(score = JsonPrimitive(2.0)) }) }
         assertTrue(repository.refresh())
         assertEquals(2.0, requireNotNull(store.snapshot!!.scores!!.single().score), 0.0)
         assertEquals(2, store.snapshot!!.models.size)
     }
 
-    @Test fun invalidAtlasReleaseKeepsLocalDataAndDoesNotFallBackToOldModelEndpoint() = runTest {
+    @Test fun invalidAtlasReleasePreservesEntireLocalSnapshot() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         repository(dispatcher).refresh()
         val previous = store.snapshot
@@ -500,15 +470,7 @@ class ModelRepositoryTest {
 
     private fun release() = AtlasRelease(
         AtlasManifest(1, "sha256:test", "a".repeat(40), "2026-11-06T00:00:00Z", emptyMap()),
-        api.models.mapValues { (_, m) -> AtlasModelDto(
-            schema = 2, name = m.name, description = m.description, family = m.family, type = m.type,
-            knowledge = m.knowledge, releaseDate = m.releaseDate, lastUpdated = m.lastUpdated,
-            openWeights = m.openWeights, license = m.license, modalities = m.modalities, limit = m.limit,
-            capabilities = AtlasCapabilitiesDto(AtlasSupportDto(m.reasoning), AtlasSupportDto(m.toolCall), m.temperature),
-            weights = m.weights, links = m.links, benchmarks = m.benchmarks?.map { b -> AtlasBenchmarkScoreDto(
-                b.name, JsonPrimitive(b.score), b.metric, b.source, b.date, b.version, b.variant, b.dataset, b.harness, b.effort,
-            ) },
-        ) }, emptyMap(), AtlasTranslationsDto(),
+        models, emptyMap(), AtlasTranslationsDto(),
     )
 
     private suspend fun tryRefresh(repository: ModelRepository): CatalogRateLimitException {
@@ -529,7 +491,6 @@ class ModelRepositoryTest {
     }
 
     private class FakeApi : ModelsDevApi {
-        var models = mapOf("model-key" to ModelDto("remote-model", "Model"))
         var providers = mapOf("provider-key" to ProviderDto("remote-provider", "API", mapOf(
             "offering-key" to ModelOfferingDto("remote-offering", "Model"),
         )))

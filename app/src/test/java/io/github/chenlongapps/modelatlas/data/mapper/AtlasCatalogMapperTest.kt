@@ -6,8 +6,7 @@ import io.github.chenlongapps.modelatlas.data.local.ModelListRow
 import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingRecord
 import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingScoreRecord
 import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingModel
-import io.github.chenlongapps.modelatlas.data.remote.atlas.AtlasReleaseLoader
-import java.io.File
+import io.github.chenlongapps.modelatlas.data.remote.atlas.bundledAtlasRelease
 import io.github.chenlongapps.modelatlas.data.remote.atlas.atlasFiles
 import io.github.chenlongapps.modelatlas.data.remote.atlas.atlasRelease
 import kotlinx.coroutines.test.runTest
@@ -70,7 +69,7 @@ class AtlasCatalogMapperTest {
     }
 
     @Test fun bundledHleIncludesUnversionedNumericModelsInOneReferenceBoard() = runTest {
-        val release = AtlasReleaseLoader { path, _ -> File("src/main/assets/atlas/$path").readBytes() }.load()
+        val release = bundledAtlasRelease()
         val snapshot = CatalogMapper().mapAtlas(release, emptyMap(), 1, 1)
         val models = snapshot.models.associateBy { it.id }
         val boards = snapshot.definitions!!.map { definition -> BenchmarkRankingRecord(definition,
@@ -98,7 +97,7 @@ class AtlasCatalogMapperTest {
     }
 
     @Test fun actualGeminiMimeListProjectsToFiveCategoriesButStoredFormatsAreIntact() = runTest {
-        val release = AtlasReleaseLoader { path, _ -> File("src/main/assets/atlas/$path").readBytes() }.load()
+        val release = bundledAtlasRelease()
         val snapshot = CatalogMapper().mapAtlas(release, emptyMap(), 1, 1)
         val model = snapshot.models.first { it.id == "google/gemini-2.0-flash" }
         assertEquals(29, model.inputModalities!!.size)

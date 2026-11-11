@@ -1,6 +1,5 @@
 package io.github.chenlongapps.modelatlas.data.remote.atlas
 
-import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.SerializationException
@@ -9,8 +8,7 @@ import org.junit.Test
 
 class AtlasReleaseLoaderTest {
     @Test fun actualPublishedBytesParseWithPythonManifestAndNoInnerModelIds() = runTest {
-        val root = File("src/main/assets/atlas")
-        val release = AtlasReleaseLoader { path, limit -> root.resolve(path).readBytes().also { assertTrue(it.size <= limit) } }.load()
+        val release = bundledAtlasRelease()
         assertEquals("27479e48258332fe988c2d06233c86d96bef4c83", release.manifest.gitCommit)
         assertEquals(855, release.models.size)
         assertEquals(11, release.benchmarks.size)

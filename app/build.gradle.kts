@@ -108,8 +108,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
-    // 测试用 Schema 的独立编译校验；生产数据库使用上方的 ksp 配置。
-    kspTest(libs.androidx.room3.compiler)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.kotlinx.coroutines.test)

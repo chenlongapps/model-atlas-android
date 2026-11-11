@@ -3,8 +3,12 @@ package io.github.chenlongapps.modelatlas.data.mapper
 import io.github.chenlongapps.modelatlas.data.local.model.InterleavedLocal
 import io.github.chenlongapps.modelatlas.data.remote.ModelsDevParser
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelDto
+import io.github.chenlongapps.modelatlas.data.remote.dto.ModelLimitDto
+import io.github.chenlongapps.modelatlas.data.remote.dto.ModelLinkDto
+import io.github.chenlongapps.modelatlas.data.remote.dto.ModelWeightDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ModelOfferingDto
 import io.github.chenlongapps.modelatlas.data.remote.dto.ProviderDto
+import io.github.chenlongapps.modelatlas.testing.modelsDevProvidersJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -13,14 +17,18 @@ import org.junit.Test
 class CatalogMapperTest {
     private val mapper = CatalogMapper()
 
-    @Test fun mapsFullFixturesWithoutMixingCanonicalAndOfferingValues() {
+    @Test fun mapsCanonicalValuesAndProviderFixtureWithoutMixingServiceFields() {
         val parser = ModelsDevParser()
         val snapshot = mapper.map(
-            parser.parseModels(fixture("models")), parser.parseProviders(fixture("api")), 100, 200,
+            mapOf("example/atlas" to ModelDto("example/atlas", "Example Atlas",
+                lastUpdated = "2026-10-19", limit = ModelLimitDto(context = 262144),
+                weights = listOf(ModelWeightDto(url = "https://example.org/weights", quantization = "fp8")),
+                links = listOf(ModelLinkDto(url = "https://example.org/card", type = "model_card")))),
+            parser.parseProviders(modelsDevProvidersJson()), 100, 200,
         )
         val model = snapshot.models.first()
         val offering = snapshot.offerings.first()
-        assertEquals(2, snapshot.models.size)
+        assertEquals(1, snapshot.models.size)
         assertEquals(2, snapshot.providers.size)
         assertEquals(4, snapshot.offerings.size)
         assertEquals(100L, model.fetchedAtEpochMillis)
@@ -70,5 +78,4 @@ class CatalogMapperTest {
         assertNull(snapshot.offerings.first().toolCall)
     }
 
-    private fun fixture(name: String) = javaClass.getResource("/modelsdev/$name.json")!!.readText()
 }

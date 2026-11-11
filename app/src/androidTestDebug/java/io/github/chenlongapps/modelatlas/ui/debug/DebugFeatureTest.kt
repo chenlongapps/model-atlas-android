@@ -67,6 +67,8 @@ class DebugFeatureTest {
             }
         }
         compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("model-list").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-debug").performClick().assertIsSelected()
         compose.onNodeWithTag("debug-screen").assertIsDisplayed()
@@ -75,6 +77,8 @@ class DebugFeatureTest {
         compose.onNodeWithContentDescription("返回").assertDoesNotExist()
         assertIndicatorMatches("nav-debug")
         compose.onNodeWithTag("debug-content").performScrollToNode(hasText("手动刷新目录"))
+        compose.onNodeWithTag("debug-content").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         val debugTop = compose.onNodeWithText("手动刷新目录").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("nav-settings").assertIsSelected()
@@ -103,7 +107,7 @@ class DebugFeatureTest {
         compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
     }
 
-    @Test fun fourTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
+    @Test fun fiveTabsSupportSwipesBoundaryPagesAndNavigationDragging() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 ModelAtlasScaffold(debugContent = { padding, _, onOpen -> DebugScreen(state, info, {}, {}, onOpenDatabase = onOpen, bottomOverlayPadding = padding) }) { _, _, _ -> }
@@ -119,6 +123,8 @@ class DebugFeatureTest {
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-compare").assertIsSelected()
+        compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("nav-benchmarks").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithTag("main-pager").performTouchInput { swipeRight() }
@@ -170,6 +176,8 @@ class DebugFeatureTest {
             }
         }
         compose.onNodeWithTag("model-list").performScrollToNode(hasText("测试模型 12"))
+        compose.onNodeWithTag("model-list").performTouchInput { swipe(center, center + Offset(0f, 100f), 400) }
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
         // 测试中间标签靠近模型的一侧：旧的二等分命中范围会把这里误识别为模型。
         compose.onNodeWithTag("nav-compare").performTouchInput {
@@ -193,11 +201,12 @@ class DebugFeatureTest {
             }
         }
         compose.onNodeWithTag("nav-debug").performClick()
+        val navigationTop = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithTag("debug-content").performScrollToNode(hasText("复制诊断信息"))
         compose.onNodeWithTag("debug-content").performTouchInput { swipeUp() }
         val action = compose.onNodeWithText("复制诊断信息").fetchSemanticsNode().boundsInRoot
-        val navigation = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
-        assertTrue(action.bottom <= navigation.top)
+        // 底栏已按滚动规则隐藏，但内容仍须避让其显示时的位置。
+        assertTrue(action.bottom <= navigationTop)
     }
 
     @Test fun readingAndRefreshingDisableBothOperationsAndShowProgress() {

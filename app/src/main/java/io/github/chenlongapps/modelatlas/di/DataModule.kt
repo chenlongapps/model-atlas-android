@@ -115,6 +115,4 @@ object DataModule {
     @Provides
     fun favoriteDao(database: CatalogDatabase) = database.favoriteDao()
 
-    @Provides
-    fun benchmarkScoreDao(database: CatalogDatabase) = database.benchmarkScoreDao()
 }

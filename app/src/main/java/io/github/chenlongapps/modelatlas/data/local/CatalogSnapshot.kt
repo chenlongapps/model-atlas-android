@@ -11,7 +11,7 @@ data class CatalogSnapshot(
     val models: List<ModelEntity>,
     val providers: List<ProviderEntity>,
     val offerings: List<ModelOfferingEntity>,
-    // null 表示旧本地操作只替换三表；非 null 表示同一发布包的全量评测（空列表同样有效）。
+    // null 表示本地目录局部编辑只替换三表；非 null 表示同一发布包的全量评测（空列表同样有效）。
     val scores: List<BenchmarkScoreEntity>? = null,
     val definitions: List<BenchmarkDefinitionEntity>? = null,
     val release: CatalogReleaseEntity? = null,

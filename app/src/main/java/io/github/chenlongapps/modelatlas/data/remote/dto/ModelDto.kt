@@ -3,7 +3,7 @@ package io.github.chenlongapps.modelatlas.data.remote.dto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** models.json 中的规范模型；不包含特定服务商的价格。 */
+/** Atlas 映射复用的规范字段载体；不作为独立远程端点解析，也不包含服务商价格。 */
 @Serializable
 data class ModelDto(
     val id: String,
@@ -25,5 +25,4 @@ data class ModelDto(
     val license: String? = null,
     val weights: List<ModelWeightDto>? = null,
     val links: List<ModelLinkDto>? = null,
-    val benchmarks: List<ModelBenchmarkDto>? = null,
 )

@@ -17,9 +17,8 @@
 | `benchmark_scores`（`BenchmarkScoreEntity`） | `id` | 每条模型评测配置的数值或文本原分数与元数据 |
 | `benchmark_definitions`（`BenchmarkDefinitionEntity`） | `id` | 名称／版本／指标、双语说明、兼容版本、单位／方向／边界及可空 REAL 热度 `popularity` 等定义 |
 | `catalog_release`（`CatalogReleaseEntity`） | `id = 1` | 内容哈希、git 提交、发布时间，不可排序的发布身份 |
-| `benchmark_version`（`BenchmarkVersionEntity`） | `id = 1` | 旧整数版本兼容测试，不参与生产更新判断 |
 
-“三表”指目录模型／服务商／服务，“五表”指 Debug 开放编辑的原业务表，不代表数据库总表数。
+当前数据库共七张业务表；旧整数版本表及相关 DAO 同步接口已删除。“三表”指目录模型／服务商／服务，“五表”指 Debug 开放编辑的原业务表，不代表数据库总表数。
 
 ## 标识、关联与来源
 
@@ -32,9 +31,9 @@
 
 ## 快照事务与查询
 
-- `CatalogSnapshot` 包含三目录表，正式 Atlas 发布须同时含 `scores`／`definitions`／`release`。`readCatalog()` 同事务读取；有 release 才携带新发布附属数据，无 release 的旧三表快照供 Debug／兼容测试，不启动旧同步。
+- `CatalogSnapshot` 包含三目录表，正式 Atlas 发布须同时含 `scores`／`definitions`／`release`。`readCatalog()` 同事务读取；有 release 才携带发布附属数据，无 release 的三表快照供本地目录编辑及定向测试，不代表支持旧远程协议。
 - `replaceCatalog()` 事务顺序为删旧服务／模型、upsert 服务商、写新模型／服务、删不在新快照的服务商；不对服务商用 REPLACE，防意外级联。正式发布还替换成绩／定义／发布状态，并更新仍可用的收藏身份，任一步失败整体回滚。
-- 合法空发布可清目录／成绩，不删除收藏；无 release 的兼容三表替换不碰成绩。Debug 改目录／成绩可能被正式更新覆盖，不加持久覆盖层。
+- 合法空发布可清目录／成绩，不删除收藏；无 release 的三表局部替换不碰成绩。Debug 改目录／成绩可能被正式更新覆盖，不加持久覆盖层。
 - `hasCatalog()` 判断三表任一记录存在，不以 LLM 筛选结果替代；首次导入还检查发布标记，已提交空包不重复初始化。
 - `hasSameContentAs()` 按稳定主键比全部映射内容及发布身份，忽略抓取时间／字典顺序。增删及内容变化均自动提交，相同内容不写库；无待确认候选，后台缓存与列表展示快照的边界见[架构](architecture.md#数据与状态流转)。
 
@@ -61,8 +60,8 @@
 - 原数值 `score` 为可空 REAL／Double，文本 `scoreText` 原样保存、导入二选一；不提取文本中心值或补零。Debug 至少填写一种，有限数值才合法。
 - 可空元数据：`name`、`version`、`variant`、`cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。cost 为 REAL／Double、口径与币种未定，不计算或显示；未知布尔／日期保留，不推断可比性。
 - 新成绩名称取 name、旧记录回退 benchmarkId；唯一匹配才关联定义，否则 `unmapped:` 隔离，不套单位／方向／中文。定义为 `unspecified` 的版本例外及其余匹配规则见[接入契约](atlas-data.md#成绩及本地化)。
-- `reconcileUnspecifiedBenchmarkScores()` 在有正式 release 时，同事务读取定义与成绩；仅对 `atlas:` ID 且名称／指标命中 `unspecified` 定义的成绩重算唯一关联，只写改变的 `benchmarkId`／`unit`／`higherIsBetter` 派生值。原始成绩／版本／配置、定义、目录、收藏及发布身份不改；手工及旧协议成绩不处理，无改变不写库。榜单或详情仓库开始观察时调用，因此旧缓存离线也可恢复关联；不改 Schema、不清数据。
-- 成绩／定义／release 正式同事务替换，详情同事务关联；旧 `models.benchmarks` 已移除，旧版本表仅兼容回归，不复用其递增版本逻辑。
+- `reconcileUnspecifiedBenchmarkScores()` 在有正式 release 时，同事务读取定义与成绩；仅对 `atlas:` ID 且名称／指标命中 `unspecified` 定义的成绩重算唯一关联，只写改变的 `benchmarkId`／`unit`／`higherIsBetter` 派生值。原始成绩／版本／配置、定义、目录、收藏及发布身份不改；手工成绩不处理，无改变不写库。榜单或详情仓库开始观察时调用，因此旧 Atlas 缓存离线也可恢复关联；这是当前数据的派生关联修正，不是旧远程协议兼容，不清数据。
+- 成绩／定义／release 正式同事务替换，详情同事务关联；仅保留成绩 DAO 的逐条读写，目录仓库不再暴露独立成绩 Flow，也不依赖旧递增版本逻辑。
 
 ## 列与本地 JSON
 

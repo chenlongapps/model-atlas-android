@@ -2,7 +2,6 @@ package io.github.chenlongapps.modelatlas.data.remote.atlas
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.github.chenlongapps.modelatlas.data.benchmark.readBenchmarkBytes
 import io.github.chenlongapps.modelatlas.di.IoDispatcher
 import java.io.IOException
 import javax.inject.Inject
@@ -39,7 +38,7 @@ class HttpAtlasDataSource @Inject constructor(
 
     override suspend fun bundled(): AtlasRelease = withContext(dispatcher) {
         AtlasReleaseLoader { path, limit ->
-            context.assets.open("atlas/$path").use { it.readBenchmarkBytes(limit) }
+            context.assets.open("atlas/$path").use { it.readAtlasBytes(limit) }
         }.load()
     }
 }
@@ -66,7 +65,7 @@ internal class AtlasHttpSource(client: OkHttpClient) {
                         ))
                         val body = requireNotNull(it.body)
                         require(body.contentLength() <= limit)
-                        body.byteStream().use { stream -> stream.readBenchmarkBytes(limit) }
+                        body.byteStream().use { stream -> stream.readAtlasBytes(limit) }
                     }
                 }
                 result.fold(continuation::resume, continuation::resumeWithException)

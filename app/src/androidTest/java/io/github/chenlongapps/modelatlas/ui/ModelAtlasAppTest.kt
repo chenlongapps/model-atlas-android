@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.espresso.Espresso.pressBack
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
@@ -320,8 +321,11 @@ class ModelAtlasAppTest {
         compose.onNodeWithText("THE SOFTWARE IS PROVIDED", substring = true).assertExists()
         compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("Benchmark 数据来源与许可"))
         compose.onNodeWithText("Benchmark 数据来源与许可").assertIsDisplayed()
-        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("Copyright (c) 2023 DeepSeek", substring = true))
-        compose.onNodeWithText("Copyright (c) 2023 DeepSeek", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("评测成绩来自 ModelAtlas Data", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("DeepSeek", substring = true).assertDoesNotExist()
+        val assets = InstrumentationRegistry.getInstrumentation().targetContext.assets
+        assertFalse(assets.list("").orEmpty().contains("benchmark-attributions.json"))
+        assertTrue(assets.list("third_party/deepseek-r1").orEmpty().isEmpty())
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         compose.onNodeWithTag("settings-screen").assertIsDisplayed()

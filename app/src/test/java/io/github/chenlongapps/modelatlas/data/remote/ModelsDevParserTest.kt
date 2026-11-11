@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.data.remote
 
 import io.github.chenlongapps.modelatlas.data.remote.dto.InterleavedDto
+import io.github.chenlongapps.modelatlas.testing.modelsDevProvidersJson
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -14,78 +15,7 @@ import org.junit.Test
 
 class ModelsDevParserTest {
     private val parser = ModelsDevParser()
-    private val models by lazy { parser.parseModels(readFixture("models.json")) }
-    private val providers by lazy { parser.parseProviders(readFixture("api.json")) }
-
-    @Test
-    fun parseModelsDecodesCanonicalMetadataAndCapabilities() {
-        val model = models.getValue("example/atlas")
-
-        assertEquals(setOf("example/atlas", "example/embedding"), models.keys)
-        assertEquals("example/atlas", model.id)
-        assertEquals("Example Atlas", model.name)
-        assertEquals("Synthetic model for parser tests", model.description)
-        assertEquals("atlas", model.family)
-        assertEquals(true, model.attachment)
-        assertEquals(true, model.reasoning)
-        assertEquals(true, model.toolCall)
-        assertEquals(false, model.structuredOutput)
-        assertEquals(false, model.temperature)
-        assertEquals("2025-03", model.knowledge)
-        assertEquals("2026-01-15", model.releaseDate)
-        assertEquals("2026-10-19", model.lastUpdated)
-        assertEquals(listOf("text", "image", "audio", "pdf", "video"), model.modalities?.input)
-        assertEquals(listOf("text"), model.modalities?.output)
-        assertEquals(true, model.openWeights)
-        assertEquals(262_144L, model.limit?.context)
-        assertEquals(245_760L, model.limit?.input)
-        assertEquals(16_384L, model.limit?.output)
-        assertEquals("Apache-2.0", model.license)
-    }
-
-    @Test
-    fun parseModelsDecodesWeightsLinksAndBenchmarks() {
-        val model = models.getValue("example/atlas")
-        val weights = requireNotNull(model.weights)
-        val links = requireNotNull(model.links)
-        val benchmarks = requireNotNull(model.benchmarks)
-        val weight = weights.first()
-        val link = links.first()
-        val benchmark = benchmarks.first()
-
-        assertEquals("Example weights", weight.label)
-        assertEquals("https://example.com/weights", weight.url)
-        assertEquals("fp8", weight.quantization)
-        assertEquals("safetensors", weight.format)
-        assertNull(weights.last().label)
-        assertEquals("Model card", link.label)
-        assertEquals("https://example.com/model-card", link.url)
-        assertEquals("model_card", link.type)
-        assertNull(links.last().type)
-        assertEquals("Example benchmark", benchmark.name)
-        assertEquals(95.5, benchmark.score, 0.0)
-        assertEquals("accuracy", benchmark.metric)
-        assertEquals("https://example.com/benchmark", benchmark.source)
-        assertEquals("2026-10-19", benchmark.date)
-        assertEquals("2", benchmark.version)
-        assertEquals("no tools", benchmark.variant)
-        assertEquals("public", benchmark.dataset)
-        assertEquals("example-harness", benchmark.harness)
-        assertEquals(96.0, benchmarks.last().score, 0.0)
-    }
-
-    @Test
-    fun parseModelsKeepsNonLlmTypesAndMissingOutputLimits() {
-        val model = models.getValue("example/embedding")
-
-        assertEquals("embedding", model.type)
-        assertEquals(8192L, model.limit?.context)
-        assertNull(model.limit?.output)
-        assertNull(model.limit?.input)
-        assertNull(model.description)
-        assertNull(model.reasoning)
-        assertNull(model.weights)
-    }
+    private val providers by lazy { parser.parseProviders(modelsDevProvidersJson()) }
 
     @Test
     fun parseProvidersKeepsProviderAndOfferingIdsSeparateFromCanonicalIds() {
@@ -246,18 +176,11 @@ class ModelsDevParserTest {
 
     @Test
     fun explicitNullsRemainNull() {
-        val model = parser.parseModels(
-            """{"model":{"id":"model","name":"Model","description":null,"reasoning":null,"limit":null,"weights":null}}""",
-        ).getValue("model")
         val provider = parser.parseProviders(
             """{"api":{"id":"api","name":"API","api":null,"models":{"m":{"id":"m","name":"M","canonical_model_id":null,"cost":null,"interleaved":null,"reasoning_options":null,"experimental":null}}}}""",
         ).getValue("api")
         val offering = provider.models.getValue("m")
 
-        assertNull(model.description)
-        assertNull(model.reasoning)
-        assertNull(model.limit)
-        assertNull(model.weights)
         assertNull(provider.api)
         assertNull(offering.canonicalModelId)
         assertNull(offering.cost)
@@ -268,17 +191,6 @@ class ModelsDevParserTest {
 
     @Test
     fun unknownFieldsAreIgnoredAtEveryTypedLevel() {
-        val model = parser.parseModels(
-            """
-            {
-              "model": {
-                "id": "model", "name": "Model", "future": {"value": 1},
-                "limit": {"context": 42, "future": true},
-                "benchmarks": [{"name": "Test", "score": 1, "future": []}]
-              }
-            }
-            """.trimIndent(),
-        ).getValue("model")
         val offering = parser.parseProviders(
             """
             {
@@ -301,7 +213,6 @@ class ModelsDevParserTest {
             """.trimIndent(),
         ).getValue("api").models.getValue("model")
 
-        assertEquals(42L, model.limit?.context)
         assertEquals(InterleavedDto.Field("reasoning"), offering.interleaved)
         assertEquals("future-option", offering.reasoningOptions?.single()?.type)
         assertEquals("future-tier", offering.cost?.tiers?.single()?.tier?.type)
@@ -310,9 +221,9 @@ class ModelsDevParserTest {
 
     @Test
     fun limitsCanExceedIntRangeAndModalityNamesCanEvolve() {
-        val model = parser.parseModels(
-            """{"model":{"id":"model","name":"Model","type":"future-type","limit":{"context":4294967296},"modalities":{"input":["future-modality"],"output":[]}}}""",
-        ).getValue("model")
+        val model = parser.parseProviders(
+            """{"api":{"id":"api","name":"API","models":{"model":{"id":"model","name":"Model","type":"future-type","limit":{"context":4294967296},"modalities":{"input":["future-modality"],"output":[]}}}}}""",
+        ).getValue("api").models.getValue("model")
 
         assertEquals(4_294_967_296L, model.limit?.context)
         assertEquals("future-type", model.type)
@@ -322,7 +233,6 @@ class ModelsDevParserTest {
 
     @Test
     fun emptyCatalogsAndProvidersWithoutOfferingsAreValid() {
-        assertTrue(parser.parseModels("{}").isEmpty())
         assertTrue(parser.parseProviders("{}").isEmpty())
         assertTrue(
             parser.parseProviders("""{"api":{"id":"api","name":"API","models":{}}}""")
@@ -333,7 +243,6 @@ class ModelsDevParserTest {
     @Test
     fun malformedJsonAndInvalidTopLevelShapesAreRejected() {
         listOf("not json", "{", "[]", "null", "true").forEach { source ->
-            assertThrows(SerializationException::class.java) { parser.parseModels(source) }
             assertThrows(SerializationException::class.java) { parser.parseProviders(source) }
         }
     }
@@ -341,19 +250,16 @@ class ModelsDevParserTest {
     @Test
     fun requiredIdentifiersNamesAndOfferingMapsCannotBeMissingOrNull() {
         listOf(
-            """{"m":{"name":"Model"}}""",
-            """{"m":{"id":"m"}}""",
-            """{"m":{"id":null,"name":"Model"}}""",
-            """{"m":{"id":"m","name":null}}""",
-        ).forEach { source ->
-            assertThrows(SerializationException::class.java) { parser.parseModels(source) }
-        }
-        listOf(
             """{"api":{"name":"API","models":{}}}""",
             """{"api":{"id":"api","models":{}}}""",
             """{"api":{"id":"api","name":"API"}}""",
             """{"api":{"id":"api","name":"API","models":null}}""",
+            """{"api":{"id":null,"name":"API","models":{}}}""",
+            """{"api":{"id":"api","name":null,"models":{}}}""",
             """{"api":{"id":"api","name":"API","models":{"m":{"name":"Model"}}}}""",
+            """{"api":{"id":"api","name":"API","models":{"m":{"id":"m"}}}}""",
+            """{"api":{"id":"api","name":"API","models":{"m":{"id":null,"name":"Model"}}}}""",
+            """{"api":{"id":"api","name":"API","models":{"m":{"id":"m","name":null}}}}""",
         ).forEach { source ->
             assertThrows(SerializationException::class.java) { parser.parseProviders(source) }
         }
@@ -362,7 +268,7 @@ class ModelsDevParserTest {
     @Test
     fun invalidFieldTypesAreNotSilentlyCoercedToDefaults() {
         assertThrows(SerializationException::class.java) {
-            parser.parseModels("""{"m":{"id":"m","name":"Model","reasoning":[]}}""")
+            parser.parseProviders("""{"api":{"id":"api","name":"API","models":{"m":{"id":"m","name":"Model","reasoning":[]}}}}""")
         }
         assertThrows(SerializationException::class.java) {
             parser.parseProviders(
@@ -370,9 +276,6 @@ class ModelsDevParserTest {
             )
         }
     }
-
-    private fun readFixture(name: String): String =
-        requireNotNull(javaClass.getResource("/modelsdev/$name")).readText()
 
     private fun assertPrice(expected: Double, actual: Double?) {
         assertEquals(expected, requireNotNull(actual), 0.0)

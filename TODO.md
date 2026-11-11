@@ -10,6 +10,8 @@
 
 ## bug
 
+- [ ] API 37 Debug 数据库编辑：软键盘可见时第一次系统返回已隐藏键盘，但同时出现“放弃修改”确认；`DebugDatabaseScreenTest#visibleKeyboardConsumesFirstBackWithoutDiscardingDraftThenNextBackPrompts` 在原 Espresso 和系统 `input keyevent KEYCODE_BACK` 两种注入下均失败。保留严格用例，另行核实 IME／返回派发和实际设备行为，不归入旧协议清理或通过删断言规避。
+
 ## 近期任务
 
 - 暂无新的实现任务；评测共享转场验收见下方。

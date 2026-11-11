@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.data.remote
 
 import io.github.chenlongapps.modelatlas.di.DataModule
+import io.github.chenlongapps.modelatlas.testing.modelsDevProvidersJson
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerializationException
 import mockwebserver3.MockResponse
@@ -16,7 +17,7 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 class ModelsDevApiTest {
     @Test fun requestsOnlyProvidersAndDecodesWithProductionJson() {
         MockWebServer().use { server ->
-            server.enqueue(jsonResponse(fixture("api")))
+            server.enqueue(jsonResponse(modelsDevProvidersJson()))
             server.start()
             val api = api(server)
             runBlocking {
@@ -60,5 +61,4 @@ class ModelsDevApiTest {
     private fun jsonResponse(body: String) = MockResponse.Builder()
         .addHeader("Content-Type", "application/json").body(body).build()
 
-    private fun fixture(name: String) = javaClass.getResource("/modelsdev/$name.json")!!.readText()
 }

@@ -3,7 +3,6 @@ package io.github.chenlongapps.modelatlas.data.local
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
-import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkVersionEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.FavoriteEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
@@ -12,7 +11,7 @@ import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEn
 import io.github.chenlongapps.modelatlas.data.local.entity.CatalogReleaseEntity
 
 @Database(
-    entities = [ModelEntity::class, ProviderEntity::class, ModelOfferingEntity::class, FavoriteEntity::class, BenchmarkScoreEntity::class, BenchmarkVersionEntity::class, BenchmarkDefinitionEntity::class, CatalogReleaseEntity::class],
+    entities = [ModelEntity::class, ProviderEntity::class, ModelOfferingEntity::class, FavoriteEntity::class, BenchmarkScoreEntity::class, BenchmarkDefinitionEntity::class, CatalogReleaseEntity::class],
     version = 1,
     exportSchema = true,
 )
