@@ -10,6 +10,7 @@
 | 调整页面展示字段 | [当前页面字段](page-information.md) |
 | 调整视觉、布局或交互 | [UI/UX 设计规范](Design.md) |
 | 修改分层、状态、导航或转场 | [架构说明](architecture.md) |
+| 接入 LLM API、流式请求、配置与取消 | [LLM API 基础接入](llm-api.md) |
 | 接入模型、评测、中文发布包 | [ModelAtlas Data 契约](atlas-data.md) |
 | 修改服务商解析、能力语义、报价或许可 | [数据源说明](data-source.md) |
 | 修改 Room、目录事务、收藏或 Debug 数据编辑 | [本地目录数据](local-data.md) |

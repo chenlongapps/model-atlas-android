@@ -12,6 +12,7 @@
 | `ui/ModelAtlasApp.kt` | 顶层 Pager、子页面、状态保存、共享转场宿主与底栏避让 |
 | `ui/navigation/` | 玻璃底栏、按实际栏数／RTL 的命中几何、非消费式滚动显隐 |
 | `data/remote/atlas/`、`data/remote/dto/` | Atlas 发布包及 Models.dev 服务商独立 DTO／解析，不包含 UI 或本地主键策略 |
+| `ai/`、`ai/openai/`、`ai/di/LlmModule.kt` | 集中维护独立 LLM 请求契约、OpenAI 兼容普通／流式客户端与 Hilt 绑定，仍属于 `:app`，不参与目录同步或持久化；见 [LLM API](llm-api.md) |
 | `data/mapper/`、`data/model/` | DTO → 本地类型；数据库投影 → 独立应用模型及纯业务规则 |
 | `data/local/` | Room3 实体、JSON 值对象、DAO、事务投影与 `CatalogStore` |
 | `data/repository/`、`di/DataModule.kt` | 请求协调、完整快照比较／提交、Flow、网络／数据库／时钟／IO 绑定 |

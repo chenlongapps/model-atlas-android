@@ -6,6 +6,8 @@
 
 已实现目录、搜索筛选、详情、评测榜单、双模型对比、收藏、离线缓存及外观设置。模型／评测／中文来自 ModelAtlas Data，服务商／价格来自 Models.dev；真实随包与在线更新链路已接通，实际整链 HTTPS 更新仍待验收。
 
+已增加独立 LLM API 基础层，支持可配置 OpenAI 兼容普通／流式多轮文本请求；尚无聊天 UI、凭据持久化、工具调用或 Agent，见 [LLM API](docs/llm-api.md)。
+
 实现查 [docs](docs/README.md)，构建规范查 [AGENTS.md](AGENTS.md)，以往完成项和测试原文查[开发历史](docs/archive/development-history.md)。本文件只维护当前任务；历史通过不代表当前版本已验证，功能完成不代表设备验收完成。
 
 ## bug

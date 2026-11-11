@@ -5,6 +5,22 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 AI 代码集中到 ai 包
+
+- 范围：在现有单 `:app` 模块内，将 LLM 接口／模型／错误集中到 `modelatlas/ai/`，OpenAI 客户端／DTO／SSE 解析迁到 `ai/openai/`，Hilt 模块迁到 `ai/di/`；两类测试同步迁到 `src/test/.../ai/openai/`。仅调整路径、package 和 import，保留现有共享网络／IO 依赖及请求行为，不新建 Gradle 模块或增加功能。
+- 文档：同步 AGENTS、架构说明、LLM 文件表和测试命令；检查当前源码与文档无旧包名／路径引用。
+- 验证：按新包名执行 `:app:testDebugUnitTest --tests 'io.github.chenlongapps.modelatlas.ai.openai.*'`，实际两类／18 项，`OpenAiCompatibleClientTest` 17 项通过，`LlmLiveTest` 1 项因未配置凭据跳过，0 失败／错误；`:app:assembleDebug`（含 Hilt／KSP）、`:app:lintDebug` 和 `git diff --check` 通过。报告见 `app/build/reports/tests/testDebugUnitTest/`、`app/build/reports/lint-results-debug.html`。
+- 边界：此次仅包结构迁移，未重复发起付费线上请求，未重跑全量单元、instrumentation、Release 或真机验收；此前线上验证属于下方基础接入记录，不冒充本轮执行。
+
+### 2026-11-11 LLM API 基础接入
+
+- 范围：新增协议无关 `LlmClient`、内存配置／消息／请求／响应／增量及脱敏错误，OpenAI 兼容普通请求／SSE 客户端和 Hilt 绑定。复用 OkHttp、Kotlinx Serialization、IO dispatcher 及现有测试依赖，无依赖／构建配置、UI、目录、数据库或外观行为修改；不实现聊天 Repository、工具调用或 Agent。
+- 实现：动态完整 API 根路径／Bearer 密钥／模型；有序多轮上下文；限长 SSE 分帧、UTF-8 拆包、尾部 usage、结束标记与异常 EOF；正值可配置超时、响应头／阻塞 body 取消、统一关闭响应。禁止重定向，关闭连接重试并使用 one-shot body，覆盖 OkHttp `503 + Retry-After: 0` follow-up 重放风险。错误不携带响应体、提示词、密钥或底层敏感 cause。
+- 首轮验证：修复 MockWebServer 5 的可空请求 body 和 JUnit4 表达式返回值导致的编译／发现错误。第一次实际执行 16 项有 5 项失败：其中 4 项是协程 debug stack recovery 复制安全异常导致的 cause／对象同一性假设，改为验证全 cause 链脱敏及原始收集方异常；另一项是用 `responseBodyStart` 等待未返回字节的阻塞读取，改为读取前的 ForwardingSource 明确信号。不删取消／脱敏断言。修正后 16 项全过，再增加 `Retry-After: 0` 回归。
+- 最终本地：全量单元实际 55 类／392 项，391 通过、1 跳过（无凭据时的 `LlmLiveTest`），0 失败／错误；其中 `OpenAiCompatibleClientTest` 17 项全部通过。`:app:assembleDebug`、`:app:lintDebug` 通过。报告见 `app/build/reports/tests/testDebugUnitTest/`、`app/build/reports/lint-results-debug.html`。
+- 线上：使用调用方提供的临时凭据，配置 `https://cliproxyapi.chenlong.click/v1/` 与 `gpt-6-luna`，单独执行 `LlmLiveTest#configuredEndpointSupportsNormalAndStreamingMultiTurnRequests`，实际 1 项通过、0 跳过／失败／错误，约 8.7 秒；包含普通请求和带前轮 assistant 消息的流式请求，验证文本、上下文及结束原因。密钥仅经进程环境临时传入，未写源码／文档／Gradle 属性，使用 `--no-configuration-cache --no-daemon`；报告无请求／响应内容。随后全量单元报告会覆盖该独立线上报告，其默认跳过不撤销此次实际线上结果。
+- 边界：OkHttp 在 JVM 单测首次探测 Android 日志平台时输出已有 `Log.isLoggable not mocked` 诊断并回退，不影响线上请求通过；全量测试亦有 DataStore／JDK Unsafe 弃用警告。未运行 instrumentation、Release 或真机验收（本次无 UI／存储变更），不将此次 LLM HTTPS 通过视为目录数据整链 HTTPS 验收，既有待验收项保留。
+
 ### 2026-11-11 删除旧协议并整理测试
 
 - 范围：不再保留旧整数版本评测兼容。删除旧下载／清单／快照／同步实现、`benchmark_version` Entity／表及专用 DAO 接口、三类旧单元测试、一类旧集成测试、全部 v2/v3 样本和 DeepSeek 归属／MIT；旧协议说明仅作历史归档。当前 Atlas 下载共用的限长读取迁为 `readAtlasBytes`，保留空文件／精确上限／跨缓冲区／未知响应长度／不安全 URL／取消及失败测试，不因旧目录删除丢掉当前保护。
