@@ -18,6 +18,8 @@
     <string name="favorite_read_error">无法读取收藏状态，请重试。</string>
     <string name="favorite_write_error">收藏操作未能保存，请重试。</string>
     <string name="nav_settings">设置</string>
+    <string name="navigation_auto_hide_title">底部导航栏自动隐藏</string>
+    <string name="navigation_auto_hide_description">向下滚动时隐藏，反向滚动时显示</string>
     <string name="appearance_title">外观</string>
     <string name="appearance_light">浅色</string>
     <string name="appearance_dark">深色</string>
@@ -32,8 +34,8 @@
     <string name="appearance_preview_body">让每一次探索，都有喜欢的色彩。</string>
     <string name="appearance_preview_button">探索模型</string>
     <string name="appearance_preview_tag">模型能力</string>
-    <string name="appearance_read_error">无法读取外观设置，暂时使用默认主题。请重试。</string>
-    <string name="appearance_write_error">保存失败，已恢复上次保存的外观。</string>
+    <string name="appearance_read_error">无法读取设置，暂时使用默认设置。请重试。</string>
+    <string name="appearance_write_error">保存失败，已恢复上次保存的设置。</string>
     <string name="appearance_loading">正在读取外观设置…</string>
     <string name="model_list_scroll_to_top">回到模型列表顶部</string>
     <string name="model_list_source_notice">模型、评测及中文描述来自 ModelAtlas Data（https://github.com/chenlongapps/model-atlas-data），通过 https://chenlongapps.github.io/model-atlas-data/ 发布；服务商与 API 价格继续来自 Models.dev（https://models.dev/）。模型资料基于 Models.dev 整理。本应用为独立第三方，与数据源及模型提供商无官方隶属关系。研发机构根据模型 ID 的前缀标签展示，未经独立核实。“开放权重”指来源报告训练权重可公开获取，不等于开源或允许商用，具体许可以模型 license 字段为准。</string>

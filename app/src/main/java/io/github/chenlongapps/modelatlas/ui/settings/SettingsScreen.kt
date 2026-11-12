@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -10,15 +11,19 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +32,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -40,6 +46,11 @@ internal fun SettingsScreen(
     onShowDataSource: () -> Unit,
     modifier: Modifier = Modifier,
     onShowAppearance: () -> Unit = {},
+    navigationAutoHideEnabled: Boolean = false,
+    onNavigationAutoHideChange: (Boolean) -> Unit = {},
+    canEdit: Boolean = true,
+    hasReadError: Boolean = false,
+    onRetry: () -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     Scaffold(
@@ -80,6 +91,44 @@ internal fun SettingsScreen(
                         Text(stringResource(R.string.appearance_title), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                         Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null)
                     }
+                }
+            }
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .testTag("settings-navigation-auto-hide")
+                            .toggleable(
+                                value = navigationAutoHideEnabled,
+                                enabled = canEdit,
+                                role = Role.Switch,
+                                onValueChange = onNavigationAutoHideChange,
+                            )
+                            .heightIn(min = 64.dp)
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(stringResource(R.string.navigation_auto_hide_title), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                stringResource(R.string.navigation_auto_hide_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = navigationAutoHideEnabled, onCheckedChange = null, enabled = canEdit)
+                    }
+                }
+            }
+            if (hasReadError) item {
+                Column {
+                    Text(stringResource(R.string.appearance_read_error), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
                 }
             }
             item {

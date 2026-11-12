@@ -5,6 +5,16 @@
 
 ## 整理后追加记录
 
+### 2026-11-12 底部导航栏自动隐藏开关
+
+- 范围：设置首页在外观入口后新增 Material 3 整行 Switch，复用现有轻量圆角表面与主题语义色，不改变全局主题或底栏玻璃样式。默认关闭，旧偏好缺字段同样关闭；开启后整组导航胶囊／AI 按钮复用既有滚动显隐，触摸探索优先保持显示。关闭时恢复显示、重置累计位移，不改变列表阅读位置／底部留白、子页隐藏或聊天输入栏。
+- 存储：复用 `AppearanceSettings`／SettingsRepository／Activity 级 AppearanceViewModel，新增布尔键 `navigation_auto_hide`；字段级原子合并、即时预览、保存失败回滚、读取失败禁写及重试沿用原机制，不新增 DataStore 文件、Room 表或网络请求。
+- 构建／单元：Debug 应用及测试 APK 构建通过；选测 `SettingsRepositoryTest` 6、`AppearanceViewModelTest` 13、`NavigationScrollBehaviorTest` 8，三类／27 项全部通过，0 失败／错误。Debug Lint 通过，0 error、77 warning。随后仅调整 MainActivity 调用缩进与尾逗号，再次构建 Debug 应用／测试 APK 与 Lint 均通过。
+- 首轮设备：现有 API 37／`emulator-5554` 覆盖安装匹配 APK，显式 runner 选择 7 类、报告 `numtests=65`。仅 `SettingsScreenTest#loadingDisablesToggleAndReadErrorOffersRetry` 有完成通过结果，第二项窄屏大字号 RTL 测试开始后模拟器断开，runner 以 255 中断，无最终 OK；宿主模拟器日志报告 QEMU 主循环／CPU 线程无响应。不得将其记为 65 项通过；未清数据或重建模拟器。
+- 最终设备：以 headless 模式重新启动同一模拟器，覆盖安装最终 APK；中断方法定向重跑 `numtests=1`、`OK (1 test)`。随后同一 APK 完整执行所选 7 类，实际 `numtests=65`、`OK (65 tests)`：设置 Screen 4、滚动 13＋零动画 1、外观导航 3、外壳 25、详情导航 3、聊天导航 16 全部通过。覆盖默认关闭／整行单次切换、禁写重试、浅色／深色／模拟器动态配色、320dp 双倍字号 RTL 完整文字和触摸目标、开关即时显隐／阅读位置、触摸探索优先、子页按钮／系统返回及助手预测性返回后的显隐恢复；不将定向复跑重复累加。
+- 真实宿主冒烟／视觉：启动 Debug MainActivity，检查设置页开关默认未选中、文字与说明完整，现有卡片／玻璃导航样式不变；查看浅色设置页截图。点击开启后强制停止应用并重启，回到设置确认仍选中，最后恢复关闭。未修改配色、AI 配置或发送请求；未清数据、卸载或重建模拟器。CLI 截图仍带 347 字节多显示器警告，保留原文件并提取 PNG 图像副本读取。
+- 边界：未渲染 IDE Preview，未人工检查深色／RTL 截图（对应布局有设备自动断言）；未执行全量 instrumentation、Release 构建／Lint 或真机／真实 TalkBack、系统边缘手势、多窗口、跨厂商动态色与备份迁移验收。既有目录缓存与 Debug 数据库 IME 问题不在本轮范围，真机验收继续见 TODO。
+
 ### 2026-11-12 助手 Navigation 3 独立全屏路由
 
 - 范围：按后续确认，将助手从主 Pager 完全移出，圆形 AI 入口由 Tab 改为按钮，push 独立全屏助手路由，隐藏整组底栏并恢复返回按钮。主 Pager 为模型／评测／对比／设置（Debug 追加调试），对比可直接横滑至设置；主界面玻璃外观与紧凑尺寸不变，删除不再使用的跨助手页指示器投影。新增稳定版 Navigation 3 runtime／ui `1.2.1`（版本目录统一管理），不迁移既有详情、榜单或设置子页，不改共享转场控制器、全局主题、数据存储或 LLM 请求协议。

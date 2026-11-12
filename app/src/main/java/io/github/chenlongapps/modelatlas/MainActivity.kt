@@ -61,19 +61,26 @@ class MainActivity : ComponentActivity() {
                     }
                     message?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show() }
                 }
-                if (state.startupComplete) ModelAtlasApp(appearanceContent = { onBack ->
-                    AppearanceScreen(
-                        uiState = state,
-                        onBack = onBack,
-                        onMode = appearance::setMode,
-                        onSystemColors = appearance::useSystemColors,
-                        onPreset = appearance::selectPreset,
-                        onRestoreCustom = appearance::restoreCustomColor,
-                        onHue = appearance::setHue,
-                        onFlush = appearance::flushPending,
-                        onRetry = appearance::retry,
-                    )
-                })
+                if (state.startupComplete) ModelAtlasApp(
+                    navigationAutoHideEnabled = state.appearance.navigationAutoHideEnabled,
+                    onNavigationAutoHideChange = appearance::setNavigationAutoHideEnabled,
+                    settingsEditable = state.canEdit,
+                    settingsReadError = state.hasReadError,
+                    onRetrySettings = appearance::retry,
+                    appearanceContent = { onBack ->
+                        AppearanceScreen(
+                            uiState = state,
+                            onBack = onBack,
+                            onMode = appearance::setMode,
+                            onSystemColors = appearance::useSystemColors,
+                            onPreset = appearance::selectPreset,
+                            onRestoreCustom = appearance::restoreCustomColor,
+                            onHue = appearance::setHue,
+                            onFlush = appearance::flushPending,
+                            onRetry = appearance::retry,
+                        )
+                    },
+                )
             }
         }
     }

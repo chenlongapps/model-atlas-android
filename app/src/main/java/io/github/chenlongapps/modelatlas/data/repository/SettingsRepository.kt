@@ -14,6 +14,9 @@ interface SettingsRepository {
     suspend fun updateAppearance(transform: (AppearanceSettings) -> AppearanceSettings): AppearanceSettings
 
     suspend fun setThemeMode(mode: ThemeMode) = updateAppearance { it.copy(mode = mode) }
+    suspend fun setNavigationAutoHideEnabled(enabled: Boolean) = updateAppearance {
+        it.copy(navigationAutoHideEnabled = enabled)
+    }
     suspend fun useSystemColors() = updateAppearance { it.copy(colorSource = ThemeColorSource.System) }
     suspend fun selectPreset(preset: ThemePreset) = updateAppearance {
         it.copy(colorSource = ThemeColorSource.Preset, preset = preset)

@@ -2,6 +2,12 @@
 
 本文维护外观偏好的状态、持久化与异常契约；页面字段见[字段表](page-information.md#设置页)，尺寸与视觉见[设计规范](Design.md#设置与-debug)。AI 助手及其配置存储分别见[聊天](chat.md)与[配置持久化](ai-configuration.md)，不复用外观仓库；尚无导入导出或应用内备份恢复入口。
 
+## 底栏偏好
+
+- 设置首页提供“底部导航栏自动隐藏”开关，默认关闭；新安装和旧设置缺失该字段时均为关闭。开关即时生效并持久保存，无额外保存按钮。
+- 关闭后主页面不因滚动隐藏底栏；原本已隐藏时恢复显示并清空累计位移，不改变阅读位置或底部留白。开启后复用原有滚动规则，触摸探索开启时仍强制保持显示。子页隐藏和聊天输入栏不受此开关影响，详见[架构](architecture.md#顶层分页与子页面)。
+- 为避免新增并行偏好存储，`AppearanceSettings.navigationAutoHideEnabled` 与外观字段共用现有 DataStore、Activity 级 ViewModel 及字段级原子合并；读失败禁用开关，设置首页可重试，保存失败回滚并提示，不覆盖损坏文件。
+
 ## 配色规则
 
 - 明暗模式为浅色、深色、跟随系统，默认跟随系统；与颜色来源独立。强制明暗也可以使用系统动态色。
@@ -44,7 +50,7 @@ Repository Flow 只代表已持久化值，不包含拖动预览。ViewModel 在
 
 ## 存储和备份边界
 
-文件为应用私有目录 `files/datastore/appearance.preferences_pb`。字段包括明暗模式、颜色来源、预设稳定标识、可空自定义历史色相；不存储系统生成的整套色板。
+文件为应用私有目录 `files/datastore/appearance.preferences_pb`。字段包括明暗模式、颜色来源、预设稳定标识、可空自定义历史色相及 `navigation_auto_hide` 布尔值；不存储系统生成的整套色板。
 
 `data_extraction_rules.xml` 的 cloud backup、device transfer 及旧 `backup_rules.xml` 均排除此外观文件；另独立排除设备绑定的 [AI 配置](ai-configuration.md)，不改变其余数据的备份规则。Debug／Release 使用各自应用沙盒，偏好互不影响。外观设置不新增 Room 表、网络请求或 AI 工具。
 

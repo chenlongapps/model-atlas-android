@@ -94,6 +94,7 @@ class AppearanceViewModel @Inject constructor(private val repository: SettingsRe
     }
 
     fun setMode(mode: ThemeMode) = change { it.copy(mode = mode) }
+    fun setNavigationAutoHideEnabled(enabled: Boolean) = change { it.copy(navigationAutoHideEnabled = enabled) }
     fun useSystemColors() = change { it.copy(colorSource = ThemeColorSource.System) }
     fun selectPreset(preset: ThemePreset) = change { it.copy(colorSource = ThemeColorSource.Preset, preset = preset) }
     fun restoreCustomColor() {

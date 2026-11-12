@@ -115,6 +115,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun ModelAtlasApp(
     modifier: Modifier = Modifier,
+    navigationAutoHideEnabled: Boolean = false,
+    onNavigationAutoHideChange: (Boolean) -> Unit = {},
+    settingsEditable: Boolean = true,
+    settingsReadError: Boolean = false,
+    onRetrySettings: () -> Unit = {},
     appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
     },
@@ -125,6 +130,11 @@ fun ModelAtlasApp(
     val chatState = chatViewModel.uiState.collectAsStateWithLifecycle()
     ModelAtlasScaffold(
         modifier = modifier,
+        navigationAutoHideEnabled = navigationAutoHideEnabled,
+        onNavigationAutoHideChange = onNavigationAutoHideChange,
+        settingsEditable = settingsEditable,
+        settingsReadError = settingsReadError,
+        onRetrySettings = onRetrySettings,
         appearanceContent = appearanceContent,
         chatUiState = chatState,
         onChatInput = chatViewModel::setInput,
@@ -176,6 +186,11 @@ internal fun ModelAtlasScaffold(
     onChatStop: () -> Unit = {},
     onChatClosed: () -> Unit = {},
     touchExplorationEnabled: Boolean = rememberTouchExplorationEnabled(),
+    navigationAutoHideEnabled: Boolean = false,
+    onNavigationAutoHideChange: (Boolean) -> Unit = {},
+    settingsEditable: Boolean = true,
+    settingsReadError: Boolean = false,
+    onRetrySettings: () -> Unit = {},
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
@@ -209,6 +224,11 @@ internal fun ModelAtlasScaffold(
                 compareContent = compareContent,
                 appearanceContent = appearanceContent,
                 touchExplorationEnabled = touchExplorationEnabled,
+                navigationAutoHideEnabled = navigationAutoHideEnabled,
+                onNavigationAutoHideChange = onNavigationAutoHideChange,
+                settingsEditable = settingsEditable,
+                settingsReadError = settingsReadError,
+                onRetrySettings = onRetrySettings,
                 modelContent = modelContent,
             )
         },
@@ -282,13 +302,18 @@ private fun MainAtlasScaffold(
     compareContent: @Composable (Dp, Boolean) -> Unit,
     appearanceContent: @Composable (() -> Unit) -> Unit,
     touchExplorationEnabled: Boolean,
+    navigationAutoHideEnabled: Boolean,
+    onNavigationAutoHideChange: (Boolean) -> Unit,
+    settingsEditable: Boolean,
+    settingsReadError: Boolean,
+    onRetrySettings: () -> Unit,
     modelContent: @Composable (Dp, LazyListState, (String) -> Unit) -> Unit,
 ) {
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
     val density = LocalDensity.current
     val scrollThreshold = with(density) { 12.dp.toPx() }
     val navigationScroll = remember(scrollThreshold) { NavigationScrollState(scrollThreshold) }
-    val autoHideEnabled = !touchExplorationEnabled
+    val autoHideEnabled = navigationAutoHideEnabled && !touchExplorationEnabled
     LaunchedEffect(pagerState, navigationScroll, autoHideEnabled) {
         snapshotFlow { pagerState.currentPage to (pagerState.currentPageOffsetFraction != 0f) }.collect {
             // 只响应真实横移：纵向列表松手也可能让 Pager 短暂进入零位移 fling。
@@ -445,6 +470,11 @@ private fun MainAtlasScaffold(
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onShowDataSource = { showDataSource = true },
                                 onShowAppearance = { showAppearance = true },
+                                navigationAutoHideEnabled = navigationAutoHideEnabled,
+                                onNavigationAutoHideChange = onNavigationAutoHideChange,
+                                canEdit = settingsEditable,
+                                hasReadError = settingsReadError,
+                                onRetry = onRetrySettings,
                             )
                             else -> debugContent(bottomOverlayPadding, isActive && !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
                         }

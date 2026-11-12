@@ -16,7 +16,7 @@
 | 接入模型、评测、中文发布包 | [ModelAtlas Data 契约](atlas-data.md) |
 | 修改服务商解析、能力语义、报价或许可 | [数据源说明](data-source.md) |
 | 修改 Room、目录事务、收藏或 Debug 数据编辑 | [本地目录数据](local-data.md) |
-| 修改主题与偏好持久化 | [外观设置](appearance-settings.md) |
+| 修改主题、底栏自动隐藏与偏好持久化 | [外观设置](appearance-settings.md) |
 | 签名安装、双版本共存或 Debug 隔离 | [Debug / Release](debug-release-coexistence.md) |
 | 选择测试范围、运行或核对结果 | [分级测试](testing.md) |
 | 维护评测品牌素材 | [评测 Logo](benchmark-logos.md) |

@@ -53,6 +53,7 @@ class AppearanceViewModelTest {
         vm.setMode(ThemeMode.Dark)
         vm.setHue(20f)
         vm.selectPreset(ThemePreset.Rose)
+        vm.setNavigationAutoHideEnabled(true)
         vm.flushPending()
         advanceUntilIdle()
         assertEquals(0, repository.writes)
@@ -95,6 +96,43 @@ class AppearanceViewModelTest {
         runCurrent()
         assertEquals(1, repository.writes)
         assertEquals(80f, repository.settings.value.customHue)
+    }
+
+    @Test fun navigationAutoHideAppliesImmediatelyPersistsAndRestores() = runTest {
+        val vm = viewModel()
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.appearance.navigationAutoHideEnabled)
+        vm.setHue(42f)
+        vm.setNavigationAutoHideEnabled(true)
+        assertTrue(vm.uiState.value.appearance.navigationAutoHideEnabled)
+        runCurrent()
+        assertTrue(repository.settings.value.navigationAutoHideEnabled)
+        assertEquals(42f, repository.settings.value.customHue)
+        val restored = viewModel()
+        advanceUntilIdle()
+        assertTrue(restored.uiState.value.appearance.navigationAutoHideEnabled)
+        restored.setNavigationAutoHideEnabled(false)
+        assertFalse(restored.uiState.value.appearance.navigationAutoHideEnabled)
+        advanceUntilIdle()
+        assertFalse(repository.settings.value.navigationAutoHideEnabled)
+    }
+
+    @Test fun failedNavigationSaveRestoresLastCommittedValue() = runTest {
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.setNavigationAutoHideEnabled(true)
+        advanceUntilIdle()
+        repository.writeFailure = true
+        vm.setNavigationAutoHideEnabled(false)
+        assertFalse(vm.uiState.value.appearance.navigationAutoHideEnabled)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.appearance.navigationAutoHideEnabled)
+        assertTrue(vm.uiState.value.hasWriteError)
+        repository.writeFailure = false
+        vm.setNavigationAutoHideEnabled(false)
+        advanceUntilIdle()
+        assertFalse(repository.settings.value.navigationAutoHideEnabled)
+        assertFalse(vm.uiState.value.hasWriteError)
     }
 
     @Test fun releaseFlushesAndModeChangeDoesNotLosePendingHue() = runTest {

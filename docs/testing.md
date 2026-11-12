@@ -16,6 +16,7 @@
 | 对比 | `ModelCompareQueryTest`、`ModelCompareViewModelTest`、`ModelCompareScreenTest` | 报价变化加 `ModelPriceMapperTest`／`PriceProviderPolicyTest` 及列表；覆盖等高、替换重置、异步恢复 |
 | 收藏／收藏标识 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`CatalogEntriesTest`、`CatalogFavoritesTest`、`FavoritesScreenTest`、`ModelCardFavoriteLayoutTest` | 从模型目录进入详情，不使用独立收藏导航；存储加 `FavoriteDatabaseTest`，返回加共享转场／零动画 |
 | 外观／主题 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`AppearanceColorTest`、`AppearanceScreenTest`、`AppearanceNavigationTest` | 全局变化加 `ModelAtlasThemeTest` 与主要页面浅深；备份变化加 `AppearanceBackupRulesTest` |
+| 底栏自动隐藏开关 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`SettingsScreenTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest` | `ChatNavigationTest`、`AppearanceNavigationTest`、`ModelAtlasAppTest`、`ModelDetailNavigationTest`；覆盖默认关闭／旧文件、保存恢复／失败回滚、禁写重试、隐藏时关闭、无障碍优先级与子页返回；显隐测试显式开启偏好 |
 | Models.dev／价格 | `ModelsDevApiTest`、`ModelsDevParserTest`、`InterleavedDtoSerializerTest`、相关 Mapper／Policy／Repository | Room／事务变化加 `CatalogDatabaseTest`，共享字段覆盖所有消费者 |
 | LLM 请求 | `OpenAiCompatibleClientTest`（序列化／SSE／超时／取消／脱敏／资源关闭）、`LlmLiveTestConfigTest`（环境／本地配置优先级） | `LlmLiveTest` 读取环境变量或 `local.properties`，必须用 `-PllmLiveTest=true` 显式开启；默认跳过不计线上通过，命令及密钥边界见 [LLM API](llm-api.md#测试) |
 | AI 聊天 | `ChatViewModelTest`（Fake 客户端、上下文／增量／取消／重试／防重复／配置校验），`ChatScreenTest`、`ChatNavigationTest`、`GlassNavigationBarTest`（导航胶囊↔输入栏形态转换） | 复用客户端测试回归真实 SSE／socket 资源释放；导航加 `ModelAtlasAppTest`、`AppearanceNavigationTest`、`ModelDetailNavigationTest`，IME 首次返回必须不离页；不默认执行真实付费 API |
@@ -35,7 +36,7 @@
 - Room KSP 直接检查生产数据库；不再复制一份未使用的测试数据库或单独配置 Room 的 `kspTest`。真实事务、回滚、文件重开、收藏保留由当前 Atlas／Catalog／Favorite 集成测试覆盖。
 - 只合并同一行为的重复断言／准备逻辑；业务单元、数据库事务与设备 UI 属于不同边界，不因名称类似就删掉。当前仍使用的价格条件、查询恢复、MIME 投影、Atlas 缓存关联修正及零动画回归继续保留。
 - 不保留低于应用 minSdk、永远无法执行的设备用例。发现数量与源码不符时可用 runner 的 `-e log true` 列举实际用例并核对 SDK 过滤；该模式不运行测试，即使返回 `OK` 也不能作为通过证据。
-- 页面导航测试先满足当前可见性规则：目录向下浏览隐藏底栏后，反向轻滑唤回再点击，不通过未合并语义树命中不可见导航来绕过行为。
+- 页面导航测试先满足当前可见性规则：默认关闭自动隐藏；显隐专项须显式开启偏好，目录向下浏览隐藏底栏后，反向轻滑唤回再点击，不通过未合并语义树命中不可见导航来绕过行为。
 - `glass-navigation` 为整个分体底栏，`glass-navigation-capsule` 为主 Pager 的单选 Tab 组，`nav-chat` 是独立路由按钮、没有选中语义；主 Pager 横滑直接从对比到设置，不能到助手。进入助手后应断言整个主 Pager、底栏、圆形入口均不存在；返回恢复来源页／位置／展开，胶囊指示器直接与 Pager 条目对应。
 - 助手路由覆盖真实 IME 的系统／按钮两阶段返回、保存状态恢复、pop 后阅读位置重入，以及 Fake 请求在路由重建／预测性取消时不重复／不取消，确认 pop 时同步停止。额外检查预测性返回预组合的来源页恢复滚动显隐，以及退出动画未结束时旧助手操作已从读屏树移除且不能点击。预测性测试经 NavigationEvent dispatcher 驱动 Navigation 3，不能替代系统边缘手势验收；配置、草稿与消息不能因新增导航保存状态进入 SavedState。
 

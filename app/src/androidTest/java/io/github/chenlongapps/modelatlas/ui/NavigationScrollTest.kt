@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -51,9 +53,46 @@ import org.junit.Test
 class NavigationScrollTest {
     @get:Rule val compose = createComposeRule()
     private val touchExploration = mutableStateOf(false)
+    private val autoHide = mutableStateOf(true)
     private lateinit var listState: LazyListState
     private var bottomPadding = Dp.Unspecified
     private val models = List(30) { ModelSummary("lab/$it", "Model $it") }
+
+    @Test fun disabledPreferenceKeepsNavigationVisibleAndSettingsToggleEnablesScrollingHide() {
+        autoHide.value = false
+        show()
+        scroll("model-list", forward = true)
+        assertShown()
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithTag("settings-navigation-auto-hide").assertIsOff().performClick().assertIsOn()
+        compose.onNodeWithTag("nav-models").performClick()
+        scroll("model-list", forward = true)
+        assertHidden()
+        scroll("model-list", forward = false)
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithTag("settings-navigation-auto-hide").performClick().assertIsOff()
+        compose.onNodeWithTag("nav-models").performClick()
+        scroll("model-list", forward = true)
+        assertShown()
+    }
+
+    @Test fun disablingWhileHiddenRevealsWithoutMovingListAndReenablingStartsVisible() {
+        show()
+        scroll("model-list", forward = true)
+        assertHidden()
+        val position = position()
+        val padding = bottomPadding
+        compose.runOnIdle { autoHide.value = false }
+        assertShown()
+        compose.runOnIdle {
+            assertEquals(position, position())
+            assertEquals(padding, bottomPadding)
+            autoHide.value = true
+        }
+        assertShown()
+        scroll("model-list", forward = true)
+        assertHidden()
+    }
 
     @Test fun catalogHidesAndRevealsWithoutChangingViewportOrBottomPadding() {
         show()
@@ -236,6 +275,8 @@ class NavigationScrollTest {
                     Box(if (shortWindow) Modifier.height(320.dp).clipToBounds() else Modifier) {
                         ModelAtlasScaffold(
                             touchExplorationEnabled = touchExploration.value,
+                            navigationAutoHideEnabled = autoHide.value,
+                            onNavigationAutoHideChange = { autoHide.value = it },
                             compareContent = { padding, visible ->
                                 val details = models.take(2).map { ModelDetail(it.id, it.name, fetchedAtEpochMillis = 0) }
                                 ModelCompareScreen(ModelCompareUiState(models, CompareReadStatus.CONTENT,
@@ -273,7 +314,7 @@ class NavigationScrollReducedMotionTest {
     @Test fun disabledAnimationsStillHideAndRevealNavigation() {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold { padding, state, _ ->
+                ModelAtlasScaffold(navigationAutoHideEnabled = true) { padding, state, _ ->
                     ModelListScreen(ModelListUiState(models = List(20) { ModelSummary("lab/$it", "Model $it") }, isLoading = false),
                         bottomOverlayPadding = padding, listState = state)
                 }

@@ -33,6 +33,8 @@ class SettingsRepositoryTest {
         try {
             val repository = repository(file, scope)
             assertEquals(AppearanceSettings(), repository.observeAppearance().first())
+            assertFalse(repository.observeAppearance().first().navigationAutoHideEnabled)
+            repository.setNavigationAutoHideEnabled(true)
             repository.setThemeMode(ThemeMode.Dark)
             repository.setCustomHue(137.5f)
             repository.selectPreset(ThemePreset.Sage)
@@ -44,7 +46,7 @@ class SettingsRepositoryTest {
         try {
             val reopened = repository(file, reopenedScope)
             assertEquals(
-                AppearanceSettings(ThemeMode.Dark, ThemeColorSource.System, ThemePreset.Sage, 137.5f),
+                AppearanceSettings(ThemeMode.Dark, ThemeColorSource.System, ThemePreset.Sage, 137.5f, navigationAutoHideEnabled = true),
                 reopened.observeAppearance().first(),
             )
         } finally {
@@ -59,11 +61,14 @@ class SettingsRepositoryTest {
             coroutineScope {
                 launch { repository.setThemeMode(ThemeMode.Light) }
                 launch { repository.setCustomHue(360f) }
+                launch { repository.setNavigationAutoHideEnabled(true) }
             }
-            assertEquals(AppearanceSettings(mode = ThemeMode.Light, colorSource = ThemeColorSource.Custom, customHue = 360f),
+            assertEquals(AppearanceSettings(mode = ThemeMode.Light, colorSource = ThemeColorSource.Custom, customHue = 360f, navigationAutoHideEnabled = true),
                 repository.observeAppearance().first())
             repository.useSystemColors()
             assertEquals(360f, repository.observeAppearance().first().customHue)
+            repository.setNavigationAutoHideEnabled(false)
+            assertEquals(AppearanceSettings(mode = ThemeMode.Light, customHue = 360f), repository.observeAppearance().first())
         } finally {
             scope.coroutineContext.job.cancelAndJoin()
         }
@@ -96,6 +101,7 @@ class SettingsRepositoryTest {
             mutablePreferencesOf(floatPreferencesKey("custom_hue") to Float.NaN),
             mutablePreferencesOf(floatPreferencesKey("custom_hue") to -1f),
             mutablePreferencesOf(stringPreferencesKey("custom_hue") to "wrong type"),
+            mutablePreferencesOf(stringPreferencesKey("navigation_auto_hide") to "true"),
         )
         invalid.forEach { preferences ->
             assertThrows(IOException::class.java) { decodeAppearance(preferences) }
@@ -116,6 +122,12 @@ class SettingsRepositoryTest {
         } finally {
             scope.coroutineContext.job.cancelAndJoin()
         }
+    }
+
+    @Test fun existingThemePreferencesWithoutNavigationKeyDefaultToDisabled() {
+        val settings = decodeAppearance(mutablePreferencesOf(stringPreferencesKey("theme_mode") to "Dark"))
+        assertEquals(ThemeMode.Dark, settings.mode)
+        assertFalse(settings.navigationAutoHideEnabled)
     }
 
     private fun repository(file: File, scope: CoroutineScope) = DataStoreSettingsRepository(

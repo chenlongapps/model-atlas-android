@@ -25,6 +25,7 @@ data class AppearanceSettings(
     val colorSource: ThemeColorSource = ThemeColorSource.System,
     val preset: ThemePreset = ThemePreset.Blue,
     val customHue: Float? = null,
+    val navigationAutoHideEnabled: Boolean = false,
 ) {
     init {
         require(customHue == null || (customHue.isFinite() && customHue in 0f..360f))

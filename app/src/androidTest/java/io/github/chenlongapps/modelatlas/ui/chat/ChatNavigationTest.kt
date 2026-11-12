@@ -256,7 +256,7 @@ class ChatNavigationTest {
                 dispatcher.addInput(input)
                 onDispose { dispatcher.removeInput(input) }
             }
-            Content()
+            Content(navigationAutoHideEnabled = true)
         }
         open()
         compose.mainClock.autoAdvance = false
@@ -512,13 +512,14 @@ class ChatNavigationTest {
     }
 
     @Composable
-    private fun Content(onVisibility: (Boolean) -> Unit = {}) {
+    private fun Content(navigationAutoHideEnabled: Boolean = false, onVisibility: (Boolean) -> Unit = {}) {
         view = LocalView.current
         var chat by remember { mutableStateOf(ChatUiState()) }
         val latestChat = rememberUpdatedState(chat)
         val setInput: (String) -> Unit = { chat = chat.copy(input = it) }
         ModelAtlasTheme(dynamicColor = false) {
             ModelAtlasScaffold(
+                navigationAutoHideEnabled = navigationAutoHideEnabled,
                 chatUiState = latestChat,
                 onChatInput = setInput,
                 onChatClosed = { onVisibility(false) },

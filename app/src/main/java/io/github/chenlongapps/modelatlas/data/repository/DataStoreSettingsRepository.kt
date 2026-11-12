@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
@@ -29,6 +30,7 @@ class DataStoreSettingsRepository @Inject constructor(
         preferences[Source] = next.colorSource.name
         preferences[Preset] = next.preset.name
         next.customHue?.let { preferences[Hue] = it } ?: preferences.remove(Hue)
+        preferences[NavigationAutoHide] = next.navigationAutoHideEnabled
     })
 }
 
@@ -38,6 +40,7 @@ private val Mode = stringPreferencesKey("theme_mode")
 private val Source = stringPreferencesKey("theme_color_source")
 private val Preset = stringPreferencesKey("theme_preset")
 private val Hue = floatPreferencesKey("custom_hue")
+private val NavigationAutoHide = booleanPreferencesKey("navigation_auto_hide")
 
 internal fun decodeAppearance(preferences: Preferences): AppearanceSettings = try {
     AppearanceSettings(
@@ -45,6 +48,7 @@ internal fun decodeAppearance(preferences: Preferences): AppearanceSettings = tr
         colorSource = preferences[Source]?.let(ThemeColorSource::valueOf) ?: ThemeColorSource.System,
         preset = preferences[Preset]?.let(ThemePreset::valueOf) ?: ThemePreset.Blue,
         customHue = preferences[Hue],
+        navigationAutoHideEnabled = preferences[NavigationAutoHide] ?: false,
     )
 } catch (error: IllegalArgumentException) {
     throw IOException("Invalid appearance preferences", error)
