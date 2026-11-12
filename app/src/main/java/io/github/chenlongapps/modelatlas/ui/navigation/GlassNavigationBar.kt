@@ -6,7 +6,6 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -53,8 +52,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -80,75 +77,148 @@ internal data class GlassNavigationItem(
     }
 }
 
-/** AI 按钮打开独立路由；胶囊条目与主 Pager 一一对应。 */
+/** 胶囊内容本身不含玻璃表面：共享底栏只创建一次表面，模式切换时仅交叉淡化内容。 */
 @Composable
-internal fun GlassNavigationBar(
+internal fun NavigationCapsuleContent(
     pagerState: PagerState,
     backdrop: Backdrop,
     onNavigate: (Int) -> Unit,
-    onOpenChat: () -> Unit,
     onModelsDoubleClick: () -> Unit,
     items: List<GlassNavigationItem>,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    require(items.isNotEmpty())
-    val spacing = if (items.size >= 5) 2.dp else 4.dp
+    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
+    val colors = MaterialTheme.colorScheme
+    val surface = colors.surface
+    val indicatorTint = if (surface.luminance() < 0.5f) {
+        lerp(surface, Color.White, 0.16f)
+    } else {
+        lerp(surface, Color.Black, 0.08f)
+    }
     val layoutDirection = LocalLayoutDirection.current
     val isRtl = layoutDirection == LayoutDirection.Rtl
-    val modelsDoubleClick by rememberUpdatedState(onModelsDoubleClick)
-    val colors = MaterialTheme.colorScheme
-    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
     val haptics = LocalHapticFeedback.current
-    val aiLabel = stringResource(R.string.chat_title)
-    BoxWithConstraints(modifier.testTag("glass-navigation")) {
-        val gap = 8.dp
-        val capsuleMinWidth = 48.dp * items.size + 8.dp + spacing * (items.size - 1)
-        val aiSize = (maxWidth - gap - capsuleMinWidth).coerceIn(48.dp, 64.dp)
-        Row(
-            modifier = Modifier
-                .pointerInput(layoutDirection, items.size, spacing, aiSize, enabled) {
-                    if (!enabled) return@pointerInput
-                    detectModelsDoubleClicks({ width ->
-                        splitNavigationModelsRange(width, aiSize.toPx(), gap.toPx(), 4.dp.toPx(), spacing.toPx(), items.size, isRtl)
-                    }) { modelsDoubleClick() }
-                },
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    val navigate by rememberUpdatedState(onNavigate)
+    val scrollToTopLabel = stringResource(R.string.model_list_scroll_to_top)
+    val spacing = if (items.size >= 5) 2.dp else 4.dp
+
+    Box(modifier.padding(4.dp)) {
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            val itemWidth = (maxWidth - spacing * (items.size - 1)) / items.size
             Box(
-                modifier = Modifier.size(aiSize)
-                    .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, colors.background.copy(alpha = 0.5f))
-                    .testTag("nav-chat")
-                    .semantics { contentDescription = aiLabel }
-                    .clickable(
-                        enabled = enabled,
-                        role = Role.Button,
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onOpenChat()
+                Modifier
+                    .fillMaxHeight()
+                    .width(itemWidth)
+                    .graphicsLayer {
+                        // 在绘制阶段读取偏移，页面拖动时不必逐帧重组整个导航栏。
+                        val offset = pagerState.currentPage + pagerState.currentPageOffsetFraction
+                        translationX = offset * (itemWidth + spacing).toPx() * if (isRtl) -1f else 1f
+                    }
+                    .testTag("nav-indicator")
+                    .clip(CircleShape)
+                    .then(
+                        if (glassEnabled) {
+                            Modifier.drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { CircleShape },
+                                effects = {
+                                    blur(4.dp.toPx())
+                                    lens(10.dp.toPx(), 14.dp.toPx(), chromaticAberration = true)
+                                },
+                                onDrawSurface = {
+                                    drawRect(indicatorTint, blendMode = BlendMode.Hue)
+                                    drawRect(indicatorTint.copy(alpha = 0.75f))
+                                },
+                            )
+                        } else {
+                            Modifier.background(colors.secondaryContainer)
                         },
                     ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    stringResource(R.string.nav_ai),
-                    color = colors.onSurfaceVariant,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.clearAndSetSemantics {},
-                )
-            }
-            GlassNavigationCapsule(
-                pagerState, backdrop, onNavigate, onModelsDoubleClick, items,
-                modifier = Modifier.weight(1f), enabled = enabled,
             )
+        }
+        Row(
+            modifier = Modifier.selectableGroup()
+                .pointerInput(pagerState, layoutDirection, items, enabled) {
+                    if (!enabled) return@pointerInput
+                    var lastTarget = pagerState.currentPage
+                    detectHorizontalDragGestures(
+                        onDragStart = { lastTarget = pagerState.currentPage },
+                        onHorizontalDrag = { change, _ ->
+                            val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                            val logicalFraction = if (isRtl) 1f - fraction else fraction
+                            val target = (logicalFraction * items.size).toInt().coerceIn(items.indices)
+                            if (target != lastTarget) {
+                                lastTarget = target
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                navigate(target)
+                            }
+                        },
+                    )
+                },
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items.forEachIndexed { index, item ->
+                val selected = pagerState.currentPage == index
+                val contentColor by animateColorAsState(
+                    if (selected) {
+                        if (glassEnabled) colors.primary else colors.onSecondaryContainer
+                    } else colors.onSurfaceVariant,
+                    label = "Navigation content color",
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(CircleShape)
+                        .testTag(item.tag)
+                        .semantics {
+                            if (enabled && item == GlassNavigationItem.Models) {
+                                customActions = listOf(CustomAccessibilityAction(scrollToTopLabel) {
+                                    onModelsDoubleClick()
+                                    true
+                                })
+                            }
+                        }
+                        .selectable(
+                            enabled = enabled,
+                            selected = selected,
+                            role = Role.Tab,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {
+                                if (!selected || pagerState.isScrollInProgress) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    navigate(index)
+                                }
+                            },
+                        )
+                        .heightIn(min = 56.dp)
+                        .padding(horizontal = when { items.size >= 5 -> 2.dp; items.size >= 4 -> 8.dp; else -> 12.dp }, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                ) {
+                    Crossfade(targetState = selected, label = "Navigation icon") { isSelected ->
+                        Icon(
+                            painterResource(if (isSelected) item.selectedIcon else item.icon),
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    Text(
+                        stringResource(item.label),
+                        color = contentColor,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
         }
     }
 }
 
-private fun Modifier.navigationGlassSurface(
+/** 主界面与助手共用同一玻璃表面；两个模式切换时不需要重建背景。 */
+internal fun Modifier.navigationGlassSurface(
     backdrop: Backdrop,
     glassEnabled: Boolean,
     fallback: Color,
@@ -168,153 +238,8 @@ private fun Modifier.navigationGlassSurface(
     } else Modifier.background(fallback),
 )
 
-@Composable
-private fun GlassNavigationCapsule(
-    pagerState: PagerState,
-    backdrop: Backdrop,
-    onNavigate: (Int) -> Unit,
-    onModelsDoubleClick: () -> Unit,
-    items: List<GlassNavigationItem>,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
-    val colors = MaterialTheme.colorScheme
-    val surface = colors.surface
-    val tint = colors.background.copy(alpha = 0.5f)
-    val indicatorTint = if (surface.luminance() < 0.5f) {
-        lerp(surface, Color.White, 0.16f)
-    } else {
-        lerp(surface, Color.Black, 0.08f)
-    }
-    val layoutDirection = LocalLayoutDirection.current
-    val isRtl = layoutDirection == LayoutDirection.Rtl
-    val haptics = LocalHapticFeedback.current
-    val navigate by rememberUpdatedState(onNavigate)
-    val scrollToTopLabel = stringResource(R.string.model_list_scroll_to_top)
-    val spacing = if (items.size >= 5) 2.dp else 4.dp
-
-    Box(
-        modifier = modifier.testTag("glass-navigation-capsule")
-            .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, tint),
-    ) {
-        Box(Modifier.padding(4.dp)) {
-            BoxWithConstraints(Modifier.matchParentSize()) {
-                val itemWidth = (maxWidth - spacing * (items.size - 1)) / items.size
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .width(itemWidth)
-                        .graphicsLayer {
-                            // 在绘制阶段读取偏移，页面拖动时不必逐帧重组整个导航栏。
-                            val offset = pagerState.currentPage + pagerState.currentPageOffsetFraction
-                            translationX = offset * (itemWidth + spacing).toPx() * if (isRtl) -1f else 1f
-                        }
-                        .testTag("nav-indicator")
-                        .clip(CircleShape)
-                        .then(
-                            if (glassEnabled) {
-                                Modifier.drawBackdrop(
-                                    backdrop = backdrop,
-                                    shape = { CircleShape },
-                                    effects = {
-                                        blur(4.dp.toPx())
-                                        lens(10.dp.toPx(), 14.dp.toPx(), chromaticAberration = true)
-                                    },
-                                    onDrawSurface = {
-                                        drawRect(indicatorTint, blendMode = BlendMode.Hue)
-                                        drawRect(indicatorTint.copy(alpha = 0.75f))
-                                    },
-                                )
-                            } else {
-                                Modifier.background(colors.secondaryContainer)
-                            },
-                        ),
-                )
-            }
-            Row(
-                modifier = Modifier.selectableGroup()
-                    .pointerInput(pagerState, layoutDirection, items, enabled) {
-                        if (!enabled) return@pointerInput
-                        var lastTarget = pagerState.currentPage
-                        detectHorizontalDragGestures(
-                            onDragStart = { lastTarget = pagerState.currentPage },
-                            onHorizontalDrag = { change, _ ->
-                                val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                                val logicalFraction = if (isRtl) 1f - fraction else fraction
-                                val target = (logicalFraction * items.size).toInt().coerceIn(items.indices)
-                                if (target != lastTarget) {
-                                    lastTarget = target
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    navigate(target)
-                                }
-                            },
-                        )
-                    },
-                horizontalArrangement = Arrangement.spacedBy(spacing),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                items.forEachIndexed { index, item ->
-                    val selected = pagerState.currentPage == index
-                    val contentColor by animateColorAsState(
-                        if (selected) {
-                            if (glassEnabled) colors.primary else colors.onSecondaryContainer
-                        } else colors.onSurfaceVariant,
-                        label = "Navigation content color",
-                    )
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(CircleShape)
-                            .testTag(item.tag)
-                            .semantics {
-                                if (enabled && item == GlassNavigationItem.Models) {
-                                    customActions = listOf(CustomAccessibilityAction(scrollToTopLabel) {
-                                        onModelsDoubleClick()
-                                        true
-                                    })
-                                }
-                            }
-                            .selectable(
-                                enabled = enabled,
-                                selected = selected,
-                                role = Role.Tab,
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = {
-                                    if (!selected || pagerState.isScrollInProgress) {
-                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        navigate(index)
-                                    }
-                                },
-                            )
-                            .heightIn(min = 56.dp)
-                            .padding(horizontal = when { items.size >= 5 -> 2.dp; items.size >= 4 -> 8.dp; else -> 12.dp }, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
-                    ) {
-                        Crossfade(targetState = selected, label = "Navigation icon") { isSelected ->
-                            Icon(
-                                painterResource(if (isSelected) item.selectedIcon else item.icon),
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
-                        Text(
-                            stringResource(item.label),
-                            color = contentColor,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** 只观察触摸，不消费事件或等待双击后才执行单击，保留 selectable 与父级拖动的响应。 */
-private suspend fun PointerInputScope.detectModelsDoubleClicks(
+internal suspend fun PointerInputScope.detectModelsDoubleClicks(
     modelsRange: (Float) -> ClosedFloatingPointRange<Float>,
     onDoubleClick: () -> Unit,
 ) {

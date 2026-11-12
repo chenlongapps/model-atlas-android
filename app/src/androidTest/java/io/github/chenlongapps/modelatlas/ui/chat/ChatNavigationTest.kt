@@ -16,6 +16,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
@@ -50,6 +51,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.chenlongapps.modelatlas.ai.LlmChunk
 import io.github.chenlongapps.modelatlas.ai.LlmClient
@@ -84,7 +86,7 @@ class ChatNavigationTest {
         val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
         val capsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
         assertEquals("AI 入口应保持圆形", ai.width, ai.height, 1f)
-        assertTrue("AI 应位于胶囊左侧并留出间隔", ai.right < capsule.left)
+        assertTrue("AI 应位于胶囊右侧并留出间隔", ai.left > capsule.right)
         compose.onNode(hasTestTag("nav-chat") and hasAnyAncestor(hasTestTag("glass-navigation-capsule"))).assertDoesNotExist()
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithContentDescription("AI 助手").performClick()
@@ -92,6 +94,32 @@ class ChatNavigationTest {
         compose.onNodeWithTag("chat-back").performClick()
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         compose.onNodeWithTag("nav-indicator").assertIsDisplayed()
+    }
+
+    @Test fun assistantRouteKeepsBottomBarGeometryWhileMorphingAndRestoring() {
+        compose.setContent { Content() }
+        val navCapsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
+        val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("nav-chat").performClick()
+        compose.onNodeWithTag("chat-screen").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发送").assertIsDisplayed()
+        val chatCapsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
+        val send = compose.onNodeWithTag("chat-send").fetchSemanticsNode().boundsInRoot
+        // 胶囊与右侧入口在路由切换前后保持同一位置和形状，仅内容形态变化。
+        assertEquals(navCapsule.left, chatCapsule.left, 1f)
+        assertEquals(navCapsule.right, chatCapsule.right, 1f)
+        assertEquals(navCapsule.top, chatCapsule.top, 1f)
+        assertEquals(navCapsule.bottom, chatCapsule.bottom, 1f)
+        assertEquals(ai.left, send.left, 1f)
+        assertEquals(ai.right, send.right, 1f)
+        compose.onNodeWithTag("chat-back").performClick()
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.onNodeWithContentDescription("AI 助手").assertIsDisplayed()
+        val restoredCapsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
+        assertEquals(navCapsule.left, restoredCapsule.left, 1f)
+        assertEquals(navCapsule.right, restoredCapsule.right, 1f)
+        assertEquals(navCapsule.top, restoredCapsule.top, 1f)
+        assertEquals(navCapsule.bottom, restoredCapsule.bottom, 1f)
     }
 
     @Test fun assistantIsIndependentAndSettingsHasNoDuplicateEntry() {
@@ -202,9 +230,9 @@ class ChatNavigationTest {
         } }
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(chatContent = { visible, onBack ->
+                ModelAtlasScaffold(chatContent = { padding, visible, onBack ->
                     list = rememberLazyListState()
-                    ChatScreen(ChatUiState(modelId = "model", turns = turns), isVisible = visible, onBack = onBack, listState = list)
+                    ChatScreen(ChatUiState(modelId = "model", turns = turns), bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, listState = list)
                 }) { _, _, _ -> }
             }
         }
@@ -256,7 +284,7 @@ class ChatNavigationTest {
         lateinit var closeRoute: () -> Unit
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(chatContent = { _, onBack ->
+                ModelAtlasScaffold(chatContent = { _, _, onBack ->
                     closeRoute = onBack
                     Box(Modifier.fillMaxSize()) {
                         Button(onClick = { clicks++ }, modifier = Modifier.testTag("route-exit-action")) { Text("测试操作") }
@@ -294,17 +322,28 @@ class ChatNavigationTest {
                 onDispose { dispatcher.removeInput(input) }
             }
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(onChatClosed = vm::stop, chatContent = { visible, onBack ->
-                    ChatRoute(isVisible = visible, onBack = onBack, viewModel = vm)
-                }) { _, _, _ -> }
+                val chatState = vm.uiState.collectAsStateWithLifecycle()
+                ModelAtlasScaffold(
+                    chatUiState = chatState,
+                    onChatInput = vm::setInput,
+                    onChatSend = vm::send,
+                    onChatStop = vm::stop,
+                    onChatClosed = vm::stop,
+                    chatContent = { padding, visible, onBack ->
+                        ChatRoute(bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, viewModel = vm)
+                    },
+                ) { _, _, _ -> }
             }
         }
         open()
         compose.waitUntil { vm.uiState.value.configurationReady }
         compose.onNodeWithTag("chat-input").performTextInput("仅内存问题")
+        // 等 IME 与消息区布局稳定后再发送，避免断言和键盘动画竞争。
+        compose.waitUntil(5_000) { imeVisible() }
         compose.onNodeWithTag("chat-send").performClick()
         compose.waitUntil { client.active.get() == 1 }
         client.channel.trySend(LlmChunk("保留部分回复"))
+        compose.waitUntil { vm.uiState.value.turns.single().reply.value.text == "保留部分回复" }
         compose.onNodeWithText("保留部分回复").assertIsDisplayed()
         compose.waitUntil(5_000) { imeVisible() }
         pressBack()
@@ -357,7 +396,7 @@ class ChatNavigationTest {
         val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
         val capsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
         assertEquals(ai.width, ai.height, 1f)
-        assertTrue("RTL 的 AI 入口应位于起始侧（右侧）", ai.left > capsule.right)
+        assertTrue("RTL 的 AI 入口应位于末侧（左侧）", ai.right < capsule.left)
         open()
         assertFullScreen()
         assertControlsInsideScreen()
@@ -375,8 +414,8 @@ class ChatNavigationTest {
             ) {
                 ModelAtlasTheme(darkTheme = true, dynamicColor = false) {
                     Box(Modifier.size(640.dp, 320.dp)) {
-                        ModelAtlasScaffold(chatContent = { visible, onBack ->
-                            ChatScreen(ChatUiState(modelId = "model", input = "第一行\n第二行"), isVisible = visible, onBack = onBack)
+                        ModelAtlasScaffold(chatContent = { padding, visible, onBack ->
+                            ChatScreen(ChatUiState(modelId = "model", input = "第一行\n第二行"), bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
                         }) { _, _, _ -> }
                     }
                 }
@@ -397,9 +436,12 @@ class ChatNavigationTest {
         var chat by mutableStateOf(ChatUiState(modelId = "example-model"))
         compose.setContent {
             ModelAtlasTheme(darkTheme = theme == 1, dynamicColor = theme == 2) {
-                ModelAtlasScaffold(chatContent = { visible, onBack ->
-                    ChatScreen(chat, isVisible = visible, onBack = onBack)
-                }) { _, _, _ -> }
+                ModelAtlasScaffold(
+                    chatUiState = rememberUpdatedState(chat),
+                    chatContent = { padding, visible, onBack ->
+                        ChatScreen(chat, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
+                    },
+                ) { _, _, _ -> }
             }
         }
         open()
@@ -434,7 +476,10 @@ class ChatNavigationTest {
 
     private fun assertFullScreen() {
         compose.onNodeWithTag("chat-screen").assertIsDisplayed()
-        for (tag in listOf("main-pager", "glass-navigation", "nav-chat", "nav-models", "nav-settings")) {
+        // 底栏保留并变形成输入栏，主导航内容与主页面不再可访问。
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
+        compose.onNodeWithTag("chat-input").assertIsDisplayed()
+        for (tag in listOf("main-pager", "nav-chat", "nav-models", "nav-settings")) {
             compose.onNodeWithTag(tag).assertDoesNotExist()
         }
     }
@@ -470,11 +515,18 @@ class ChatNavigationTest {
     private fun Content(onVisibility: (Boolean) -> Unit = {}) {
         view = LocalView.current
         var chat by remember { mutableStateOf(ChatUiState()) }
+        val latestChat = rememberUpdatedState(chat)
+        val setInput: (String) -> Unit = { chat = chat.copy(input = it) }
         ModelAtlasTheme(dynamicColor = false) {
-            ModelAtlasScaffold(onChatClosed = { onVisibility(false) }, chatContent = { visible, onBack ->
-                LaunchedEffect(visible) { onVisibility(visible) }
-                ChatScreen(chat, isVisible = visible, onBack = onBack, onInput = { chat = chat.copy(input = it) })
-            }) { padding, list, onClick ->
+            ModelAtlasScaffold(
+                chatUiState = latestChat,
+                onChatInput = setInput,
+                onChatClosed = { onVisibility(false) },
+                chatContent = { padding, visible, onBack ->
+                    LaunchedEffect(visible) { onVisibility(visible) }
+                    ChatScreen(chat, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, onInput = setInput)
+                },
+            ) { padding, list, onClick ->
                 ModelListScreen(ModelListUiState(models = List(30) { ModelSummary("lab/$it", "模型 $it") }, isLoading = false), bottomOverlayPadding = padding, listState = list, onModelClick = onClick)
             }
         }

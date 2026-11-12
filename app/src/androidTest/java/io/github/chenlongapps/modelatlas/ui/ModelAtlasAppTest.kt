@@ -216,7 +216,10 @@ class ModelAtlasAppTest {
             click()
         }
         compose.onNodeWithTag("chat-screen").assertIsDisplayed()
-        compose.onNodeWithTag("glass-navigation").assertDoesNotExist()
+        // 底栏保留为输入栏，主导航内容不再存在。
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
+        compose.onNodeWithTag("nav-models").assertDoesNotExist()
+        compose.onNodeWithTag("chat-input").assertIsDisplayed()
         pressBack()
         compose.onNodeWithTag("nav-models").performTouchInput {
             advanceEventTime(50)

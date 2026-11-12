@@ -61,6 +61,8 @@ class BenchmarkSharedTransitionTest {
     private var leaderboardDisposals = 0
     private var trackColor = Color.Unspecified
     private val resultColors = mutableMapOf<String, Color>()
+    // 共享底栏是独立覆盖层：进入／返回榜单时自行滑出滑入，像素差分只验证内容层。
+    private var navigationBand: Rect? = null
 
     @Test fun darkCardExpandsAndContractsWithoutFadingTheOverview() = assertContainerFrames(dark = true)
     @Test fun lightCardExpandsAndContractsWithoutFadingTheOverview() = assertContainerFrames(dark = false)
@@ -531,6 +533,11 @@ class BenchmarkSharedTransitionTest {
         compose.onNodeWithTag("nav-benchmarks").performClick()
         // 先让顶层 Pager 停稳，再由用例冻结时钟；不能在横移期间点击来源卡片。
         compose.onNodeWithTag("benchmark-screen").assertIsDisplayed()
+        navigationBand = runCatching {
+            val bar = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
+            val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            Rect(bar.left, bar.top, bar.right, root.bottom)
+        }.getOrNull()
     }
 
     private fun changedBounds(before: PixelMap, after: PixelMap, tolerance: Int = 0): Rect? {
@@ -538,7 +545,10 @@ class BenchmarkSharedTransitionTest {
         var right = 0
         var top = before.height
         var bottom = 0
+        val band = navigationBand
         for (y in 0 until before.height) for (x in 0 until before.width) {
+            // 底栏滑出／滑入属于独立覆盖层动画，不参与共享容器边界判定。
+            if (band != null && x >= band.left && x < band.right && y >= band.top && y < band.bottom) continue
             val a = before[x, y].toArgb()
             val b = after[x, y].toArgb()
             if ((0..24 step 8).any { shift -> kotlin.math.abs(((a ushr shift) and 255) - ((b ushr shift) and 255)) > tolerance }) {

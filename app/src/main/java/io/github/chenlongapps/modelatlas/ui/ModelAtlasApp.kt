@@ -6,6 +6,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -24,11 +25,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -55,20 +59,20 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import io.github.chenlongapps.modelatlas.ui.modellist.LocalModelListVisible
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListRoute
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
-import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationBar
 import io.github.chenlongapps.modelatlas.ui.navigation.AssistantNavigation
+import io.github.chenlongapps.modelatlas.ui.navigation.BottomBarMode
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollConnection
+import io.github.chenlongapps.modelatlas.ui.navigation.MorphingBottomBar
 import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollState
 import io.github.chenlongapps.modelatlas.ui.navigation.rememberTouchExplorationEnabled
 import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
@@ -117,10 +121,18 @@ fun ModelAtlasApp(
 ) {
     // Activity 作用域：弹出独立路由不丢对话／草稿，配置重建不取消请求。
     val chatViewModel: ChatViewModel = hiltViewModel()
+    // 只读取 State 对象，不在此处订阅值；输入变化只重组共享底栏。
+    val chatState = chatViewModel.uiState.collectAsStateWithLifecycle()
     ModelAtlasScaffold(
         modifier = modifier,
         appearanceContent = appearanceContent,
-        chatContent = { visible, onBack -> ChatRoute(isVisible = visible, onBack = onBack, viewModel = chatViewModel) },
+        chatUiState = chatState,
+        onChatInput = chatViewModel::setInput,
+        onChatSend = chatViewModel::send,
+        onChatStop = chatViewModel::stop,
+        chatContent = { padding, visible, onBack ->
+            ChatRoute(bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, viewModel = chatViewModel)
+        },
         onChatClosed = chatViewModel::stop,
         debugContent = { bottomPadding, isVisible, onOpen -> DebugFeature.Content(bottomPadding, isVisible, onOpen) },
         databaseContent = { onClose -> DebugFeature.DatabaseContent(onClose) },
@@ -155,21 +167,40 @@ internal fun ModelAtlasScaffold(
     appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
     },
-    chatContent: @Composable (isVisible: Boolean, onBack: () -> Unit) -> Unit = { visible, onBack ->
-        ChatScreen(ChatUiState(), isVisible = visible, onBack = onBack)
+    chatContent: @Composable (bottomOverlayPadding: Dp, isVisible: Boolean, onBack: () -> Unit) -> Unit = { padding, visible, onBack ->
+        ChatScreen(ChatUiState(), bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
     },
+    chatUiState: State<ChatUiState> = remember { mutableStateOf(ChatUiState()) },
+    onChatInput: (String) -> Unit = {},
+    onChatSend: () -> Unit = {},
+    onChatStop: () -> Unit = {},
     onChatClosed: () -> Unit = {},
     touchExplorationEnabled: Boolean = rememberTouchExplorationEnabled(),
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
+    val navigationItems = remember {
+        listOf(GlassNavigationItem.Models, GlassNavigationItem.Benchmarks, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
+    }
+    val pagerState = rememberPagerState(pageCount = { navigationItems.size })
+    val modelListState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    // 恢复首帧沿用已测得的高度，避免默认底部留白把接近列表末尾的保存位置夹回。
+    var navigationHeight by rememberSaveable { mutableStateOf(64f) }
+    var chatBarHeight by rememberSaveable { mutableStateOf(64f) }
+    var navigationHiddenByMain by remember { mutableStateOf(false) }
     AssistantNavigation(
         modifier = modifier.fillMaxSize(),
         onChatClosed = onChatClosed,
-        chatContent = chatContent,
-        mainContent = { isActive, onOpenChat ->
+        chatContent = { visible, onBack -> chatContent(chatBarHeight.dp + 32.dp, visible, onBack) },
+        mainContent = { isActive ->
             MainAtlasScaffold(
                 isActive = isActive,
-                onOpenChat = onOpenChat,
+                pagerState = pagerState,
+                navigationItems = navigationItems,
+                modelListState = modelListState,
+                bottomOverlayPadding = navigationHeight.dp + 32.dp,
+                onNavigationHiddenChange = { navigationHiddenByMain = it },
                 detailContent = detailContent,
                 debugContent = debugContent,
                 databaseContent = databaseContent,
@@ -181,13 +212,68 @@ internal fun ModelAtlasScaffold(
                 modelContent = modelContent,
             )
         },
+        bottomBar = { isChatOpen, onOpenChat, backdrop ->
+            val mode = if (isChatOpen) BottomBarMode.Chat else BottomBarMode.Navigation
+            val hidden = mode == BottomBarMode.Navigation && navigationHiddenByMain
+            val hideProgress by animateFloatAsState(
+                if (hidden) 1f else 0f, tween(200), label = "Navigation scroll visibility",
+            )
+            val baseInsets = WindowInsets.navigationBars.union(WindowInsets.displayCutout)
+                .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+            // 聊天输入栏跟随 IME；主导航仍贴系统手势区，不改变既有页面行为。
+            val barInsets = if (mode == BottomBarMode.Chat) {
+                baseInsets.union(WindowInsets.ime).only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+            } else baseInsets
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    // 整个外壳（含底部安全区）滑出，列表留白与测量高度保持不变。
+                    .graphicsLayer { translationY = size.height * hideProgress }
+                    .testTag("glass-navigation-motion")
+                    .then(if (hidden) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
+                    .windowInsetsPadding(barInsets)
+                    .padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
+                    .widthIn(max = 400.dp)
+                    .fillMaxWidth(),
+            ) {
+                MorphingBottomBar(
+                    mode = mode,
+                    pagerState = pagerState,
+                    items = navigationItems,
+                    backdrop = backdrop,
+                    chatState = chatUiState,
+                    onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+                    onModelsDoubleClick = {
+                        scope.launch {
+                            // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
+                            launch { pagerState.animateScrollToPage(0) }
+                            modelListState.animateScrollToItem(0, 0)
+                        }
+                    },
+                    onOpenChat = onOpenChat,
+                    onChatInput = onChatInput,
+                    onSend = onChatSend,
+                    onStop = onChatStop,
+                    enabled = !hidden,
+                    // 测量整个分体底栏，包含圆形入口与可随字号增高的胶囊。
+                    modifier = Modifier.fillMaxWidth().onSizeChanged {
+                        val height = with(density) { it.height.toDp().value }
+                        if (mode == BottomBarMode.Navigation) navigationHeight = height else chatBarHeight = height
+                    },
+                )
+            }
+        },
     )
 }
 
 @Composable
 private fun MainAtlasScaffold(
     isActive: Boolean,
-    onOpenChat: () -> Unit,
+    pagerState: PagerState,
+    navigationItems: List<GlassNavigationItem>,
+    modelListState: LazyListState,
+    bottomOverlayPadding: Dp,
+    onNavigationHiddenChange: (Boolean) -> Unit,
     detailContent: @Composable (String, () -> Unit) -> Unit,
     debugContent: @Composable (Dp, Boolean, () -> Unit) -> Unit,
     databaseContent: @Composable (() -> Unit) -> Unit,
@@ -198,34 +284,17 @@ private fun MainAtlasScaffold(
     touchExplorationEnabled: Boolean,
     modelContent: @Composable (Dp, LazyListState, (String) -> Unit) -> Unit,
 ) {
-    val navigationItems = remember {
-        listOf(GlassNavigationItem.Models, GlassNavigationItem.Benchmarks, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
-    }
-    val pagerState = rememberPagerState(pageCount = { navigationItems.size })
-    val modelListState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
-    val backdrop = rememberLayerBackdrop {
-        drawRect(background)
-        drawContent()
-    }
     val density = LocalDensity.current
     val scrollThreshold = with(density) { 12.dp.toPx() }
     val navigationScroll = remember(scrollThreshold) { NavigationScrollState(scrollThreshold) }
     val autoHideEnabled = !touchExplorationEnabled
-    val navigationHidden = !isActive || (autoHideEnabled && navigationScroll.isHidden)
-    val navigationHideProgress = animateFloatAsState(
-        if (navigationHidden) 1f else 0f, tween(200), label = "Navigation scroll visibility",
-    )
     LaunchedEffect(pagerState, navigationScroll, autoHideEnabled) {
         snapshotFlow { pagerState.currentPage to (pagerState.currentPageOffsetFraction != 0f) }.collect {
             // 只响应真实横移：纵向列表松手也可能让 Pager 短暂进入零位移 fling。
             navigationScroll.show()
         }
     }
-    // 恢复首帧沿用已测得的高度，避免默认底部留白把接近列表末尾的保存位置夹回。
-    var navigationHeight by rememberSaveable { mutableStateOf(64f) }
-    val bottomOverlayPadding = navigationHeight.dp + 32.dp
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showDatabase by rememberSaveable { mutableStateOf(false) }
@@ -257,6 +326,9 @@ private fun MainAtlasScaffold(
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
     val subpageVisible = showDataSource || showAppearance || showDatabase || retainedBenchmarkId != null || retainedModelId != null
+    // 共享底栏不再位于主页面树内，需要显式上报主界面的隐藏条件（子页与向下滚动）。
+    val barHiddenByMain = subpageVisible || (autoHideEnabled && navigationScroll.isHidden)
+    SideEffect { onNavigationHiddenChange(barHiddenByMain) }
     LaunchedEffect(subpageVisible, navigationScroll) { navigationScroll.resetTracking() }
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition, benchmarkTransition) {
@@ -316,7 +388,7 @@ private fun MainAtlasScaffold(
         RetainedPage(placeMain, interactive = isActive && !subpageVisible) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize().testTag("main-pager").layerBackdrop(backdrop),
+                modifier = Modifier.fillMaxSize().testTag("main-pager"),
                 // 保留全部顶层页，切换时不重建列表或重启刷新提示的协程。
                 beyondViewportPageCount = navigationItems.size - 1,
                 key = { navigationItems[it].tag },
@@ -378,41 +450,6 @@ private fun MainAtlasScaffold(
                         }
                     }
                 }
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    // 整个外壳（含底部安全区）滑出，列表留白与测量高度保持不变。
-                    .graphicsLayer { translationY = size.height * navigationHideProgress.value }
-                    .testTag("glass-navigation-motion")
-                    .then(if (navigationHidden) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
-                    .windowInsetsPadding(
-                        WindowInsets.navigationBars.union(WindowInsets.displayCutout)
-                            .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                    )
-                    .padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
-                    .widthIn(max = 400.dp)
-                    .fillMaxWidth(),
-            ) {
-                GlassNavigationBar(
-                    pagerState = pagerState,
-                    items = navigationItems,
-                    backdrop = backdrop,
-                    onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
-                    onOpenChat = onOpenChat,
-                    onModelsDoubleClick = {
-                        scope.launch {
-                            // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
-                            launch { pagerState.animateScrollToPage(0) }
-                            modelListState.animateScrollToItem(0, 0)
-                        }
-                    },
-                    enabled = !navigationHidden,
-                    // 测量整个分体底栏，包含圆形入口与可随字号增高的胶囊。
-                    modifier = Modifier.fillMaxWidth().onSizeChanged {
-                        navigationHeight = with(density) { it.height.toDp().value }
-                    },
-                )
             }
         }
         if (showDataSource) {

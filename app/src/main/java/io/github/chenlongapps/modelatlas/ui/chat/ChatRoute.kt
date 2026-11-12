@@ -24,8 +24,6 @@ internal fun ChatRoute(
         isVisible = isVisible,
         onBack = onBack,
         onInput = viewModel::setInput,
-        onSend = viewModel::send,
-        onStop = viewModel::stop,
         onRetry = viewModel::retry,
         onOpenConfig = viewModel::openConfig,
         onEditConfig = viewModel::editConfig,

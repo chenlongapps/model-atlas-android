@@ -58,25 +58,26 @@ class NavigationGeometryTest {
         assertFalse(144f in rtl)
     }
 
-    @Test fun splitDebugNavigationKeepsFortyEightDpModelsOutsideAiInBothDirections() {
-        // 320dp - 两侧各 4dp；48dp AI + 8dp 间隔 + 256dp 胶囊。
-        val ltr = splitNavigationModelsRange(312f, 48f, 8f, 4f, 2f, 5, false)
-        val rtl = splitNavigationModelsRange(312f, 48f, 8f, 4f, 2f, 5, true)
-        assertEquals(60f..108f, ltr)
-        assertEquals(204f..252f, rtl)
-        assertFalse(24f in ltr)
-        assertFalse(288f in rtl)
-        assertFalse(52f in ltr)
-        assertFalse(260f in rtl)
+    @Test fun capsuleFirstRowKeepsFortyEightDpModelsOutsideTrailingAiInBothDirections() {
+        // 320dp - 两侧各 4dp；256dp 胶囊 + 8dp 间隔 + 48dp AI（AI 在末侧）。
+        val ltr = navigationModelsRange(312f, 48f, 8f, 4f, 2f, 5, false)
+        val rtl = navigationModelsRange(312f, 48f, 8f, 4f, 2f, 5, true)
+        assertEquals(4f..52f, ltr)
+        assertEquals(260f..308f, rtl)
+        // AI 一侧不属于模型双击范围。
+        assertFalse(288f in ltr)
+        assertFalse(24f in rtl)
+        assertFalse(56f in ltr)
+        assertFalse(256f in rtl)
     }
 
-    @Test fun splitReleaseNavigationKeepsFourCapsuleItemsAndSeparateAi() {
-        val ltr = splitNavigationModelsRange(288f, 64f, 8f, 4f, 4f, 4, false)
-        val rtl = splitNavigationModelsRange(288f, 64f, 8f, 4f, 4f, 4, true)
-        assertEquals(76f..125f, ltr)
-        assertEquals(163f..212f, rtl)
-        assertFalse(32f in ltr)
-        assertFalse(256f in rtl)
+    @Test fun trailingAiLeavesFourCapsuleItemsAndSeparateCircle() {
+        val ltr = navigationModelsRange(288f, 64f, 8f, 4f, 4f, 4, false)
+        val rtl = navigationModelsRange(288f, 64f, 8f, 4f, 4f, 4, true)
+        assertEquals(4f..53f, ltr)
+        assertEquals(235f..284f, rtl)
+        assertFalse(256f in ltr)
+        assertFalse(32f in rtl)
     }
 
 }

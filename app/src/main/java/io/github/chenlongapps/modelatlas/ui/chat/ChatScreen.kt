@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,14 +26,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,7 +56,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -67,7 +65,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -91,8 +88,6 @@ internal fun ChatScreen(
     isVisible: Boolean = true,
     onBack: (() -> Unit)? = null,
     onInput: (String) -> Unit = {},
-    onSend: () -> Unit = {},
-    onStop: () -> Unit = {},
     onRetry: () -> Unit = {},
     onOpenConfig: () -> Unit = {},
     onEditConfig: (String, String, String) -> Unit = { _, _, _ -> },
@@ -106,7 +101,6 @@ internal fun ChatScreen(
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
-    val scope = rememberCoroutineScope()
     var followLatest by rememberSaveable { mutableStateOf(true) }
     val scrollConnection = remember(listState) {
         object : NestedScrollConnection {
@@ -123,6 +117,16 @@ internal fun ChatScreen(
         }
     }
     if (isVisible) ChatFollowLatest(uiState.turns.lastOrNull(), listState, followLatest)
+    // 发送动作位于共享底栏；出现新轮次时恢复跟随并滚到末尾。
+    var knownTurnCount by rememberSaveable { mutableIntStateOf(uiState.turns.size) }
+    LaunchedEffect(uiState.turns.size) {
+        if (uiState.turns.size > knownTurnCount) {
+            followLatest = true
+            withFrameNanos { }
+            listState.scrollToChatBottom()
+        }
+        knownTurnCount = uiState.turns.size
+    }
     // IME 可见性不能由 bottom > 0 推断：浮动键盘或已处理 inset 的宿主可能高度为零。
     val imeVisible = WindowInsets.isImeVisible
     LaunchedEffect(isVisible) {
@@ -144,7 +148,7 @@ internal fun ChatScreen(
     Scaffold(
         modifier = modifier.testTag("chat-screen"),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        // 一次性消费系统栏、刘海及 IME；底部编辑器不再叠加 imePadding。
+        // 一次性消费系统栏、刘海及 IME；共享输入栏位于页面之外，不在此叠加 imePadding。
         contentWindowInsets = WindowInsets.safeDrawing.union(WindowInsets.ime),
     ) { padding ->
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
@@ -153,9 +157,21 @@ internal fun ChatScreen(
             val navigateBack: (() -> Unit)? = onBack?.let { back ->
                 { if (imeVisible) { focus.clearFocus(); keyboard?.hide() } else back() }
             }
-            // 先预留底栏；不能在编辑器之后再测量 Spacer，否则短窗口会挤掉避让。
-            Column(Modifier.fillMaxSize().padding(bottom = if (imeVisible) 0.dp else bottomOverlayPadding)) {
-                if (!compact) ChatHeader(uiState, isVisible, openConfig, onBack = navigateBack)
+            // 共享输入栏由外壳绘制在页面之上，消息区始终为它保留高度；IME 由 Scaffold 一次消费。
+            Column(Modifier.fillMaxSize().padding(bottom = bottomOverlayPadding)) {
+                if (compact) {
+                    // 短窗口把返回与配置入口固定在顶部，标题仍随消息滚动。
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        navigateBack?.let { back -> ChatBackButton(isVisible, back) }
+                        Spacer(Modifier.weight(1f))
+                        ChatConfigButton(uiState, isVisible, openConfig)
+                    }
+                } else {
+                    ChatHeader(uiState, isVisible, openConfig, onBack = navigateBack)
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(scrollConnection).testTag("chat-messages"),
@@ -186,11 +202,6 @@ internal fun ChatScreen(
                     }
                     if (uiState.turns.isEmpty()) item(key = "welcome") { ChatWelcome(isVisible, onInput) }
                 }
-                ChatComposer(uiState, isVisible, compact, onInput, onStop, openConfig, onBack = navigateBack, onSend = {
-                    followLatest = true
-                    onSend()
-                    scope.launch { withFrameNanos { }; listState.scrollToChatBottom() }
-                })
             }
         }
     }
@@ -225,53 +236,6 @@ private fun ChatWelcome(enabled: Boolean, onInput: (String) -> Unit) {
                     Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(20.dp))
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ChatComposer(
-    uiState: ChatUiState,
-    enabled: Boolean,
-    compact: Boolean,
-    onInput: (String) -> Unit,
-    onStop: () -> Unit,
-    onOpenConfig: () -> Unit,
-    onBack: (() -> Unit)?,
-    onSend: () -> Unit,
-) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // 横屏／大字号时保留消息空间；长输入在编辑器内部滚动。
-        val minInputHeight = 56.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
-        val inputMaxHeight = if (compact) 80.dp else (maxHeight * 0.3f).coerceIn(minInputHeight, maxOf(minInputHeight, 180.dp))
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 8.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (compact) {
-                onBack?.let { ChatBackButton(enabled, it) }
-                ChatConfigButton(uiState, enabled, onOpenConfig)
-            }
-            OutlinedTextField(
-                value = uiState.input,
-                onValueChange = onInput,
-                modifier = Modifier.weight(1f).heightIn(max = inputMaxHeight).testTag("chat-input"),
-                label = if (compact) null else { { Text(stringResource(R.string.chat_input)) } },
-                placeholder = if (compact) { { Text(stringResource(R.string.chat_input)) } } else null,
-                shape = MaterialTheme.shapes.large,
-                enabled = enabled,
-                minLines = 1,
-                maxLines = 6,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-            )
-            if (uiState.isGenerating) FilledIconButton(onClick = onStop, enabled = enabled, modifier = Modifier.size(48.dp).testTag("chat-stop")) {
-                Icon(painterResource(R.drawable.ic_stop), stringResource(R.string.chat_stop))
-            } else FilledIconButton(
-                enabled = enabled && uiState.canSend,
-                onClick = onSend,
-                modifier = Modifier.size(48.dp).testTag("chat-send"),
-            ) { Icon(painterResource(R.drawable.ic_send), stringResource(R.string.chat_send)) }
         }
     }
 }

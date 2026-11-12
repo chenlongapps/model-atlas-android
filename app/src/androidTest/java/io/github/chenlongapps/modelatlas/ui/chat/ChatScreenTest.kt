@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.chat
 
+import android.view.KeyEvent
 import android.view.View
 import android.content.ClipboardManager
 import android.content.Context
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
@@ -41,9 +43,6 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -51,6 +50,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.chenlongapps.modelatlas.ai.LlmChunk
@@ -62,6 +62,7 @@ import io.github.chenlongapps.modelatlas.ai.LlmResponse
 import io.github.chenlongapps.modelatlas.ai.config.LlmConfigRepository
 import io.github.chenlongapps.modelatlas.ai.config.ConfigStorageException
 import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
+import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.Channel
@@ -213,25 +214,31 @@ class ChatScreenTest {
         compose.onNodeWithText("重试读取").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
         compose.onNodeWithTag("chat-config-clear-confirm").assertIsDisplayed()
-        pressBack()
+        // 弹窗窗口持有焦点且前序用例可能仍显示 IME；直接注入系统返回，避免 Espresso 等待基础窗口焦点。
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
     }
 
     @Test fun credentialsInputAndMessagesAreAbsentFromSavedUiState() {
         val registry = SaveableStateRegistry(restoredValues = null) { true }
         val turn = ChatTurn(1, "private-user-text").also { it.update(ChatReply("private-reply-text", ChatReplyStatus.COMPLETE)) }
+        val state = ChatUiState(
+            turns = listOf(turn), input = "private-input-text",
+            configDraft = ChatConfigDraft("https://example.test/api", "never-save-secret", "model"),
+        )
         compose.setContent {
             CompositionLocalProvider(LocalSaveableStateRegistry provides registry) {
                 ModelAtlasTheme(dynamicColor = false) {
-                    ChatScreen(
-                        ChatUiState(
-                            turns = listOf(turn), input = "private-input-text",
-                            configDraft = ChatConfigDraft("https://example.test/api", "never-save-secret", "model"),
-                        ),
-                    )
+                    ModelAtlasScaffold(
+                        chatUiState = rememberUpdatedState(state),
+                        chatContent = { padding, visible, onBack ->
+                            ChatScreen(state, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
+                        },
+                    ) { _, _, _ -> }
                 }
             }
         }
+        compose.onNodeWithTag("nav-chat").performClick()
         compose.runOnIdle {
             val saved = registry.performSave().toString()
             for (privateText in listOf("never-save-secret", "private-user-text", "private-reply-text", "private-input-text")) {
@@ -246,9 +253,21 @@ class ChatScreenTest {
         init()
         restoration.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                ModelAtlasTheme(darkTheme = redraw, dynamicColor = false) { ChatRoute(viewModel = vm) }
+                ModelAtlasTheme(darkTheme = redraw, dynamicColor = false) {
+                    val state = vm.uiState.collectAsStateWithLifecycle()
+                    ModelAtlasScaffold(
+                        chatUiState = state,
+                        onChatInput = vm::setInput,
+                        onChatSend = vm::send,
+                        onChatStop = vm::stop,
+                        chatContent = { padding, visible, onBack ->
+                            ChatRoute(bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, viewModel = vm)
+                        },
+                    ) { _, _, _ -> }
+                }
             }
         }
+        compose.onNodeWithTag("nav-chat").performClick()
         send()
         fake.channel.trySend(LlmChunk("还在生成"))
         compose.runOnIdle { redraw = true }
@@ -312,6 +331,7 @@ class ChatScreenTest {
 
     @Test fun narrowLargeFontRtlAndLandscapeKeepLongTextAndControlsReachable() {
         val turn = ChatTurn(1, "长消息\n".repeat(30)).also { it.update(ChatReply("模型完整回答\n".repeat(100), ChatReplyStatus.COMPLETE)) }
+        val chat = ChatUiState(turns = listOf(turn), modelId = "model", input = "多行\n输入")
         var landscape by mutableStateOf(false)
         compose.setContent {
             val density = LocalDensity.current
@@ -321,11 +341,17 @@ class ChatScreenTest {
                 ModelAtlasTheme(darkTheme = landscape, dynamicColor = false) {
                     // size 遵循宿主真实宽度；requiredSize(640dp) 会把 RTL 发送按钮放到手机屏幕外。
                     Box(Modifier.size(if (landscape) 640.dp else 320.dp, if (landscape) 320.dp else 600.dp)) {
-                        ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model", input = "多行\n输入"))
+                        ModelAtlasScaffold(
+                            chatUiState = rememberUpdatedState(chat),
+                            chatContent = { padding, visible, onBack ->
+                                ChatScreen(chat, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
+                            },
+                        ) { _, _, _ -> }
                     }
                 }
             }
         }
+        compose.onNodeWithTag("nav-chat").performClick()
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         compose.onNodeWithTag("chat-input").assertIsDisplayed()
         compose.onNodeWithTag("chat-messages").performScrollToNode(hasText("模型完整回答\n".repeat(100)))
@@ -361,7 +387,9 @@ class ChatScreenTest {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) { ChatRoute(isVisible = visible, viewModel = vm) }
         }
-        send()
+        // 输入栏已迁到共享底栏；此用例只验证离屏停止与重入状态，直接驱动 ViewModel。
+        compose.runOnIdle { vm.setInput("问题\n第二行"); vm.send() }
+        compose.waitUntil { fake.calls.get() == 1 }
         fake.channel.trySend(LlmChunk("保留部分回复"))
         compose.onNodeWithTag("chat-reply-1").assert(hasText("保留部分回复"))
         compose.runOnIdle { visible = false }
@@ -400,14 +428,23 @@ class ChatScreenTest {
         init(configured)
         compose.setContent {
             view = LocalView.current
+            val state = vm.uiState.collectAsStateWithLifecycle()
             ModelAtlasTheme(dynamicColor = false) {
-                NavigationBackHandler(
-                    state = rememberNavigationEventState(NavigationEventInfo.None),
-                    onBackCompleted = { exits++ },
-                )
-                ChatRoute(viewModel = vm)
+                // 输入栏由共享底栏提供，页面本身不再包含第二套编辑器。
+                ModelAtlasScaffold(
+                    chatUiState = state,
+                    onChatInput = vm::setInput,
+                    onChatSend = vm::send,
+                    onChatStop = vm::stop,
+                    onChatClosed = { exits++; vm.stop() },
+                    chatContent = { padding, visible, onBack ->
+                        ChatRoute(bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, viewModel = vm)
+                    },
+                ) { _, _, _ -> }
             }
         }
+        compose.onNodeWithTag("nav-chat").performClick()
+        compose.onNodeWithTag("chat-screen").assertIsDisplayed()
     }
     private fun configure() {
         vm.openConfig(); vm.editConfig("https://example.test/api", "test-key", "model"); vm.applyConfig()

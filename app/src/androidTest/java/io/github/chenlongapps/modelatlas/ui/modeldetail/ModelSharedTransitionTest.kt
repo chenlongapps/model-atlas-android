@@ -63,6 +63,8 @@ class ModelSharedTransitionTest {
     private var pageColor = Color.Unspecified
     private val backInput = ModelBackTestInput()
     private lateinit var detailTransition: ModelSharedTransition
+    // 共享底栏是独立覆盖层：进入／返回子页时自行滑出滑入，像素差分只验证内容层。
+    private var navigationBand: Rect? = null
     private val catalog = mutableStateOf(listOf(
         ModelSummary("openai/one", "First model", openWeights = true, license = "MIT"),
         ModelSummary("openai/two", "Second model", openWeights = true, license = "MIT"),
@@ -670,7 +672,10 @@ class ModelSharedTransitionTest {
         var right = 0
         var top = before.height
         var bottom = 0
+        val band = navigationBand
         for (y in 0 until before.height) for (x in 0 until before.width) {
+            // 底栏滑出／滑入属于独立覆盖层动画，不参与共享容器边界判定。
+            if (band != null && x >= band.left && x < band.right && y >= band.top && y < band.bottom) continue
             val oldColor = before[x, y].toArgb()
             val newColor = after[x, y].toArgb()
             // 共享层切换时文字抗锯齿会有少量舍入差异，不把它当作整页回闪。
@@ -791,6 +796,12 @@ class ModelSharedTransitionTest {
             }
         }
         if (restoration == null) compose.setContent(content) else restoration.setContent(content)
+        compose.waitForIdle()
+        navigationBand = runCatching {
+            val bar = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
+            val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            Rect(bar.left, bar.top, bar.right, root.bottom)
+        }.getOrNull()
     }
 }
 
