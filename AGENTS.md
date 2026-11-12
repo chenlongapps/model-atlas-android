@@ -6,6 +6,14 @@
 - 修改应用结构、界面状态或数据流前，阅读 [架构说明](docs/architecture.md)；涉及 Models.dev、字段映射或计价时，阅读 [数据源说明](docs/data-source.md)。
 - 必要的项目背景文档统一放在 `docs/`，使用中文并区分已实现与规划内容。构建规范保留在本文件，任务进度保留在 [TODO.md](TODO.md)；实现变化时同步更新相关文档，避免重复维护。
 
+## UI 修改约束
+
+- 任何涉及 Compose UI、页面布局、视觉样式、交互方式或动画的任务，开始修改前必须阅读 `docs/Design.md` 的设计原则、设计一致性约束及对应页面章节。
+- UI 修改必须以 Material 3 和项目现有设计体系为共同约束，优先复用已有组件及 `ModelAtlasTheme`。
+- 实现前应检查目标页面及相近的现有 UI 组件，不得仅凭通用 Material 3 示例或 AI 自行设计来生成新界面。
+- 不得未经明确要求修改全局视觉风格或无关页面。
+- 完成后按 `docs/Design.md` 的 UI 修改执行流程检查，并报告实际验证结果。
+
 ## 构建与验证
 
 - 项目只有一个模块：`:app`。使用 `./gradlew`；虽然 Java 源码和目标兼容性均为 17，但 Gradle 守护进程需要 **JDK 25**（见 `gradle/gradle-daemon-jvm.properties`）。编译和目标 SDK 均为 **37**。
