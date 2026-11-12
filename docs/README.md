@@ -11,7 +11,8 @@
 | 调整视觉、布局或交互 | [UI/UX 设计规范](Design.md) |
 | 修改分层、状态、导航或转场 | [架构说明](architecture.md) |
 | 接入 LLM API、流式请求、配置与取消 | [LLM API 基础接入](llm-api.md) |
-| 修改 AI 聊天、会话状态、内存配置与键盘交互 | [AI 文本聊天](chat.md) |
+| 修改 AI 聊天、会话状态与键盘交互 | [AI 文本聊天](chat.md) |
+| 修改 AI 配置 DataStore、Keystore 加密、删除与备份 | [AI 配置持久化](ai-configuration.md) |
 | 接入模型、评测、中文发布包 | [ModelAtlas Data 契约](atlas-data.md) |
 | 修改服务商解析、能力语义、报价或许可 | [数据源说明](data-source.md) |
 | 修改 Room、目录事务、收藏或 Debug 数据编辑 | [本地目录数据](local-data.md) |

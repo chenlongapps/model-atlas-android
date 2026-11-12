@@ -91,6 +91,10 @@ internal fun ChatScreen(
     onEditConfig: (String, String, String) -> Unit = { _, _, _ -> },
     onApplyConfig: () -> Unit = {},
     onDismissConfig: () -> Unit = {},
+    onReloadConfig: () -> Unit = {},
+    onRequestClearConfig: () -> Unit = {},
+    onCancelClearConfig: () -> Unit = {},
+    onClearConfig: () -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
@@ -141,14 +145,14 @@ internal fun ChatScreen(
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                     Text(
-                        uiState.modelId ?: stringResource(R.string.chat_not_configured),
+                        if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }, enabled = !uiState.isGenerating) {
+                IconButton(onClick = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }, enabled = !uiState.isGenerating && !uiState.configLoading && !uiState.configSaving) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.chat_config_title))
                 }
             }
@@ -159,7 +163,7 @@ internal fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 items(uiState.turns, key = { it.id }, contentType = { "turn" }) { turn ->
-                    ChatTurnContent(turn, canRetry = turn === uiState.turns.lastOrNull() && !uiState.isGenerating, onRetry)
+                    ChatTurnContent(turn, canRetry = turn === uiState.turns.lastOrNull() && !uiState.isGenerating && uiState.configurationReady, onRetry)
                 }
                 if (uiState.turns.isEmpty()) item(key = "welcome") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,8 +176,14 @@ internal fun ChatScreen(
                     }
                 }
             }
+            if (uiState.configLoadFailed && uiState.configDraft == null) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    uiState.configFailure?.let { ChatConfigFailure(it) }
+                    TextButton(onClick = onReloadConfig, enabled = !uiState.configLoading) { Text(stringResource(R.string.chat_config_reload)) }
+                }
+            }
             if (uiState.modelId == null) {
-                TextButton(onClick = onOpenConfig, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                TextButton(onClick = onOpenConfig, enabled = !uiState.configLoading && !uiState.configSaving, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text(stringResource(R.string.chat_config_required))
                 }
             }
@@ -211,7 +221,11 @@ internal fun ChatScreen(
         }
     }
     uiState.configDraft?.let { draft ->
-        ChatConfigDialog(draft, onEditConfig, onApplyConfig, onDismissConfig)
+        ChatConfigDialog(draft, onEditConfig, onApplyConfig, onDismissConfig,
+            loading = uiState.configLoading, saving = uiState.configSaving, loadFailed = uiState.configLoadFailed,
+            failure = uiState.configFailure, confirmClear = uiState.confirmClearConfig,
+            onReload = onReloadConfig, onRequestClear = onRequestClearConfig,
+            onCancelClear = onCancelClearConfig, onClear = onClearConfig)
     }
 }
 

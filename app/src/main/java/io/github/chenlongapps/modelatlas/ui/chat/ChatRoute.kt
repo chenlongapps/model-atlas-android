@@ -19,5 +19,9 @@ internal fun ChatRoute(onBack: () -> Unit, viewModel: ChatViewModel = hiltViewMo
         onEditConfig = viewModel::editConfig,
         onApplyConfig = viewModel::applyConfig,
         onDismissConfig = viewModel::dismissConfig,
+        onReloadConfig = viewModel::retryLoadConfig,
+        onRequestClearConfig = viewModel::requestClearConfig,
+        onCancelClearConfig = viewModel::cancelClearConfig,
+        onClearConfig = viewModel::clearConfig,
     )
 }

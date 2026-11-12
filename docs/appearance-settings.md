@@ -1,6 +1,6 @@
 # 外观设置与持久化
 
-本文维护外观偏好的状态、持久化与异常契约；页面字段见[字段表](page-information.md#设置页)，尺寸与视觉见[设计规范](Design.md#设置与-debug)。AI 调用入口、导入导出及备份恢复功能未实现。
+本文维护外观偏好的状态、持久化与异常契约；页面字段见[字段表](page-information.md#设置页)，尺寸与视觉见[设计规范](Design.md#设置与-debug)。AI 助手及其配置存储分别见[聊天](chat.md)与[配置持久化](ai-configuration.md)，不复用外观仓库；尚无导入导出或应用内备份恢复入口。
 
 ## 配色规则
 
@@ -46,8 +46,8 @@ Repository Flow 只代表已持久化值，不包含拖动预览。ViewModel 在
 
 文件为应用私有目录 `files/datastore/appearance.preferences_pb`。字段包括明暗模式、颜色来源、预设稳定标识、可空自定义历史色相；不存储系统生成的整套色板。
 
-`data_extraction_rules.xml` 的 cloud backup、device transfer 及旧 `backup_rules.xml` 均只排除此新增文件，不改变其他数据的备份规则。Debug／Release 使用各自应用沙盒，偏好互不影响。没有新增 Room 表、网络请求或 AI 工具。
+`data_extraction_rules.xml` 的 cloud backup、device transfer 及旧 `backup_rules.xml` 均排除此外观文件；另独立排除设备绑定的 [AI 配置](ai-configuration.md)，不改变其余数据的备份规则。Debug／Release 使用各自应用沙盒，偏好互不影响。外观设置不新增 Room 表、网络请求或 AI 工具。
 
 ## 验证入口
 
-选测类与执行方式集中在[测试说明](testing.md)。重点保留并发字段更新／在途写入、1.5 秒超时与失败禁写、损坏文件不覆盖、完整色板对比度和备份 XML 只排除新增文件的断言；实际设备及服务验收只在 [TODO](../TODO.md#待验收与发布) 跟踪。
+选测类与执行方式集中在[测试说明](testing.md)。重点保留并发字段更新／在途写入、1.5 秒超时与失败禁写、损坏文件不覆盖、完整色板对比度和备份 XML 精确排除外观及 AI 配置文件的断言；实际设备及服务验收只在 [TODO](../TODO.md#待验收与发布) 跟踪。

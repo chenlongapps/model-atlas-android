@@ -12,7 +12,7 @@
 | `ui/ModelAtlasApp.kt` | 顶层 Pager、子页面、状态保存、共享转场宿主与底栏避让 |
 | `ui/navigation/` | 玻璃底栏、按实际栏数／RTL 的命中几何、非消费式滚动显隐 |
 | `data/remote/atlas/`、`data/remote/dto/` | Atlas 发布包及 Models.dev 服务商独立 DTO／解析，不包含 UI 或本地主键策略 |
-| `ai/`、`ai/openai/`、`ai/di/LlmModule.kt` | 集中维护独立 LLM 请求契约、OpenAI 兼容普通／流式客户端与 Hilt 绑定，仍属于 `:app`，不参与目录同步或持久化；见 [LLM API](llm-api.md) |
+| `ai/`、`ai/openai/`、`ai/di/` | 集中维护独立 LLM 请求契约、OpenAI 兼容普通／流式客户端与 Hilt 绑定，仍属于 `:app`，不参与目录同步；`ai/config/` 独立管理 DataStore／Keystore [配置持久化](ai-configuration.md)，客户端不读存储；见 [LLM API](llm-api.md) |
 | `data/mapper/`、`data/model/` | DTO → 本地类型；数据库投影 → 独立应用模型及纯业务规则 |
 | `data/local/` | Room3 实体、JSON 值对象、DAO、事务投影与 `CatalogStore` |
 | `data/repository/`、`di/DataModule.kt` | 请求协调、完整快照比较／提交、Flow、网络／数据库／时钟／IO 绑定 |
@@ -21,7 +21,7 @@
 | `ui/model/` | 共用身份展示、整卡共享转场与预测性返回控制器 |
 | `ui/transition/` | 模型／评测共用的保留可见性与可寻址双端转场时间轴 |
 | `ui/settings/`、`ui/theme/` | 设置子页、外观状态与语义主题；持久化见[外观设置](appearance-settings.md) |
-| `ui/chat/` | 独立 AI 文本会话、内存配置和显式请求生命周期；直接复用 `LlmClient`，见[聊天](chat.md) |
+| `ui/chat/` | 独立 AI 文本会话、配置恢复／提交与显式请求生命周期；直接复用 `LlmClient`，对话仅内存，见[聊天](chat.md) |
 
 Debug 工具位于 `src/debug/java/.../ui/debug/`，Release 同路径仅保留空 `DebugFeature`，不通过 `BuildConfig.DEBUG` 决定是否打包。隔离与签名见[双版本说明](debug-release-coexistence.md)。
 

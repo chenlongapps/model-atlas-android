@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 云备份与设备迁移均仅排除新增外观偏好，不改变其他数据规则。 -->
+<!-- 云备份与设备迁移均排除外观偏好及设备绑定的 AI 配置。 -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="datastore/appearance.preferences_pb" />
+        <exclude domain="file" path="datastore/llm_config.preferences_pb" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="datastore/appearance.preferences_pb" />
+        <exclude domain="file" path="datastore/llm_config.preferences_pb" />
     </device-transfer>
 </data-extraction-rules>

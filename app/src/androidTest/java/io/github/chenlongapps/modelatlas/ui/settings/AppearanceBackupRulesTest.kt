@@ -7,18 +7,21 @@ import org.junit.Test
 import org.xmlpull.v1.XmlPullParser
 
 class AppearanceBackupRulesTest {
-    @Test fun cloudAndDeviceTransferExcludeOnlyAppearanceFile() {
+    @Test fun cloudAndDeviceTransferExcludeAppearanceAndAiConfigWithoutChangingOtherData() {
         assertEquals(
             listOf(
                 Triple("cloud-backup", "file", "datastore/appearance.preferences_pb"),
+                Triple("cloud-backup", "file", "datastore/llm_config.preferences_pb"),
                 Triple("device-transfer", "file", "datastore/appearance.preferences_pb"),
+                Triple("device-transfer", "file", "datastore/llm_config.preferences_pb"),
             ),
             exclusions(R.xml.data_extraction_rules),
         )
     }
 
-    @Test fun legacyRulesExcludeOnlyAppearanceFile() {
-        assertEquals(listOf(Triple("full-backup-content", "file", "datastore/appearance.preferences_pb")),
+    @Test fun legacyRulesExcludeAppearanceAndAiConfigWithoutChangingOtherData() {
+        assertEquals(listOf(Triple("full-backup-content", "file", "datastore/appearance.preferences_pb"),
+            Triple("full-backup-content", "file", "datastore/llm_config.preferences_pb")),
             exclusions(R.xml.backup_rules))
     }
 

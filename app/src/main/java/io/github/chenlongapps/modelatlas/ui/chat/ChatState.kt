@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.chat
 
+import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +39,12 @@ internal data class ChatUiState(
     val modelId: String? = null,
     val isGenerating: Boolean = false,
     val configDraft: ChatConfigDraft? = null,
+    val configLoading: Boolean = false,
+    val configSaving: Boolean = false,
+    val configLoadFailed: Boolean = false,
+    val configFailure: ConfigFailure? = null,
+    val confirmClearConfig: Boolean = false,
 ) {
-    val canSend: Boolean get() = modelId != null && input.isNotBlank() && !isGenerating
+    val configurationReady: Boolean get() = modelId != null && !configLoading && !configSaving && !configLoadFailed
+    val canSend: Boolean get() = configurationReady && input.isNotBlank() && !isGenerating
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -54,6 +55,9 @@ import io.github.chenlongapps.modelatlas.ai.LlmConfig
 import io.github.chenlongapps.modelatlas.ai.LlmException
 import io.github.chenlongapps.modelatlas.ai.LlmRequest
 import io.github.chenlongapps.modelatlas.ai.LlmResponse
+import io.github.chenlongapps.modelatlas.ai.config.LlmConfigRepository
+import io.github.chenlongapps.modelatlas.ai.config.ConfigStorageException
+import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.Channel
@@ -67,6 +71,7 @@ class ChatScreenTest {
     @get:Rule val compose = createComposeRule()
     private val store = ViewModelStore()
     private val fake = FakeClient()
+    private val configs = MemoryConfigs()
     private lateinit var vm: ChatViewModel
     private lateinit var view: View
     private lateinit var lifecycle: LifecycleRegistry
@@ -125,6 +130,87 @@ class ChatScreenTest {
         compose.onNodeWithTag("chat-config-apply").performClick()
         compose.onNodeWithText("test-model").assertIsDisplayed()
         assertEquals(0, fake.calls.get())
+    }
+
+    @Test fun clearConfigurationRequiresConfirmationAndRestoredViewModelHasNoCredentials() {
+        show()
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
+        compose.onNodeWithText("取消").performClick()
+        compose.runOnIdle { assertEquals("model", vm.uiState.value.modelId) }
+        compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
+        compose.onNodeWithTag("chat-config-clear-confirm").performClick()
+        compose.onNodeWithText("请先配置 API 和模型").assertIsDisplayed()
+        compose.onNodeWithTag("chat-send").assertIsNotEnabled()
+        compose.runOnIdle { assertNull(configs.config); assertEquals(0, fake.calls.get()) }
+    }
+
+    @Test fun loadFailureOffersRetryAndResetButCannotOverwriteCredentials() {
+        configs.loadError = ConfigStorageException(ConfigFailure.KEY_UNAVAILABLE)
+        show(configured = false)
+        compose.onNodeWithText("无法加密或解密 API Key。", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
+        compose.onNodeWithTag("chat-base-url").assertIsNotEnabled()
+        configs.loadError = null
+        configs.config = LlmConfig("https://example.test/api", "test-key", "recovered")
+        compose.onNodeWithText("重试读取").performScrollTo().performClick()
+        compose.onNodeWithTag("chat-model-id").assert(hasText("recovered"))
+        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithText("recovered").assertIsDisplayed()
+        assertEquals(0, fake.calls.get())
+    }
+
+    @Test fun savingFailureRetainsDraftAndOldConfigUntilExplicitRetry() {
+        show()
+        configs.saveError = ConfigStorageException(ConfigFailure.STORAGE)
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        compose.onNodeWithTag("chat-model-id").performTextInput("-new")
+        compose.onNodeWithTag("chat-config-apply").performClick()
+        compose.onNodeWithText("配置读取或保存失败。", substring = true).performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertEquals("model", vm.uiState.value.modelId); assertNotNull(vm.uiState.value.configDraft) }
+        configs.saveError = null
+        compose.onNodeWithTag("chat-config-apply").performClick()
+        compose.runOnIdle { assertNull(vm.uiState.value.configDraft); assertEquals(configs.config!!.modelId, vm.uiState.value.modelId) }
+        assertEquals(0, fake.calls.get())
+    }
+
+    @Test fun newViewModelRestoresOnlyAppliedConfigWithoutMessagesOrAutomaticRequests() {
+        init()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            vm.setInput("private draft")
+            vm.openConfig(); vm.editConfig("https://discarded.test", "discarded-key", "discarded-model"); vm.dismissConfig()
+        }
+        show(configured = false)
+        compose.onNodeWithText("model").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals("", vm.uiState.value.input)
+            assertTrue(vm.uiState.value.turns.isEmpty())
+            assertEquals(0, fake.calls.get())
+        }
+    }
+
+    @Test fun configurationErrorAndClearConfirmationRemainReachableAtNarrowLargeFontRtl() {
+        var state by mutableStateOf(ChatUiState(
+            configDraft = ChatConfigDraft(), configLoadFailed = true, configFailure = ConfigFailure.KEY_UNAVAILABLE,
+        ))
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 2f), LocalLayoutDirection provides LayoutDirection.Rtl) {
+                ModelAtlasTheme(dynamicColor = false) {
+                    Box(Modifier.requiredSize(320.dp, 640.dp)) {
+                        ChatScreen(state, {}, onRequestClearConfig = { state = state.copy(confirmClearConfig = true) },
+                            onCancelClearConfig = { state = state.copy(confirmClearConfig = false) })
+                    }
+                }
+            }
+        }
+        compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
+        compose.onNodeWithText("无法加密或解密 API Key。", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("重试读取").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
+        compose.onNodeWithTag("chat-config-clear-confirm").assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
     }
 
     @Test fun credentialsInputAndMessagesAreAbsentFromSavedUiState() {
@@ -273,7 +359,7 @@ class ChatScreenTest {
             owner = object : LifecycleOwner { override val lifecycle = LifecycleRegistry(this) }
             lifecycle = owner.lifecycle as LifecycleRegistry
             lifecycle.currentState = Lifecycle.State.RESUMED
-            vm = ChatViewModel(fake)
+            vm = ChatViewModel(fake, configs)
             store.put("chat", vm)
             if (configured) configure()
         }
@@ -294,6 +380,15 @@ class ChatScreenTest {
         compose.waitUntil { fake.calls.get() == 1 }
     }
     private fun imeVisible() = ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+    private class MemoryConfigs : LlmConfigRepository {
+        var config: LlmConfig? = null
+        var loadError: Exception? = null
+        var saveError: Exception? = null
+        override suspend fun load(): LlmConfig? { loadError?.let { throw it }; return config }
+        override suspend fun save(config: LlmConfig) { saveError?.let { throw it }; this.config = config }
+        override suspend fun clear() { config = null }
+    }
 
     private class FakeClient : LlmClient {
         val calls = AtomicInteger()

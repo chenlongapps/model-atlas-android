@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.SecureFlagPolicy
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 @Composable
@@ -30,10 +31,34 @@ internal fun ChatConfigDialog(
     onEdit: (String, String, String) -> Unit,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
+    loading: Boolean = false,
+    saving: Boolean = false,
+    loadFailed: Boolean = false,
+    failure: ConfigFailure? = null,
+    confirmClear: Boolean = false,
+    onReload: () -> Unit = {},
+    onRequestClear: () -> Unit = {},
+    onCancelClear: () -> Unit = {},
+    onClear: () -> Unit = {},
 ) {
+    val busy = loading || saving
+    val properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn, dismissOnBackPress = !busy, dismissOnClickOutside = !busy)
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = onCancelClear,
+            properties = properties,
+            title = { Text(stringResource(R.string.chat_config_clear)) },
+            text = { Text(stringResource(R.string.chat_config_clear_notice)) },
+            confirmButton = { TextButton(onClick = onClear, enabled = !busy, modifier = Modifier.testTag("chat-config-clear-confirm")) {
+                Text(stringResource(if (saving) R.string.chat_config_saving else R.string.chat_config_clear_confirm))
+            } },
+            dismissButton = { TextButton(onClick = onCancelClear, enabled = !busy) { Text(stringResource(R.string.chat_config_cancel)) } },
+        )
+        return
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
+        properties = properties,
         title = { Text(stringResource(R.string.chat_config_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -41,6 +66,7 @@ internal fun ChatConfigDialog(
                 // String TextField 不使用 rememberTextFieldState / Saver；密钥只由 VM 内存草稿持有。
                 OutlinedTextField(
                     value = draft.baseUrl,
+                    enabled = !busy && !loadFailed,
                     onValueChange = { onEdit(it, draft.apiKey, draft.modelId) },
                     label = { Text(stringResource(R.string.chat_base_url)) },
                     supportingText = { Text(stringResource(R.string.chat_base_url_hint)) },
@@ -50,6 +76,7 @@ internal fun ChatConfigDialog(
                 )
                 OutlinedTextField(
                     value = draft.apiKey,
+                    enabled = !busy && !loadFailed,
                     onValueChange = { onEdit(draft.baseUrl, it, draft.modelId) },
                     label = { Text(stringResource(R.string.chat_api_key)) },
                     singleLine = true,
@@ -59,6 +86,7 @@ internal fun ChatConfigDialog(
                 )
                 OutlinedTextField(
                     value = draft.modelId,
+                    enabled = !busy && !loadFailed,
                     onValueChange = { onEdit(draft.baseUrl, draft.apiKey, it) },
                     label = { Text(stringResource(R.string.chat_model_id)) },
                     singleLine = true,
@@ -66,11 +94,26 @@ internal fun ChatConfigDialog(
                     modifier = Modifier.fillMaxWidth().testTag("chat-model-id"),
                 )
                 if (draft.invalid) Text(stringResource(R.string.chat_config_invalid), color = MaterialTheme.colorScheme.error)
+                if (failure != null) ChatConfigFailure(failure)
+                if (loadFailed) TextButton(onClick = onReload, enabled = !busy) { Text(stringResource(R.string.chat_config_reload)) }
+                TextButton(onClick = onRequestClear, enabled = !busy, modifier = Modifier.testTag("chat-config-clear")) {
+                    Text(stringResource(R.string.chat_config_clear))
+                }
             }
         },
-        confirmButton = { TextButton(onClick = onApply, modifier = Modifier.testTag("chat-config-apply")) { Text(stringResource(R.string.chat_config_apply)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.chat_config_cancel)) } },
+        confirmButton = { TextButton(onClick = onApply, enabled = !busy && !loadFailed, modifier = Modifier.testTag("chat-config-apply")) {
+            Text(stringResource(if (saving) R.string.chat_config_saving else R.string.chat_config_apply))
+        } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.chat_config_cancel)) } },
     )
+}
+
+@Composable
+internal fun ChatConfigFailure(failure: ConfigFailure) {
+    Text(stringResource(when (failure) {
+        ConfigFailure.STORAGE -> R.string.chat_config_storage_error
+        ConfigFailure.KEY_UNAVAILABLE -> R.string.chat_config_key_error
+    }), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
 }
 
 @Preview(name = "Chat configuration", showBackground = true)

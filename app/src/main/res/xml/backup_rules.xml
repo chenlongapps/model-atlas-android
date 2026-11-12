@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 仅排除新增外观偏好，其他数据沿用既有备份行为。 -->
+<!-- 外观偏好与设备绑定的 AI 配置不参与备份；其他数据规则不变。 -->
 <full-backup-content>
     <exclude domain="file" path="datastore/appearance.preferences_pb" />
+    <exclude domain="file" path="datastore/llm_config.preferences_pb" />
 </full-backup-content>

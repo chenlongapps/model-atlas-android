@@ -4,7 +4,7 @@
 
 已实现 OpenAI 兼容的 `POST chat/completions` 文本请求、普通响应、SSE 流式响应，以及 system／user／assistant 有序多轮上下文。不新增依赖，不改变目录同步、数据库或外观持久化。
 
-设置已提供独立[文本聊天 UI](chat.md)，由 `ChatViewModel` 直接管理内存配置、多轮上下文及请求生命周期，没有仅透传的 `ChatRepository`。尚未实现凭据／历史持久化、Function Calling、Agent、后台服务或服务端。
+设置已提供独立[文本聊天 UI](chat.md)，由 `ChatViewModel` 管理多轮上下文及请求生命周期，直接调用 `LlmClient`，没有仅透传的 `ChatRepository`。已提交配置通过独立 DataStore／Keystore [持久化](ai-configuration.md)；尚未实现历史持久化、Function Calling、Agent、后台服务或服务端。
 
 ## 代码边界
 
@@ -19,6 +19,7 @@ AI 代码统一放在 `app/src/main/java/io/github/chenlongapps/modelatlas/ai/`�
 | `ai/openai/OpenAiCompatibleClient.kt` | OkHttp 请求、协程取消、限长读取及协议映射 |
 | `ai/openai/ServerSentEvents.kt` | UTF-8／LF／CRLF、BOM、注释、多行 data 与 SSE 分帧 |
 | `ai/di/LlmModule.kt` | 将 `OpenAiCompatibleClient` 绑定为 `LlmClient` |
+| `ai/config/`、`ai/di/LlmConfigModule.kt` | 配置存储契约、DataStore、Keystore 加密及独立 Hilt 绑定 |
 
 客户端通过 Hilt 复用现有无日志 OkHttp 和 `@IoDispatcher`，派生客户端共享连接池／调度器，不改变目录客户端的超时。动态 Base URL、认证头和有界 SSE 读取直接使用 OkHttp；不为此重复创建 Retrofit Service／依赖。DTO 使用独立 Kotlinx Serialization `Json`，忽略新增字段，不改变 Models.dev 解析配置。
 
@@ -61,7 +62,7 @@ llmClient.stream(config, LlmRequest(nextTurn)).collect { chunk ->
 - 不重定向，不自动重试。除 `retryOnConnectionFailure(false)` 外，请求体设置 `isOneShot()`，阻止 OkHttp 因 `503 + Retry-After: 0` 等 follow-up 重放付费 POST。用户主动重试仍可能重复计费，应由后续业务明确确认，不对部分流式结果自动续接。
 - 普通响应限 8 MiB，每个 SSE 事件限 1 MiB；超限、损坏 JSON、缺少必要结构、意外 EOF／缺少 `[DONE]` 均失败，不把截断内容当成功。上层可以保留已收到的部分文本，但必须标记请求未完成。
 - 配置不使用自动暴露字段的 data class，`toString()` 固定脱敏。当前不记录 headers、body、提示词或响应；不得向共享客户端增加包含敏感数据的日志拦截器／EventListener，异常上报也不得额外附上配置。消息和响应本身仍是敏感数据，不能因错误已脱敏就随意记录。
-- 不把开发者密钥放入 APK、BuildConfig、资源、Git、SavedState、备份或普通 Preferences。当前配置仅存在于调用方内存；未来用户密钥存储及删除策略需单独设计。工具调用、写入确认及 Agent 成本／循环上限均为后续任务。
+- 不把开发者密钥放入 APK、BuildConfig、资源、Git、SavedState、备份或明文 Preferences。用户 API Key 仅以 Keystore 加密密文保存；客户端仍每次接收显式运行配置，不访问存储，详见[配置持久化](ai-configuration.md)。工具调用、写入确认及 Agent 成本／循环上限均为后续任务。
 
 ## 测试
 

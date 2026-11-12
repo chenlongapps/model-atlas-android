@@ -24,7 +24,7 @@
     <string name="chat_empty_response">模型未返回文本。</string>
     <string name="chat_retry_notice">失败或停止的轮次不加入后续上下文。重试将替换本轮部分回复，并重新发起可能计费的请求。</string>
     <string name="chat_retry">重新生成</string>
-    <string name="chat_config_notice">配置和对话仅保留在当前进程内存中，进程结束后丢失。更改任意配置会清空对话，开始新会话；不会自动发送请求。</string>
+    <string name="chat_config_notice">API 地址和 Model ID 保存在本机；API Key 通过 Android Keystore 加密保存，不参与备份或设备迁移。对话仅保留在内存中。应用配置成功后才生效，更改配置会清空对话；不会自动发送请求。</string>
     <string name="chat_base_url">API Base URL</string>
     <string name="chat_base_url_hint">完整 API 根路径（HTTPS），不自动补 /v1；不要填写 chat/completions。</string>
     <string name="chat_api_key">API Key</string>
@@ -32,4 +32,12 @@
     <string name="chat_config_invalid">配置无效：请检查完整 HTTPS 根路径、非空可打印 ASCII 密钥及 Model ID。URL 不得含用户名、密码、查询或片段；仅本机开发允许 HTTP。</string>
     <string name="chat_config_apply">应用</string>
     <string name="chat_config_cancel">取消</string>
+    <string name="chat_config_loading">正在读取配置…</string>
+    <string name="chat_config_saving">正在保存…</string>
+    <string name="chat_config_storage_error">配置读取或保存失败。请重试；若仍无法读取，可清除已保存配置后重新填写。</string>
+    <string name="chat_config_key_error">无法加密或解密 API Key。请重试；若密钥已丢失或失效，请清除已保存配置后重新填写。</string>
+    <string name="chat_config_reload">重试读取</string>
+    <string name="chat_config_clear">清除已保存配置</string>
+    <string name="chat_config_clear_notice">将删除本机 API 配置、加密密钥和当前内存对话。此操作不可撤销，不影响服务商账户。</string>
+    <string name="chat_config_clear_confirm">确认清除</string>
 </resources>

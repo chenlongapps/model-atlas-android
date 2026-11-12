@@ -5,6 +5,16 @@
 
 ## 整理后追加记录
 
+### 2026-11-12 AI 配置 DataStore／Keystore 持久化
+
+- 范围：新增独立 `ai/config/` 配置仓库、单例 Preferences DataStore 与 Hilt 绑定；Base URL／Model ID 和 API Key 密文同事务提交，密钥使用 Android Keystore AES-256-GCM、随机 IV、端点／模型／版本 AAD。不新增依赖，不改目录／Room／外观仓库或 LLM 请求协议，不读取运行时测试凭据。
+- 状态：聊天异步恢复配置，恢复／保存中禁发，应用持久化成功才替换运行配置；失败保留原配置与编辑草稿，读失败不视为未配置。新增安全错误、重新读取及二次确认清除；只有用户确认清除才恢复损坏 protobuf，清除后删除 Keystore 别名。对话／输入／草稿仍不持久化，旧式备份／云备份／设备迁移均排除新增文件。
+- 单元与构建：最终全量单元实际 58 类／427 项，426 通过、1 项付费线上测试默认跳过，0 失败／错误；其中 `LlmConfigRepositoryTest` 11 项、`ChatViewModelTest` 18 项，覆盖真实 DataStore 文件重开、并发整份提交、无明文、篡改、丢失密钥、磁盘写入失败不覆盖、取消、显式清除及 ViewModel 防重入／失败恢复。Debug 应用及测试 APK 构建通过；Debug Lint 通过，0 error、71 Warning／2 Hint。报告位于 `app/build/reports/tests/testDebugUnitTest/`、`app/build/reports/lint-results-debug.html`。
+- 设备首轮：API 37／`emulator-5554` 的 `KeystoreConfigTest` 因清理方法末尾 `File.delete()` 使表达式返回 Boolean，JUnit4 拒绝发现；已显式返回 Unit。随后模拟器进程退出、ADB 断开，批次中断，不计通过。恢复原 AVD（不清数据／卸载／重建）后，快照带回旧应用 APK，首个重试批次出现缺类／方法及旧备份 XML 断言失败；重新覆盖安装本轮应用与测试包，并核对两者安装 SHA-256 均与本地 APK 一致，再进行有效回归。另修正命令中外观导航的实际包名为 `ui.AppearanceNavigationTest`，不把未发现的类计入覆盖。
+- 最终设备：同一组匹配 APK 在 API 37／`emulator-5554` 显式 runner 批量执行，实际 `numtests=30`、`OK (30 tests)`，5 类／30 项全部通过：`KeystoreConfigTest` 5 项、`ChatScreenTest` 17 项、`ChatNavigationTest` 3 项、`AppearanceBackupRulesTest` 2 项、`ui.AppearanceNavigationTest` 3 项。覆盖真实不可导出 Keystore 密钥、随机 IV、端点／密文认证、丢失密钥恢复，以及配置保存／失败／清除、320dp 双倍字号 RTL、敏感 UI 状态、IME 和来源返回。显式 runner 不更新 Gradle connected 报告，不将此前中断或 APK 不匹配批次计为通过。
+- 真实宿主冒烟：使用生产 Debug `MainActivity`／Hilt／DataStore／Keystore 链路，仅输入 `.test` 端点及假凭据，确认应用保存后模型名生效、磁盘含 URL／Model ID 且不含假密钥明文；`am force-stop` 后重新启动，重新进入聊天能恢复模型，配置弹窗恢复原 URL、Model ID 和掩码密钥。随后经二次确认清除该组测试配置，复查未配置状态与磁盘字段移除，恢复临时切换的键盘语言。未点击发送，不发起真实聊天请求，也未清除原有目录／收藏数据。
+- 边界：未调用真实付费 API；自动测试 Keystore 使用随机专用别名和 cache 文件，不删除生产凭据。全量设备／Release、真机跨厂商 Keystore／进程恢复、真实系统备份／迁移仍需另行验收；模拟器进程重启通过不冒充这些验收。
+
 ### 2026-11-11 AI 文本聊天页面
 
 - 范围：设置新增「AI 助手」独立子页，不增加底栏标签、不引入导航／AI 框架或第三方依赖；保留来源 Pager 及阅读状态。新增 `ui/chat/` 的 Route、纯 Screen／Preview、配置弹窗、稳定轮次状态与 Hilt ViewModel，直接复用 `LlmClient.stream()`；不增加透传 Repository、不改变目录／评测／收藏／外观存储。客户端 URL 校验原样提取供 `LlmConfig.validate()` 与请求共用，不改 URL 拼接、SSE 或付费请求安全行为。

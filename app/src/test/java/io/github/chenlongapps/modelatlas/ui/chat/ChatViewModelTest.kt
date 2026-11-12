@@ -10,14 +10,19 @@ import io.github.chenlongapps.modelatlas.ai.LlmRequest
 import io.github.chenlongapps.modelatlas.ai.LlmResponse
 import io.github.chenlongapps.modelatlas.ai.LlmRole
 import io.github.chenlongapps.modelatlas.ai.LlmUsage
+import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
+import io.github.chenlongapps.modelatlas.ai.config.ConfigStorageException
+import io.github.chenlongapps.modelatlas.ai.config.LlmConfigRepository
 import io.github.chenlongapps.modelatlas.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.TestScope
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
@@ -28,8 +33,10 @@ class ChatViewModelTest {
     @get:Rule val dispatcher = MainDispatcherRule()
     private val store = ViewModelStore()
     private val client = FakeClient()
-    private fun create(configured: Boolean = true) = ChatViewModel(client).also {
+    private val configs = FakeConfigs()
+    private fun TestScope.create(configured: Boolean = true) = ChatViewModel(client, configs).also {
         store.put("chat", it)
+        runCurrent()
         if (configured) configure(it)
     }
     @After fun close() = store.clear()
@@ -174,19 +181,19 @@ class ChatViewModelTest {
         assertFalse(ChatConfigDraft("url", "secret", "model").toString().contains("secret"))
     }
 
-    @Test fun configurationEditingIsMemoryOnlyAndChangingItStartsNewConversation() = runTest {
+    @Test fun onlyAppliedConfigurationIsPersistedAndChangingItStartsNewConversation() = runTest {
         val vm = create(); send(vm); client.finish(); advanceUntilIdle()
         val turns = vm.uiState.value.turns
-        vm.openConfig(); vm.applyConfig()
+        vm.openConfig(); vm.applyConfig(); runCurrent()
         assertSame(turns, vm.uiState.value.turns)
         vm.openConfig(); vm.editConfig("https://other.example/api", "new-secret", "new-model"); vm.dismissConfig()
         assertEquals("model", vm.uiState.value.modelId)
-        vm.openConfig(); vm.editConfig("https://other.example/api", "new-secret", "new-model"); vm.applyConfig()
+        vm.openConfig(); vm.editConfig("https://other.example/api", "new-secret", "new-model"); vm.applyConfig(); runCurrent()
         assertTrue(vm.uiState.value.turns.isEmpty())
         assertEquals("new-model", vm.uiState.value.modelId)
         assertEquals(1, client.requests.size)
         val fresh = create(false)
-        assertNull(fresh.uiState.value.modelId)
+        assertEquals("new-model", fresh.uiState.value.modelId)
         assertTrue(fresh.uiState.value.turns.isEmpty())
     }
 
@@ -227,13 +234,120 @@ class ChatViewModelTest {
         }
     }
 
-    private fun configure(vm: ChatViewModel) {
+    private fun TestScope.configure(vm: ChatViewModel) {
         vm.openConfig(); vm.editConfig("https://example.test/custom/root", "test-key", "model"); vm.applyConfig()
+        runCurrent()
     }
     private suspend fun kotlinx.coroutines.test.TestScope.send(vm: ChatViewModel, text: String = "hello") {
         vm.setInput(text); vm.send(); runCurrent()
     }
     private fun reply(vm: ChatViewModel) = vm.uiState.value.turns.last().reply.value
+
+    @Test fun delayedRestoreBlocksEditsAndSendingAndNeverStartsNetwork() = runTest {
+        configs.saved = LlmConfig("https://example.test/api", "restored-key", "restored-model")
+        configs.loadGate = CompletableDeferred()
+        val vm = create(false)
+        vm.setInput("hello"); vm.send(); vm.openConfig()
+        assertTrue(vm.uiState.value.configLoading)
+        assertFalse(vm.uiState.value.canSend)
+        assertNull(vm.uiState.value.configDraft)
+        configs.loadGate!!.complete(Unit); runCurrent()
+        assertEquals("restored-model", vm.uiState.value.modelId)
+        assertTrue(vm.uiState.value.canSend)
+        vm.openConfig()
+        assertEquals("restored-key", vm.uiState.value.configDraft!!.apiKey)
+        assertTrue(vm.uiState.value.turns.isEmpty())
+        assertTrue(client.requests.isEmpty())
+    }
+
+    @Test fun saveFailureKeepsOldConfigConversationAndDraftAndRetryCommitsOnce() = runTest {
+        val vm = create(); send(vm); client.finish(); advanceUntilIdle()
+        val turns = vm.uiState.value.turns
+        configs.saveGate = CompletableDeferred()
+        configs.saveError = ConfigStorageException(ConfigFailure.STORAGE)
+        vm.openConfig(); vm.editConfig("https://other.test/api", "other-key", "other-model"); vm.applyConfig()
+        repeat(3) { vm.applyConfig(); vm.dismissConfig(); vm.send(); vm.editConfig("bad", "bad", "bad") }
+        runCurrent()
+        assertTrue(vm.uiState.value.configSaving)
+        assertEquals(2, configs.saves)
+        assertEquals("other-model", vm.uiState.value.configDraft!!.modelId)
+        assertSame(turns, vm.uiState.value.turns)
+        configs.saveGate!!.complete(Unit); runCurrent()
+        assertEquals("model", vm.uiState.value.modelId)
+        assertEquals("model", configs.saved!!.modelId)
+        assertEquals(ConfigFailure.STORAGE, vm.uiState.value.configFailure)
+        assertSame(turns, vm.uiState.value.turns)
+        configs.saveError = null
+        vm.applyConfig(); runCurrent()
+        assertEquals("other-model", vm.uiState.value.modelId)
+        assertTrue(vm.uiState.value.turns.isEmpty())
+        assertNull(vm.uiState.value.configDraft)
+        assertEquals(1, client.requests.size)
+    }
+
+    @Test fun loadFailureIsNotAnEmptyConfigAndDoesNotAllowOverwritingUntilResetOrRetry() = runTest {
+        configs.loadError = ConfigStorageException(ConfigFailure.KEY_UNAVAILABLE)
+        val vm = create(false)
+        vm.setInput("hello"); vm.openConfig(); vm.editConfig("https://test.test", "key", "model"); vm.applyConfig(); vm.send()
+        assertTrue(vm.uiState.value.configLoadFailed)
+        assertEquals(ConfigFailure.KEY_UNAVAILABLE, vm.uiState.value.configFailure)
+        assertEquals(0, configs.saves)
+        configs.loadError = null
+        configs.saved = LlmConfig("https://example.test", "key", "recovered")
+        vm.retryLoadConfig(); runCurrent()
+        assertFalse(vm.uiState.value.configLoadFailed)
+        assertEquals("recovered", vm.uiState.value.configDraft!!.modelId)
+        assertTrue(client.requests.isEmpty())
+    }
+
+    @Test fun clearRequiresConfirmationAndRemovesPersistedAndMemoryStateWithoutNetwork() = runTest {
+        val vm = create(); send(vm); client.finish(); advanceUntilIdle()
+        vm.setInput("draft")
+        vm.clearConfig(); runCurrent()
+        assertNotNull(configs.saved)
+        vm.openConfig(); vm.requestClearConfig(); vm.cancelClearConfig(); vm.clearConfig(); runCurrent()
+        assertNotNull(configs.saved)
+        vm.requestClearConfig(); vm.clearConfig(); vm.clearConfig(); runCurrent()
+        assertNull(configs.saved)
+        assertEquals(1, configs.clears)
+        assertNull(vm.uiState.value.modelId)
+        assertTrue(vm.uiState.value.turns.isEmpty())
+        assertEquals("", vm.uiState.value.input)
+        assertNull(create(false).uiState.value.modelId)
+        assertEquals(1, client.requests.size)
+    }
+
+    @Test fun failedClearDisablesOldCredentialsAndCanBeRetriedWithoutLeakingError() = runTest {
+        val vm = create()
+        configs.clearError = IllegalStateException("sensitive-secret")
+        vm.openConfig(); vm.requestClearConfig(); vm.clearConfig(); runCurrent()
+        assertNull(vm.uiState.value.modelId)
+        assertTrue(vm.uiState.value.configLoadFailed)
+        assertEquals(ConfigFailure.STORAGE, vm.uiState.value.configFailure)
+        assertFalse(vm.uiState.value.toString().contains("sensitive-secret"))
+        configs.clearError = null
+        vm.requestClearConfig(); vm.clearConfig(); runCurrent()
+        assertFalse(vm.uiState.value.configLoadFailed)
+        assertNull(configs.saved)
+    }
+
+    private class FakeConfigs : LlmConfigRepository {
+        var saved: LlmConfig? = null
+        var loadGate: CompletableDeferred<Unit>? = null
+        var saveGate: CompletableDeferred<Unit>? = null
+        var loadError: Exception? = null
+        var saveError: Exception? = null
+        var clearError: Exception? = null
+        var saves = 0
+        var clears = 0
+        override suspend fun load(): LlmConfig? {
+            loadGate?.await(); loadError?.let { throw it }; return saved
+        }
+        override suspend fun save(config: LlmConfig) {
+            saves++; saveGate?.await(); saveError?.let { throw it }; saved = config
+        }
+        override suspend fun clear() { clears++; clearError?.let { throw it }; saved = null }
+    }
 
     private class FakeClient : LlmClient {
         val requests = mutableListOf<LlmRequest>()
