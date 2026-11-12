@@ -5,6 +5,17 @@
 
 ## 整理后追加记录
 
+### 2026-11-11 AI 文本聊天页面
+
+- 范围：设置新增「AI 助手」独立子页，不增加底栏标签、不引入导航／AI 框架或第三方依赖；保留来源 Pager 及阅读状态。新增 `ui/chat/` 的 Route、纯 Screen／Preview、配置弹窗、稳定轮次状态与 Hilt ViewModel，直接复用 `LlmClient.stream()`；不增加透传 Repository、不改变目录／评测／收藏／外观存储。客户端 URL 校验原样提取供 `LlmConfig.validate()` 与请求共用，不改 URL 拼接、SSE 或付费请求安全行为。
+- 会话：显式发送／重试才单次收集冷流；增量只更新当前回复，正常完成／失败／取消分态。保留部分内容、停止真正取消 Job，覆盖尚未调度的请求；重试复用用户消息并替换部分回复。后续仅携带完成轮次的有序 user／assistant 对，失败／停止整轮排除。配置和草稿仅内存、密钥掩码及 secure 弹窗，不读运行时测试密钥、不写凭据／消息到持久化或 SavedState。支持多行输入、复制、长文本与按阅读位置跟随；助手不注入本地目录或伪造回复。
+- 单元与构建：`ChatViewModelTest` 13 项、既有 `OpenAiCompatibleClientTest` 17 项，实际两类／30 项全部通过，0 跳过／失败／错误；涵盖多轮、空增量／finish／usage、失败／取消、资源释放、防重复、配置、显式重试和重新收集。Debug 应用／测试 APK 构建通过；末轮 Debug Lint 0 error、71 Warning／2 Hint，报告见 `app/build/reports/lint-results-debug.html`；单元见 `app/build/reports/tests/testDebugUnitTest/`。未开启 `llmLiveTest`，不调用真实付费 API。
+- 首轮修正：设备测试首次编译缺少 Compose `assert` import，补齐后通过。API 37 的首次 IME 返回严格断言失败，不能用 `ime.bottom > 0` 或切换 handler enabled 判断键盘是否拥有返回；改读独立 `WindowInsets.isImeVisible`，在同一 handler 完成时明确分流收键盘／离页，定向用例通过。期间临时 key 拦截及仅记录可见性的诊断均已移除。滚动改为正向列表，另测在同一条增长中的长回复中部阅读不会跳动；对旧消息的滚动测试使用真实手势建立用户阅读状态，不以程序定位代替。
+- 设备批次：使用既有 API 37／`emulator-5554`，显式安装覆盖、不清数据／卸载／重建模拟器；首批声明 42 项但宿主 120 秒超时，之后两次定向也有宿主超时，不把中断视为整批通过；保留首次键盘失败事实。修正后批量实际 `numtests=47`、`OK (47 tests)`，覆盖 `ChatScreenTest` 11 项、`ChatNavigationTest` 3 项、`AppearanceNavigationTest` 3 项、`ModelDetailNavigationTest` 3 项、`ModelAtlasAppTest` 24 项、`ModelSeekableTransitionTest` 1 项，以及 `BenchmarkSharedTransitionTest#predictiveBackPausesCancelsAndCommitsFromEitherEdge`、`BenchmarkReentryTest#leaderboardButtonAndSystemBackKeepTheSameSubscriptionAndOverviewPosition` 各 1 项。末次聊天专测另记下行；显式 runner 不更新 Gradle connected 报告，临时 shell 输出不保证永久保存。
+- 最终聊天专测：空会话不跟随到欢迎页尾部、补配置弹窗 Preview 及敏感状态检查后，重建／覆盖安装对应 APK，`ChatScreenTest` 12 项＋`ChatNavigationTest` 3 项实际 `numtests=15`、`OK (15 tests)`，0 失败／忽略；其中显式检查 `SaveableStateRegistry.performSave()` 不含假密钥、输入、用户消息或回复。结合上批未受此调整影响的其他 33 项，本轮最终选测范围去重为 8 类／48 项全部通过，不将 47＋15 重复累加。
+- 实际宿主冒烟：启动正式 Debug `MainActivity`／Hilt 链路，设置进入聊天、未配置提示与禁发、配置弹窗及密码字段语义、取消与系统返回恢复设置均正常；检查浅色空会话截图及系统栏／输入区位置，无底栏穿透。Android CLI 截图前附带了 screencap 的多显示器警告，临时去除 PNG 签名前的警告字节后才读取检查，未改应用显示。未填写凭据或发起 AI 请求。启动时另观察到该模拟器现有目录及收藏读取错误，原因未定位，未清数据或越界修改业务，已记 TODO；独立聊天入口不依赖该缓存。
+- 边界：没有执行全量单元／设备、Release 或真实服务聊天、真实 Activity 旋转／TalkBack／跨厂商动态色／系统边缘手势验收；同 VM 的组合状态恢复及 dispatcher 注入不冒充这些验收。既有 Debug 数据库编辑的 IME bug 不在本次范围，保留原 TODO，不因聊天页修正而宣称全局解决。
+
 ### 2026-11-11 线上测试支持本地配置
 
 - 范围：根目录已忽略的 `local.properties` 增加调用方提供的测试端点／密钥／模型，保留已有 SDK 配置，并将本机文件权限收紧为 600；仅为开发机测试使用，不新增应用凭据持久化。`LlmLiveTest` 改为显式 `-PllmLiveTest=true` 才执行，未开启时不读取凭据、不联网；开启但配置不完整时失败。

@@ -92,6 +92,9 @@ import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkLeaderboardRoute
 import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkLeaderboardScreen
 import io.github.chenlongapps.modelatlas.ui.benchmark.BenchmarkUiState
 import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
+import io.github.chenlongapps.modelatlas.ui.chat.ChatRoute
+import io.github.chenlongapps.modelatlas.ui.chat.ChatScreen
+import io.github.chenlongapps.modelatlas.ui.chat.ChatUiState
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareRoute
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareScreen
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareUiState
@@ -111,6 +114,7 @@ fun ModelAtlasApp(
     ModelAtlasScaffold(
         modifier = modifier,
         appearanceContent = appearanceContent,
+        chatContent = { onBack -> ChatRoute(onBack) },
         debugContent = { bottomPadding, isVisible, onOpen -> DebugFeature.Content(bottomPadding, isVisible, onOpen) },
         databaseContent = { onClose -> DebugFeature.DatabaseContent(onClose) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
@@ -143,6 +147,7 @@ internal fun ModelAtlasScaffold(
     appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
     },
+    chatContent: @Composable (onBack: () -> Unit) -> Unit = { onBack -> ChatScreen(ChatUiState(), onBack) },
     touchExplorationEnabled: Boolean = rememberTouchExplorationEnabled(),
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
@@ -177,6 +182,7 @@ internal fun ModelAtlasScaffold(
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showDatabase by rememberSaveable { mutableStateOf(false) }
+    var showChat by rememberSaveable { mutableStateOf(false) }
     var selectedBenchmarkId by rememberSaveable { mutableStateOf<String?>(null) }
     var retainedBenchmarkId by remember { mutableStateOf(selectedBenchmarkId) }
     val benchmarkTransition = remember { RetainedPageTransitionController(selectedBenchmarkId != null) }
@@ -204,7 +210,7 @@ internal fun ModelAtlasScaffold(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || showAppearance || showDatabase || retainedBenchmarkId != null || retainedModelId != null
+    val subpageVisible = showDataSource || showAppearance || showDatabase || showChat || retainedBenchmarkId != null || retainedModelId != null
     LaunchedEffect(subpageVisible, navigationScroll) { navigationScroll.resetTracking() }
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition, benchmarkTransition) {
@@ -221,7 +227,7 @@ internal fun ModelAtlasScaffold(
     if (!LocalInspectionMode.current) {
         NavigationBackHandler(
             state = backState,
-            isBackEnabled = subpageVisible && !showDatabase,
+            isBackEnabled = subpageVisible && !showDatabase && !showChat,
             onBackCancelled = {
                 if (retainedBenchmarkId != null) benchmarkTransition.cancelBack() else detailTransition.cancelBack()
             },
@@ -243,7 +249,7 @@ internal fun ModelAtlasScaffold(
             benchmarkMainVisibility.transition.currentState != benchmarkMainVisibility.transition.targetState ||
             leaderboardVisibility.transition.currentState != leaderboardVisibility.transition.targetState ||
             benchmarkMainVisibility.transition.isRunning || leaderboardVisibility.transition.isRunning || isTransitionActive
-        val placeMain = !showDataSource && !showAppearance && !showDatabase &&
+        val placeMain = !showDataSource && !showAppearance && !showDatabase && !showChat &&
             (selectedBenchmarkId == null || benchmarkTransitioning) && (selectedModelId == null || transitioning)
         LaunchedEffect(selectedBenchmarkId, benchmarkTransitioning, leaderboardVisibility.transition.currentState) {
             if (selectedBenchmarkId == null && !benchmarkTransitioning &&
@@ -321,6 +327,7 @@ internal fun ModelAtlasScaffold(
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onShowDataSource = { showDataSource = true },
                                 onShowAppearance = { showAppearance = true },
+                                onShowChat = { showChat = true },
                             )
                             else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
                         }
@@ -369,6 +376,9 @@ internal fun ModelAtlasScaffold(
         }
         if (showDatabase) {
             databaseContent { showDatabase = false }
+        }
+        if (showChat) {
+            chatContent { showChat = false }
         }
         retainedBenchmarkId?.let { id ->
             RetainedPage(placed = true, interactive = selectedBenchmarkId != null && benchmarkTransition.interactive) {

@@ -40,6 +40,7 @@ internal fun SettingsScreen(
     onShowDataSource: () -> Unit,
     modifier: Modifier = Modifier,
     onShowAppearance: () -> Unit = {},
+    onShowChat: () -> Unit = {},
 ) {
     val layoutDirection = LocalLayoutDirection.current
     Scaffold(
@@ -78,6 +79,24 @@ internal fun SettingsScreen(
                     ) {
                         Icon(painterResource(R.drawable.ic_palette), contentDescription = null)
                         Text(stringResource(R.string.appearance_title), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null)
+                    }
+                }
+            }
+            item {
+                Surface(
+                    onClick = onShowChat,
+                    modifier = Modifier.fillMaxWidth().testTag("settings-chat"),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(painterResource(R.drawable.ic_chat), contentDescription = null)
+                        Text(stringResource(R.string.chat_title), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                         Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null)
                     }
                 }

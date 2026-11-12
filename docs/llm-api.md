@@ -2,9 +2,9 @@
 
 ## 当前范围
 
-已实现 OpenAI 兼容的 `POST chat/completions` 文本请求、普通响应、SSE 流式响应，以及 system／user／assistant 有序多轮上下文。不新增依赖，不改变目录同步、数据库、页面或外观设置。
+已实现 OpenAI 兼容的 `POST chat/completions` 文本请求、普通响应、SSE 流式响应，以及 system／user／assistant 有序多轮上下文。不新增依赖，不改变目录同步、数据库或外观持久化。
 
-尚未实现聊天 UI、配置保存、会话历史、Function Calling、Agent、后台任务或服务端。当前没有聊天业务，故不增加仅透传的 `ChatRepository`／ViewModel；后续需要管理会话时再由 Repository 协调，并让 ViewModel 持有调用生命周期。
+设置已提供独立[文本聊天 UI](chat.md)，由 `ChatViewModel` 直接管理内存配置、多轮上下文及请求生命周期，没有仅透传的 `ChatRepository`。尚未实现凭据／历史持久化、Function Calling、Agent、后台服务或服务端。
 
 ## 代码边界
 
@@ -27,6 +27,7 @@ AI 代码统一放在 `app/src/main/java/io/github/chenlongapps/modelatlas/ai/`�
 ## 配置与调用
 
 - `LlmConfig(baseUrl, apiKey, modelId, timeouts)` 每次调用显式传入，不存在默认站点、密钥或模型。模型 ID 是实际服务 API ID，不自动使用目录规范模型 ID。
+- `LlmConfig.validate()` 允许表单在提交前提前执行与客户端完全相同的 URL 安全校验，不联网；密钥／模型 ID 继续由构造器校验。客户端仍在每次真实请求前校验，不改变协议或地址拼接。
 - `baseUrl` 是**完整 API 根路径**，例如 `https://api.example.com/v1/` 或 `https://gateway.example.com/openai/v1`；仅追加 `chat/completions`，保留自定义前缀，不推断／补充 `/v1`。不要传完整 completions 地址。
 - 仅接受 HTTPS，拒绝 userinfo、query、fragment；仅为本机开发／MockWebServer 允许 HTTP 的 `localhost`、`127.0.0.1`、`[::1]`。没有放宽 Android cleartext 策略，外部服务必须 HTTPS。
 - 当前只使用 `Authorization: Bearer`。`temperature`／`maxOutputTokens` 可选，默认不发送；后者映射兼容协议 `max_tokens`。只接受 `max_completion_tokens`、Responses API、非 Bearer 认证或特有参数的服务不在当前兼容范围，不自动改写请求／降级重试。

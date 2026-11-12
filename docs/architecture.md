@@ -21,6 +21,7 @@
 | `ui/model/` | 共用身份展示、整卡共享转场与预测性返回控制器 |
 | `ui/transition/` | 模型／评测共用的保留可见性与可寻址双端转场时间轴 |
 | `ui/settings/`、`ui/theme/` | 设置子页、外观状态与语义主题；持久化见[外观设置](appearance-settings.md) |
+| `ui/chat/` | 独立 AI 文本会话、内存配置和显式请求生命周期；直接复用 `LlmClient`，见[聊天](chat.md) |
 
 Debug 工具位于 `src/debug/java/.../ui/debug/`，Release 同路径仅保留空 `DebugFeature`，不通过 `BuildConfig.DEBUG` 决定是否打包。隔离与签名见[双版本说明](debug-release-coexistence.md)。
 
@@ -69,7 +70,7 @@ refresh()（启动自动同步／用户主动刷新共用）
 ## 顶层分页与子页面
 
 - Release 为“模型｜评测｜对比｜设置”，Debug 追加调试；同一 `GlassNavigationItem` 列表决定 pageCount、key、内容与导航几何，按条目标识分发。顶层页面持续组合，普通切页不重置滚动、查询、提醒或展开状态。
-- 详情、完整排行榜、外观、来源许可和 Debug 数据库管理是独立子页，隐藏底栏并保留但不放置主 Pager，防绘制、触摸、焦点和读屏穿透。不引入通用导航栈；根 Back 放行，弹层优先处理返回。
+- 详情、完整排行榜、外观、AI 助手、来源许可和 Debug 数据库管理是独立子页，隐藏底栏并保留但不放置主 Pager，防绘制、触摸、焦点和读屏穿透。不引入通用导航栈；根 Back 放行，弹层优先处理返回。聊天页自行分流 IME／页面返回，不进入模型／榜单的预测性共享转场控制器。
 - 底栏实测高度保存为 dp，恢复首帧沿用，页面末尾增加实测高度＋32dp 留白；不因底栏显隐改变留白、夹回阅读位置。玻璃采样由 `layerBackdrop` 提供，当前支持设备为 API 33+，设计预览使用实色兜底。
 - `NavigationScrollConnection` 始终零消费，只观察当前停稳页 `UserInput` 已消费纵向位移；松手／反向重置累计，不响应惯性、程序或独立弹层滚动。横向零位移 fling 不当成切页。阈值、动效、触摸探索规则见[设计规范](Design.md#悬浮底部导航)。
 - 模型标签双击走 UI 的 `animateScrollToItem(0, 0)`，不经过 ViewModel 或刷新。监听不消费原点击，拖动／多指／长按／越界／其他标签中断双击序列，另提供等效无障碍操作。

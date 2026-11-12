@@ -14,6 +14,9 @@ class LlmConfig(
 
     // 不使用 data class，避免自动 toString/copy/componentN 意外暴露凭据。
     override fun toString(): String = "LlmConfig([redacted])"
+
+    /** 在提交配置时提前校验，规则与真实请求一致，不联网。 */
+    fun validate() { apiBaseUrl() }
 }
 
 /** 流式 read 是相邻网络读取的空闲超时；call 是包含整个响应体的总时限，均不可无限等待。 */

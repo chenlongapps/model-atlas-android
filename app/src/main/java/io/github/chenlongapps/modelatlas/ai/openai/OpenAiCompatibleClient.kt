@@ -6,6 +6,7 @@ import io.github.chenlongapps.modelatlas.ai.LlmConfig
 import io.github.chenlongapps.modelatlas.ai.LlmException
 import io.github.chenlongapps.modelatlas.ai.LlmRequest
 import io.github.chenlongapps.modelatlas.ai.LlmResponse
+import io.github.chenlongapps.modelatlas.ai.apiBaseUrl
 import io.github.chenlongapps.modelatlas.di.IoDispatcher
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -29,7 +30,6 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonNull
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -93,10 +93,7 @@ class OpenAiCompatibleClient @Inject constructor(
         streaming: Boolean,
         consume: suspend (Response) -> T,
     ): T = coroutineScope {
-        val base = config.baseUrl.toHttpUrlOrNull()
-        require(base != null && base.username.isEmpty() && base.password.isEmpty() &&
-            base.query == null && base.fragment == null &&
-            (base.isHttps || base.host in setOf("localhost", "127.0.0.1", "::1"))) { "Invalid LLM API base URL" }
+        val base = config.apiBaseUrl()
         val url = base.newBuilder().apply {
             if (!base.encodedPath.endsWith('/')) addPathSegment("")
         }.addPathSegment("chat").addPathSegment("completions").build()
