@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
@@ -53,6 +54,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -64,6 +66,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelListRoute
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationBar
+import io.github.chenlongapps.modelatlas.ui.navigation.AssistantNavigation
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollConnection
 import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollState
@@ -95,6 +98,7 @@ import io.github.chenlongapps.modelatlas.ui.debug.DebugFeature
 import io.github.chenlongapps.modelatlas.ui.chat.ChatRoute
 import io.github.chenlongapps.modelatlas.ui.chat.ChatScreen
 import io.github.chenlongapps.modelatlas.ui.chat.ChatUiState
+import io.github.chenlongapps.modelatlas.ui.chat.ChatViewModel
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareRoute
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareScreen
 import io.github.chenlongapps.modelatlas.ui.modelcompare.ModelCompareUiState
@@ -111,10 +115,13 @@ fun ModelAtlasApp(
         AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
     },
 ) {
+    // Activity 作用域：弹出独立路由不丢对话／草稿，配置重建不取消请求。
+    val chatViewModel: ChatViewModel = hiltViewModel()
     ModelAtlasScaffold(
         modifier = modifier,
         appearanceContent = appearanceContent,
-        chatContent = { onBack -> ChatRoute(onBack) },
+        chatContent = { visible, onBack -> ChatRoute(isVisible = visible, onBack = onBack, viewModel = chatViewModel) },
+        onChatClosed = chatViewModel::stop,
         debugContent = { bottomPadding, isVisible, onOpen -> DebugFeature.Content(bottomPadding, isVisible, onOpen) },
         databaseContent = { onClose -> DebugFeature.DatabaseContent(onClose) },
         compareContent = { bottomPadding, isVisible -> ModelCompareRoute(bottomPadding, isVisible) },
@@ -127,6 +134,7 @@ fun ModelAtlasApp(
 
 /** 页面自行处理系统安全区；外壳共享列表滚动状态以响应导航置顶操作。 */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun ModelAtlasScaffold(
     modifier: Modifier = Modifier,
     detailContent: @Composable (modelId: String, onBack: () -> Unit) -> Unit = { id, onBack -> ModelDetailRoute(id, onBack) },
@@ -147,9 +155,48 @@ internal fun ModelAtlasScaffold(
     appearanceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         AppearanceScreen(AppearanceUiState(isLoading = false, startupComplete = true), onBack)
     },
-    chatContent: @Composable (onBack: () -> Unit) -> Unit = { onBack -> ChatScreen(ChatUiState(), onBack) },
+    chatContent: @Composable (isVisible: Boolean, onBack: () -> Unit) -> Unit = { visible, onBack ->
+        ChatScreen(ChatUiState(), isVisible = visible, onBack = onBack)
+    },
+    onChatClosed: () -> Unit = {},
     touchExplorationEnabled: Boolean = rememberTouchExplorationEnabled(),
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
+) {
+    AssistantNavigation(
+        modifier = modifier.fillMaxSize(),
+        onChatClosed = onChatClosed,
+        chatContent = chatContent,
+        mainContent = { isActive, onOpenChat ->
+            MainAtlasScaffold(
+                isActive = isActive,
+                onOpenChat = onOpenChat,
+                detailContent = detailContent,
+                debugContent = debugContent,
+                databaseContent = databaseContent,
+                benchmarkContent = benchmarkContent,
+                leaderboardContent = leaderboardContent,
+                compareContent = compareContent,
+                appearanceContent = appearanceContent,
+                touchExplorationEnabled = touchExplorationEnabled,
+                modelContent = modelContent,
+            )
+        },
+    )
+}
+
+@Composable
+private fun MainAtlasScaffold(
+    isActive: Boolean,
+    onOpenChat: () -> Unit,
+    detailContent: @Composable (String, () -> Unit) -> Unit,
+    debugContent: @Composable (Dp, Boolean, () -> Unit) -> Unit,
+    databaseContent: @Composable (() -> Unit) -> Unit,
+    benchmarkContent: @Composable (Dp, Boolean, (String) -> Unit) -> Unit,
+    leaderboardContent: @Composable (String, () -> Unit) -> Unit,
+    compareContent: @Composable (Dp, Boolean) -> Unit,
+    appearanceContent: @Composable (() -> Unit) -> Unit,
+    touchExplorationEnabled: Boolean,
+    modelContent: @Composable (Dp, LazyListState, (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
         listOf(GlassNavigationItem.Models, GlassNavigationItem.Benchmarks, GlassNavigationItem.Compare, GlassNavigationItem.Settings) + listOfNotNull(DebugFeature.navigationItem)
@@ -166,7 +213,7 @@ internal fun ModelAtlasScaffold(
     val scrollThreshold = with(density) { 12.dp.toPx() }
     val navigationScroll = remember(scrollThreshold) { NavigationScrollState(scrollThreshold) }
     val autoHideEnabled = !touchExplorationEnabled
-    val navigationHidden = autoHideEnabled && navigationScroll.isHidden
+    val navigationHidden = !isActive || (autoHideEnabled && navigationScroll.isHidden)
     val navigationHideProgress = animateFloatAsState(
         if (navigationHidden) 1f else 0f, tween(200), label = "Navigation scroll visibility",
     )
@@ -182,7 +229,6 @@ internal fun ModelAtlasScaffold(
     var showDataSource by rememberSaveable { mutableStateOf(false) }
     var showAppearance by rememberSaveable { mutableStateOf(false) }
     var showDatabase by rememberSaveable { mutableStateOf(false) }
-    var showChat by rememberSaveable { mutableStateOf(false) }
     var selectedBenchmarkId by rememberSaveable { mutableStateOf<String?>(null) }
     var retainedBenchmarkId by remember { mutableStateOf(selectedBenchmarkId) }
     val benchmarkTransition = remember { RetainedPageTransitionController(selectedBenchmarkId != null) }
@@ -210,7 +256,7 @@ internal fun ModelAtlasScaffold(
         transitionSpec = { tween(ModelTransitionDurationMillis) }, label = "model-container-expansion",
     ) { if (it == EnterExitState.Visible) 1f else 0f }
     val expansion = remember { { expansionProgress } }
-    val subpageVisible = showDataSource || showAppearance || showDatabase || showChat || retainedBenchmarkId != null || retainedModelId != null
+    val subpageVisible = showDataSource || showAppearance || showDatabase || retainedBenchmarkId != null || retainedModelId != null
     LaunchedEffect(subpageVisible, navigationScroll) { navigationScroll.resetTracking() }
     val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
     LaunchedEffect(backState, detailTransition, benchmarkTransition) {
@@ -227,7 +273,7 @@ internal fun ModelAtlasScaffold(
     if (!LocalInspectionMode.current) {
         NavigationBackHandler(
             state = backState,
-            isBackEnabled = subpageVisible && !showDatabase && !showChat,
+            isBackEnabled = isActive && subpageVisible && !showDatabase,
             onBackCancelled = {
                 if (retainedBenchmarkId != null) benchmarkTransition.cancelBack() else detailTransition.cancelBack()
             },
@@ -240,7 +286,7 @@ internal fun ModelAtlasScaffold(
         )
     }
 
-    SharedTransitionLayout(modifier.fillMaxSize().background(background)) {
+    SharedTransitionLayout(Modifier.fillMaxSize().background(background)) {
         val sharedScope = this
         val transitioning = detailTransition.active || mainVisibility.transition.currentState != mainVisibility.transition.targetState ||
             detailVisibility.transition.currentState != detailVisibility.transition.targetState ||
@@ -249,7 +295,7 @@ internal fun ModelAtlasScaffold(
             benchmarkMainVisibility.transition.currentState != benchmarkMainVisibility.transition.targetState ||
             leaderboardVisibility.transition.currentState != leaderboardVisibility.transition.targetState ||
             benchmarkMainVisibility.transition.isRunning || leaderboardVisibility.transition.isRunning || isTransitionActive
-        val placeMain = !showDataSource && !showAppearance && !showDatabase && !showChat &&
+        val placeMain = !showDataSource && !showAppearance && !showDatabase &&
             (selectedBenchmarkId == null || benchmarkTransitioning) && (selectedModelId == null || transitioning)
         LaunchedEffect(selectedBenchmarkId, benchmarkTransitioning, leaderboardVisibility.transition.currentState) {
             if (selectedBenchmarkId == null && !benchmarkTransitioning &&
@@ -267,7 +313,7 @@ internal fun ModelAtlasScaffold(
                 initialIdentity = null
             }
         }
-        RetainedPage(placeMain, interactive = !subpageVisible) {
+        RetainedPage(placeMain, interactive = isActive && !subpageVisible) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize().testTag("main-pager").layerBackdrop(backdrop),
@@ -276,9 +322,9 @@ internal fun ModelAtlasScaffold(
                 key = { navigationItems[it].tag },
             ) { page ->
                 val sourceTag = navigationItems[page].tag
-                val scrollConnection = remember(page, navigationScroll, autoHideEnabled, subpageVisible) {
+                val scrollConnection = remember(page, navigationScroll, autoHideEnabled, subpageVisible, isActive) {
                     NavigationScrollConnection(navigationScroll) {
-                        autoHideEnabled && !subpageVisible && !pagerState.isScrollInProgress && pagerState.settledPage == page
+                        isActive && autoHideEnabled && !subpageVisible && !pagerState.isScrollInProgress && pagerState.settledPage == page
                     }
                 }
                 Box(Modifier.fillMaxSize().nestedScroll(scrollConnection)) {
@@ -300,12 +346,12 @@ internal fun ModelAtlasScaffold(
                         }
                         when (navigationItems[page]) {
                             GlassNavigationItem.Models -> CompositionLocalProvider(
-                                LocalModelListVisible provides (!subpageVisible && pagerState.currentPage == page),
+                                LocalModelListVisible provides (isActive && !subpageVisible && pagerState.currentPage == page),
                                 LocalFavoriteRemovalTransition provides favoriteRemoval,
                             ) {
                                 modelContent(bottomOverlayPadding, modelListState, openModel)
                             }
-                            GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page)
+                            GlassNavigationItem.Compare -> compareContent(bottomOverlayPadding, isActive && !subpageVisible && pagerState.settledPage == page)
                             GlassNavigationItem.Benchmarks -> CompositionLocalProvider(
                                 LocalBenchmarkSharedTransition provides BenchmarkSharedTransition(
                                     sharedScope, benchmarkMainVisibility, enabled = placeMain,
@@ -314,7 +360,7 @@ internal fun ModelAtlasScaffold(
                             ) {
                                 benchmarkContent(
                                     bottomOverlayPadding,
-                                    pagerState.settledPage == page && (!subpageVisible || retainedBenchmarkId != null),
+                                    isActive && pagerState.settledPage == page && (!subpageVisible || retainedBenchmarkId != null),
                                 ) { id ->
                                     if (!subpageVisible && retainedBenchmarkId == null) {
                                         retainedBenchmarkId = id
@@ -327,9 +373,8 @@ internal fun ModelAtlasScaffold(
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onShowDataSource = { showDataSource = true },
                                 onShowAppearance = { showAppearance = true },
-                                onShowChat = { showChat = true },
                             )
-                            else -> debugContent(bottomOverlayPadding, !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
+                            else -> debugContent(bottomOverlayPadding, isActive && !subpageVisible && pagerState.settledPage == page) { showDatabase = true }
                         }
                     }
                 }
@@ -345,7 +390,7 @@ internal fun ModelAtlasScaffold(
                         WindowInsets.navigationBars.union(WindowInsets.displayCutout)
                             .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
                     )
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
                     .widthIn(max = 400.dp)
                     .fillMaxWidth(),
             ) {
@@ -354,6 +399,7 @@ internal fun ModelAtlasScaffold(
                     items = navigationItems,
                     backdrop = backdrop,
                     onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+                    onOpenChat = onOpenChat,
                     onModelsDoubleClick = {
                         scope.launch {
                             // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
@@ -362,6 +408,7 @@ internal fun ModelAtlasScaffold(
                         }
                     },
                     enabled = !navigationHidden,
+                    // 测量整个分体底栏，包含圆形入口与可随字号增高的胶囊。
                     modifier = Modifier.fillMaxWidth().onSizeChanged {
                         navigationHeight = with(density) { it.height.toDp().value }
                     },
@@ -376,9 +423,6 @@ internal fun ModelAtlasScaffold(
         }
         if (showDatabase) {
             databaseContent { showDatabase = false }
-        }
-        if (showChat) {
-            chatContent { showChat = false }
         }
         retainedBenchmarkId?.let { id ->
             RetainedPage(placed = true, interactive = selectedBenchmarkId != null && benchmarkTransition.interactive) {

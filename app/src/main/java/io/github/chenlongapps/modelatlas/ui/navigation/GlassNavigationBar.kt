@@ -6,6 +6,7 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -52,6 +53,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -77,9 +80,96 @@ internal data class GlassNavigationItem(
     }
 }
 
-/** 自绘悬浮胶囊；只读取分页状态，通过回调发出切换请求，不持有业务状态。 */
+/** AI 按钮打开独立路由；胶囊条目与主 Pager 一一对应。 */
 @Composable
 internal fun GlassNavigationBar(
+    pagerState: PagerState,
+    backdrop: Backdrop,
+    onNavigate: (Int) -> Unit,
+    onOpenChat: () -> Unit,
+    onModelsDoubleClick: () -> Unit,
+    items: List<GlassNavigationItem>,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    require(items.isNotEmpty())
+    val spacing = if (items.size >= 5) 2.dp else 4.dp
+    val layoutDirection = LocalLayoutDirection.current
+    val isRtl = layoutDirection == LayoutDirection.Rtl
+    val modelsDoubleClick by rememberUpdatedState(onModelsDoubleClick)
+    val colors = MaterialTheme.colorScheme
+    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
+    val haptics = LocalHapticFeedback.current
+    val aiLabel = stringResource(R.string.chat_title)
+    BoxWithConstraints(modifier.testTag("glass-navigation")) {
+        val gap = 8.dp
+        val capsuleMinWidth = 48.dp * items.size + 8.dp + spacing * (items.size - 1)
+        val aiSize = (maxWidth - gap - capsuleMinWidth).coerceIn(48.dp, 64.dp)
+        Row(
+            modifier = Modifier
+                .pointerInput(layoutDirection, items.size, spacing, aiSize, enabled) {
+                    if (!enabled) return@pointerInput
+                    detectModelsDoubleClicks({ width ->
+                        splitNavigationModelsRange(width, aiSize.toPx(), gap.toPx(), 4.dp.toPx(), spacing.toPx(), items.size, isRtl)
+                    }) { modelsDoubleClick() }
+                },
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(aiSize)
+                    .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, colors.background.copy(alpha = 0.5f))
+                    .testTag("nav-chat")
+                    .semantics { contentDescription = aiLabel }
+                    .clickable(
+                        enabled = enabled,
+                        role = Role.Button,
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onOpenChat()
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(R.string.nav_ai),
+                    color = colors.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
+            }
+            GlassNavigationCapsule(
+                pagerState, backdrop, onNavigate, onModelsDoubleClick, items,
+                modifier = Modifier.weight(1f), enabled = enabled,
+            )
+        }
+    }
+}
+
+private fun Modifier.navigationGlassSurface(
+    backdrop: Backdrop,
+    glassEnabled: Boolean,
+    fallback: Color,
+    tint: Color,
+): Modifier = clip(CircleShape).then(
+    if (glassEnabled) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { CircleShape },
+            effects = {
+                vibrancy()
+                blur(4.dp.toPx())
+                lens(16.dp.toPx(), 32.dp.toPx(), chromaticAberration = true)
+            },
+            onDrawSurface = { drawRect(tint) },
+        )
+    } else Modifier.background(fallback),
+)
+
+@Composable
+private fun GlassNavigationCapsule(
     pagerState: PagerState,
     backdrop: Backdrop,
     onNavigate: (Int) -> Unit,
@@ -101,34 +191,15 @@ internal fun GlassNavigationBar(
     val isRtl = layoutDirection == LayoutDirection.Rtl
     val haptics = LocalHapticFeedback.current
     val navigate by rememberUpdatedState(onNavigate)
-    val modelsDoubleClick by rememberUpdatedState(onModelsDoubleClick)
     val scrollToTopLabel = stringResource(R.string.model_list_scroll_to_top)
+    val spacing = if (items.size >= 5) 2.dp else 4.dp
 
     Box(
-        modifier = modifier
-            .testTag("glass-navigation")
-            .clip(CircleShape)
-            .then(
-                if (glassEnabled) {
-                    Modifier.drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { CircleShape },
-                        effects = {
-                            vibrancy()
-                            blur(4.dp.toPx())
-                            lens(16.dp.toPx(), 32.dp.toPx(), chromaticAberration = true)
-                        },
-                        onDrawSurface = { drawRect(tint) },
-                    )
-                } else {
-                    // Android 10/11 与预览不支持 RenderEffect，使用可读的实色胶囊。
-                    Modifier.background(colors.surfaceContainer)
-                },
-            ),
+        modifier = modifier.testTag("glass-navigation-capsule")
+            .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, tint),
     ) {
         Box(Modifier.padding(4.dp)) {
             BoxWithConstraints(Modifier.matchParentSize()) {
-                val spacing = 4.dp
                 val itemWidth = (maxWidth - spacing * (items.size - 1)) / items.size
                 Box(
                     Modifier
@@ -163,11 +234,7 @@ internal fun GlassNavigationBar(
             }
             Row(
                 modifier = Modifier.selectableGroup()
-                    .pointerInput(layoutDirection, items.size, enabled) {
-                        if (!enabled) return@pointerInput
-                        detectModelsDoubleClicks(isRtl, itemCount = items.size, spacing = 4.dp.toPx()) { modelsDoubleClick() }
-                    }
-                    .pointerInput(pagerState, layoutDirection, enabled) {
+                    .pointerInput(pagerState, layoutDirection, items, enabled) {
                         if (!enabled) return@pointerInput
                         var lastTarget = pagerState.currentPage
                         detectHorizontalDragGestures(
@@ -184,7 +251,7 @@ internal fun GlassNavigationBar(
                             },
                         )
                     },
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(spacing),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 items.forEachIndexed { index, item ->
@@ -248,15 +315,13 @@ internal fun GlassNavigationBar(
 
 /** 只观察触摸，不消费事件或等待双击后才执行单击，保留 selectable 与父级拖动的响应。 */
 private suspend fun PointerInputScope.detectModelsDoubleClicks(
-    isRtl: Boolean,
-    itemCount: Int,
-    spacing: Float,
+    modelsRange: (Float) -> ClosedFloatingPointRange<Float>,
     onDoubleClick: () -> Unit,
 ) {
     var previousUpTime: Long? = null
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val modelRange = modelsTabRange(size.width.toFloat(), spacing, itemCount, isRtl)
+        val modelRange = modelsRange(size.width.toFloat())
         val interval = previousUpTime?.let { down.uptimeMillis - it }
         val isDoubleClick = interval != null &&
             interval in viewConfiguration.doubleTapMinTimeMillis..viewConfiguration.doubleTapTimeoutMillis

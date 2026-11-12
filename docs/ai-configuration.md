@@ -2,7 +2,7 @@
 
 ## 当前实现
 
-设置 → AI 助手 → 会话配置，将用户显式应用的配置保存在本机。只保存一套配置；配置草稿、输入和对话仍只在内存中，不实现历史持久化、多服务配置或后台请求。
+底部独立圆形 `AI` 入口 → 右上角会话配置，将用户显式应用的配置保存在本机。只保存一套配置；配置草稿、输入和对话仍只在内存中，不实现历史持久化、多服务配置或后台请求。
 
 `ai/config/` 的 `LlmConfigRepository` 负责真实配置读写，不是聊天请求透传层。`DataStoreLlmConfigRepository` 通过单例 `LlmPreferencesStore` 使用独立 Preferences DataStore，不混入外观 `SettingsRepository`；`ai/di/LlmConfigModule.kt` 提供 Hilt 绑定。读写、Keystore 操作在 IO dispatcher 上执行，仓库 Mutex 串行协调读取、整份保存和清除。
 

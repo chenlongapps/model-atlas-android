@@ -28,7 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,15 +64,19 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventState
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
@@ -81,8 +86,10 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalLayoutApi::class)
 internal fun ChatScreen(
     uiState: ChatUiState,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    bottomOverlayPadding: Dp = 0.dp,
+    isVisible: Boolean = true,
+    onBack: (() -> Unit)? = null,
     onInput: (String) -> Unit = {},
     onSend: () -> Unit = {},
     onStop: () -> Unit = {},
@@ -115,18 +122,24 @@ internal fun ChatScreen(
             else if (scrolling && backwards) followLatest = false
         }
     }
-    ChatFollowLatest(uiState.turns.lastOrNull(), listState, followLatest)
+    if (isVisible) ChatFollowLatest(uiState.turns.lastOrNull(), listState, followLatest)
     // IME 可见性不能由 bottom > 0 推断：浮动键盘或已处理 inset 的宿主可能高度为零。
     val imeVisible = WindowInsets.isImeVisible
-    val leave = { focus.clearFocus(); keyboard?.hide(); onBack() }
+    LaunchedEffect(isVisible) {
+        if (!isVisible) {
+            focus.clearFocus()
+            keyboard?.hide()
+        }
+    }
     if (!LocalInspectionMode.current) {
-        NavigationBackHandler(
-            state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
-            isBackEnabled = uiState.configDraft == null,
-            onBackCompleted = {
-                if (imeVisible) { focus.clearFocus(); keyboard?.hide() } else leave()
-            },
-        )
+        val backOwner = rememberNavigationEventDispatcherOwner(enabled = isVisible)
+        CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides backOwner) {
+            NavigationBackHandler(
+                state = rememberNavigationEventState(currentInfo = NavigationEventInfo.None),
+                isBackEnabled = imeVisible && uiState.configDraft == null,
+                onBackCompleted = { focus.clearFocus(); keyboard?.hide() },
+            )
+        }
     }
     Scaffold(
         modifier = modifier.testTag("chat-screen"),
@@ -134,93 +147,54 @@ internal fun ChatScreen(
         // 一次性消费系统栏、刘海及 IME；底部编辑器不再叠加 imePadding。
         contentWindowInsets = WindowInsets.safeDrawing.union(WindowInsets.ime),
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = leave) {
-                    Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.navigate_back))
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                    Text(
-                        if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(onClick = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }, enabled = !uiState.isGenerating && !uiState.configLoading && !uiState.configSaving) {
-                    Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.chat_config_title))
-                }
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+            val compact = maxHeight < 400.dp
+            val openConfig = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }
+            val navigateBack: (() -> Unit)? = onBack?.let { back ->
+                { if (imeVisible) { focus.clearFocus(); keyboard?.hide() } else back() }
             }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(scrollConnection).testTag("chat-messages"),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                items(uiState.turns, key = { it.id }, contentType = { "turn" }) { turn ->
-                    ChatTurnContent(turn, canRetry = turn === uiState.turns.lastOrNull() && !uiState.isGenerating && uiState.configurationReady, onRetry)
-                }
-                if (uiState.turns.isEmpty()) item(key = "welcome") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(stringResource(R.string.chat_welcome), style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(R.string.chat_notice), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        for (suggestion in listOf(R.string.chat_suggestion_context, R.string.chat_suggestion_price, R.string.chat_suggestion_weights)) {
-                            val text = stringResource(suggestion)
-                            TextButton(onClick = { onInput(text) }) { Text(text) }
+            // 先预留底栏；不能在编辑器之后再测量 Spacer，否则短窗口会挤掉避让。
+            Column(Modifier.fillMaxSize().padding(bottom = if (imeVisible) 0.dp else bottomOverlayPadding)) {
+                if (!compact) ChatHeader(uiState, isVisible, openConfig, onBack = navigateBack)
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(scrollConnection).testTag("chat-messages"),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    // 短窗口标题参与滚动；消息仍按稳定轮次 key 保留阅读锚点。
+                    if (compact) item(key = "header", contentType = "header") {
+                        ChatHeader(uiState, isVisible, openConfig, showConfig = false)
+                    }
+                    if (uiState.modelId == null || (uiState.configLoadFailed && uiState.configDraft == null)) item(key = "configuration", contentType = "configuration") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (uiState.configLoadFailed && uiState.configDraft == null) {
+                                uiState.configFailure?.let { ChatConfigFailure(it) }
+                                TextButton(onClick = onReloadConfig, enabled = isVisible && !uiState.configLoading) {
+                                    Text(stringResource(R.string.chat_config_reload))
+                                }
+                            }
+                            if (uiState.modelId == null) {
+                                TextButton(onClick = openConfig, enabled = isVisible && !uiState.configLoading && !uiState.configSaving) {
+                                    Text(stringResource(R.string.chat_config_required))
+                                }
+                            }
                         }
                     }
+                    items(uiState.turns, key = { it.id }, contentType = { "turn" }) { turn ->
+                        ChatTurnContent(turn, canRetry = turn === uiState.turns.lastOrNull() && !uiState.isGenerating && uiState.configurationReady, onRetry)
+                    }
+                    if (uiState.turns.isEmpty()) item(key = "welcome") { ChatWelcome(isVisible, onInput) }
                 }
-            }
-            if (uiState.configLoadFailed && uiState.configDraft == null) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    uiState.configFailure?.let { ChatConfigFailure(it) }
-                    TextButton(onClick = onReloadConfig, enabled = !uiState.configLoading) { Text(stringResource(R.string.chat_config_reload)) }
-                }
-            }
-            if (uiState.modelId == null) {
-                TextButton(onClick = onOpenConfig, enabled = !uiState.configLoading && !uiState.configSaving, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text(stringResource(R.string.chat_config_required))
-                }
-            }
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                // 横屏／大字号时留出消息空间；输入仍可在内部滚动，无固定行高。
-                val minInputHeight = 56.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
-                val inputMaxHeight = (maxHeight * 0.3f).coerceIn(minInputHeight, maxOf(minInputHeight, 180.dp))
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = uiState.input,
-                        onValueChange = onInput,
-                        modifier = Modifier.weight(1f).heightIn(max = inputMaxHeight).testTag("chat-input"),
-                        label = { Text(stringResource(R.string.chat_input)) },
-                        minLines = 1,
-                        maxLines = 6,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                    )
-                    if (uiState.isGenerating) FilledTonalButton(onClick = onStop, modifier = Modifier.testTag("chat-stop")) {
-                        Text(stringResource(R.string.chat_stop))
-                    } else FilledTonalButton(
-                        enabled = uiState.canSend,
-                        onClick = {
-                            followLatest = true
-                            onSend()
-                            scope.launch { withFrameNanos { }; listState.scrollToChatBottom() }
-                        },
-                        modifier = Modifier.testTag("chat-send"),
-                    ) { Text(stringResource(R.string.chat_send)) }
-                }
+                ChatComposer(uiState, isVisible, compact, onInput, onStop, openConfig, onBack = navigateBack, onSend = {
+                    followLatest = true
+                    onSend()
+                    scope.launch { withFrameNanos { }; listState.scrollToChatBottom() }
+                })
             }
         }
     }
-    uiState.configDraft?.let { draft ->
+    uiState.configDraft?.takeIf { isVisible }?.let { draft ->
         ChatConfigDialog(draft, onEditConfig, onApplyConfig, onDismissConfig,
             loading = uiState.configLoading, saving = uiState.configSaving, loadFailed = uiState.configLoadFailed,
             failure = uiState.configFailure, confirmClear = uiState.confirmClearConfig,
@@ -230,16 +204,125 @@ internal fun ChatScreen(
 }
 
 @Composable
+private fun ChatWelcome(enabled: Boolean, onInput: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.chat_welcome), style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.chat_notice), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        for (suggestion in listOf(R.string.chat_suggestion_context, R.string.chat_suggestion_price, R.string.chat_suggestion_weights)) {
+            val text = stringResource(suggestion)
+            Surface(
+                onClick = { onInput(text) }, enabled = enabled,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatComposer(
+    uiState: ChatUiState,
+    enabled: Boolean,
+    compact: Boolean,
+    onInput: (String) -> Unit,
+    onStop: () -> Unit,
+    onOpenConfig: () -> Unit,
+    onBack: (() -> Unit)?,
+    onSend: () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // 横屏／大字号时保留消息空间；长输入在编辑器内部滚动。
+        val minInputHeight = 56.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+        val inputMaxHeight = if (compact) 80.dp else (maxHeight * 0.3f).coerceIn(minInputHeight, maxOf(minInputHeight, 180.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 8.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (compact) {
+                onBack?.let { ChatBackButton(enabled, it) }
+                ChatConfigButton(uiState, enabled, onOpenConfig)
+            }
+            OutlinedTextField(
+                value = uiState.input,
+                onValueChange = onInput,
+                modifier = Modifier.weight(1f).heightIn(max = inputMaxHeight).testTag("chat-input"),
+                label = if (compact) null else { { Text(stringResource(R.string.chat_input)) } },
+                placeholder = if (compact) { { Text(stringResource(R.string.chat_input)) } } else null,
+                shape = MaterialTheme.shapes.large,
+                enabled = enabled,
+                minLines = 1,
+                maxLines = 6,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+            )
+            if (uiState.isGenerating) FilledIconButton(onClick = onStop, enabled = enabled, modifier = Modifier.size(48.dp).testTag("chat-stop")) {
+                Icon(painterResource(R.drawable.ic_stop), stringResource(R.string.chat_stop))
+            } else FilledIconButton(
+                enabled = enabled && uiState.canSend,
+                onClick = onSend,
+                modifier = Modifier.size(48.dp).testTag("chat-send"),
+            ) { Icon(painterResource(R.drawable.ic_send), stringResource(R.string.chat_send)) }
+        }
+    }
+}
+
+@Composable
+private fun ChatHeader(uiState: ChatUiState, isVisible: Boolean, onOpenConfig: () -> Unit, showConfig: Boolean = true, onBack: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 20.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        onBack?.let { ChatBackButton(isVisible, it) }
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+            Text(
+                if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (showConfig) ChatConfigButton(uiState, isVisible, onOpenConfig)
+    }
+}
+
+@Composable
+private fun ChatBackButton(enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp).testTag("chat-back")) {
+        Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.navigate_back))
+    }
+}
+
+@Composable
+private fun ChatConfigButton(uiState: ChatUiState, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled && !uiState.isGenerating && !uiState.configLoading && !uiState.configSaving, modifier = Modifier.size(48.dp)) {
+        Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.chat_config_title))
+    }
+}
+
+@Composable
 private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Unit) {
     val reply by turn.reply.collectAsStateWithLifecycle()
+    val userLabel = stringResource(R.string.chat_user)
     Column(Modifier.fillMaxWidth().testTag("chat-turn-${turn.id}"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
-            modifier = Modifier.align(Alignment.End),
+            modifier = Modifier.align(Alignment.End).semantics { contentDescription = userLabel },
             color = MaterialTheme.colorScheme.secondaryContainer,
             shape = MaterialTheme.shapes.medium,
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(stringResource(R.string.chat_user), style = MaterialTheme.typography.labelMedium)
                 SelectionContainer { Text(turn.user, style = MaterialTheme.typography.bodyLarge) }
                 CopyMessageButton(turn.user)
             }
@@ -326,5 +409,5 @@ private fun CopyMessageButton(text: String) {
 @Preview(name = "Chat · Landscape", widthDp = 740, heightDp = 360)
 @Composable
 private fun ChatPreview() {
-    ModelAtlasTheme(dynamicColor = false) { ChatScreen(ChatUiState(), onBack = {}) }
+    ModelAtlasTheme(dynamicColor = false) { ChatScreen(ChatUiState(), bottomOverlayPadding = 96.dp) }
 }

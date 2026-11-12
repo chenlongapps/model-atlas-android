@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.CompositionLocalProvider
@@ -40,6 +41,9 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -198,7 +202,7 @@ class ChatScreenTest {
             CompositionLocalProvider(LocalDensity provides Density(1f, 2f), LocalLayoutDirection provides LayoutDirection.Rtl) {
                 ModelAtlasTheme(dynamicColor = false) {
                     Box(Modifier.requiredSize(320.dp, 640.dp)) {
-                        ChatScreen(state, {}, onRequestClearConfig = { state = state.copy(confirmClearConfig = true) },
+                        ChatScreen(state, onRequestClearConfig = { state = state.copy(confirmClearConfig = true) },
                             onCancelClearConfig = { state = state.copy(confirmClearConfig = false) })
                     }
                 }
@@ -223,7 +227,7 @@ class ChatScreenTest {
                         ChatUiState(
                             turns = listOf(turn), input = "private-input-text",
                             configDraft = ChatConfigDraft("https://example.test/api", "never-save-secret", "model"),
-                        ), {},
+                        ),
                     )
                 }
             }
@@ -242,7 +246,7 @@ class ChatScreenTest {
         init()
         restoration.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                ModelAtlasTheme(darkTheme = redraw, dynamicColor = false) { ChatRoute({ exits++ }, vm) }
+                ModelAtlasTheme(darkTheme = redraw, dynamicColor = false) { ChatRoute(viewModel = vm) }
             }
         }
         send()
@@ -265,7 +269,7 @@ class ChatScreenTest {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 list = rememberLazyListState()
-                ChatScreen(ChatUiState(turns = turns, modelId = "model"), {}, listState = list)
+                ChatScreen(ChatUiState(turns = turns, modelId = "model"), listState = list)
             }
         }
         compose.runOnIdle { turns.last().update(ChatReply("追加\n".repeat(30), ChatReplyStatus.STREAMING)) }
@@ -285,7 +289,7 @@ class ChatScreenTest {
         compose.setContent {
             ModelAtlasTheme(dynamicColor = false) {
                 list = rememberLazyListState()
-                ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model", isGenerating = true), {}, listState = list)
+                ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model", isGenerating = true), listState = list)
             }
         }
         compose.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
@@ -315,8 +319,9 @@ class ChatScreenTest {
                 LocalDensity provides Density(density.density, 2f), LocalLayoutDirection provides LayoutDirection.Rtl,
             ) {
                 ModelAtlasTheme(darkTheme = landscape, dynamicColor = false) {
-                    Box(Modifier.requiredSize(if (landscape) 640.dp else 320.dp, if (landscape) 320.dp else 600.dp)) {
-                        ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model", input = "多行\n输入"), {})
+                    // size 遵循宿主真实宽度；requiredSize(640dp) 会把 RTL 发送按钮放到手机屏幕外。
+                    Box(Modifier.size(if (landscape) 640.dp else 320.dp, if (landscape) 320.dp else 600.dp)) {
+                        ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model", input = "多行\n输入"))
                     }
                 }
             }
@@ -328,9 +333,14 @@ class ChatScreenTest {
         compose.runOnIdle { landscape = true }
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         compose.onNodeWithTag("chat-input").assertIsDisplayed()
+        val screen = compose.onNodeWithTag("chat-screen").fetchSemanticsNode().boundsInRoot
+        for (tag in listOf("chat-send", "chat-input")) {
+            val bounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag must be fully inside the short window", bounds.left >= screen.left && bounds.right <= screen.right && bounds.bottom <= screen.bottom)
+        }
     }
 
-    @Test fun visibleKeyboardConsumesFirstSystemBackAndNextBackLeavesWithoutLosingDraft() {
+    @Test fun visibleKeyboardConsumesFirstSystemBackAndNextBackFallsThroughWithoutLosingDraft() {
         show()
         compose.onNodeWithTag("chat-input").performTextInput("保留草稿\n第二行")
         compose.onNodeWithTag("chat-input").performClick()
@@ -345,12 +355,34 @@ class ChatScreenTest {
         compose.runOnIdle { assertEquals(1, exits) }
     }
 
-    @Test fun buttonBackStopsUnderlyingRequest() {
-        show(); send()
-        // 发送后收起输入法，顶部按钮始终是退出而非仅收键盘。
-        compose.onNodeWithContentDescription("返回").performClick()
+    @Test fun leavingTabStopsUnderlyingRequestAndReentryDoesNotRestartIt() {
+        init()
+        var visible by mutableStateOf(true)
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) { ChatRoute(isVisible = visible, viewModel = vm) }
+        }
+        send()
+        fake.channel.trySend(LlmChunk("保留部分回复"))
+        compose.onNodeWithTag("chat-reply-1").assert(hasText("保留部分回复"))
+        compose.runOnIdle { visible = false }
         compose.waitUntil { fake.active.get() == 0 }
-        compose.runOnIdle { assertEquals(1, exits); assertEquals(ChatReplyStatus.STOPPED, vm.uiState.value.turns.single().reply.value.status) }
+        compose.runOnIdle { assertEquals(ChatReplyStatus.STOPPED, vm.uiState.value.turns.single().reply.value.status); visible = true }
+        compose.onNodeWithTag("chat-reply-1").assert(hasText("保留部分回复"))
+        assertEquals(1, fake.calls.get())
+    }
+
+    @Test fun offscreenConfigurationDoesNotOpenAWindowAndDraftReturnsOnReentry() {
+        init()
+        var visible by mutableStateOf(false)
+        compose.runOnIdle { vm.openConfig() }
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) { ChatRoute(isVisible = visible, viewModel = vm) }
+        }
+        compose.onNodeWithTag("chat-config-apply").assertDoesNotExist()
+        compose.runOnIdle { visible = true }
+        compose.onNodeWithTag("chat-config-apply").assertIsDisplayed()
+        compose.runOnIdle { visible = false }
+        compose.onNodeWithTag("chat-config-apply").assertDoesNotExist()
     }
 
     private lateinit var owner: LifecycleOwner
@@ -368,7 +400,13 @@ class ChatScreenTest {
         init(configured)
         compose.setContent {
             view = LocalView.current
-            ModelAtlasTheme(dynamicColor = false) { ChatRoute({ exits++ }, vm) }
+            ModelAtlasTheme(dynamicColor = false) {
+                NavigationBackHandler(
+                    state = rememberNavigationEventState(NavigationEventInfo.None),
+                    onBackCompleted = { exits++ },
+                )
+                ChatRoute(viewModel = vm)
+            }
         }
     }
     private fun configure() {

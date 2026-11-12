@@ -1,5 +1,21 @@
 package io.github.chenlongapps.modelatlas.ui.navigation
 
+/** 从整个分体底栏坐标映射到胶囊模型标签；AI 点击也会打断模型双击序列。 */
+internal fun splitNavigationModelsRange(
+    width: Float,
+    aiWidth: Float,
+    gap: Float,
+    capsulePadding: Float,
+    spacing: Float,
+    itemCount: Int,
+    isRtl: Boolean,
+): ClosedFloatingPointRange<Float> {
+    val contentWidth = width - aiWidth - gap - capsulePadding * 2
+    val range = modelsTabRange(contentWidth, spacing, itemCount, isRtl)
+    val start = if (isRtl) capsulePadding else aiWidth + gap + capsulePadding
+    return (start + range.start)..(start + range.endInclusive)
+}
+
 /** 模型固定为首个标签；双击命中范围必须与实际栏数、间距及 RTL 布局一致。 */
 internal fun modelsTabRange(width: Float, spacing: Float, itemCount: Int, isRtl: Boolean): ClosedFloatingPointRange<Float> {
     require(itemCount > 0)

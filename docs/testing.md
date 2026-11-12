@@ -25,7 +25,7 @@
 | MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、相关 Query／ViewModel | 真实字节经生产映射覆盖列表／详情／对比／筛选；Atlas 集成验证缓存／收藏无须联网或改原值 |
 | 参数量 | `AtlasParametersTest`、`ModelParameterFormattingTest`、详情 Mapper、`CatalogTypeConvertersTest`、快照／仓库／Debug Schema | `ModelParametersScreenTest`、Atlas／Catalog／Favorite／Debug DB、详情／对比及返回 |
 | 榜单 | `BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkResultPresentationTest`、`BenchmarkViewModelTest` | `BenchmarkRankingDatabaseTest`、`BenchmarkScreenTest`、`BenchmarkRefreshTest`、`BenchmarkReentryTest`、`BenchmarkSharedTransitionTest`／`BenchmarkSharedTransitionReducedMotionTest`；刷新协调加 `ModelRepositoryTest`／模型列表 ViewModel，共用提醒加 `CatalogStatusNoticeTest`；入口或底栏变化加外壳／导航／详情返回 |
-| 导航／共享转场 | `NavigationGeometryTest`、`NavigationScrollBehaviorTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest`、`ModelAtlasAppTest` | `ModelDetailNavigationTest`、`ModelSharedTransitionTest`／`ModelSharedTransitionReducedMotionTest`、`ModelSeekableTransitionTest`，按影响加收藏／RTL／恢复 |
+| 导航／共享转场 | `NavigationGeometryTest`、`NavigationScrollBehaviorTest`、`GlassNavigationBarTest`（Release 四项＋独立按钮）、`ChatNavigationTest`（Navigation 3 全屏路由／IME／状态与返回）、`NavigationScrollTest`、`NavigationScrollReducedMotionTest`、`ModelAtlasAppTest` | `ModelDetailNavigationTest`、模型／榜单共享转场及零动画、`ModelSeekableTransitionTest`、`BenchmarkReentryTest`、`SilentCatalogUpdateTest`，根导航／依赖变化扩大范围 |
 | Debug 数据库／双版本 | `DebugDatabaseSchemaTest`、`DebugDatabaseViewModelTest`、`DebugDatabaseStoreTest`、`DebugDatabaseScreenTest`、`DebugFeatureTest` | 外壳、真实 Room 冲突／级联／重开；构建隔离／安装变化按[双版本说明](debug-release-coexistence.md)检查 Release |
 
 ### 测试维护边界
@@ -36,6 +36,8 @@
 - 只合并同一行为的重复断言／准备逻辑；业务单元、数据库事务与设备 UI 属于不同边界，不因名称类似就删掉。当前仍使用的价格条件、查询恢复、MIME 投影、Atlas 缓存关联修正及零动画回归继续保留。
 - 不保留低于应用 minSdk、永远无法执行的设备用例。发现数量与源码不符时可用 runner 的 `-e log true` 列举实际用例并核对 SDK 过滤；该模式不运行测试，即使返回 `OK` 也不能作为通过证据。
 - 页面导航测试先满足当前可见性规则：目录向下浏览隐藏底栏后，反向轻滑唤回再点击，不通过未合并语义树命中不可见导航来绕过行为。
+- `glass-navigation` 为整个分体底栏，`glass-navigation-capsule` 为主 Pager 的单选 Tab 组，`nav-chat` 是独立路由按钮、没有选中语义；主 Pager 横滑直接从对比到设置，不能到助手。进入助手后应断言整个主 Pager、底栏、圆形入口均不存在；返回恢复来源页／位置／展开，胶囊指示器直接与 Pager 条目对应。
+- 助手路由覆盖真实 IME 的系统／按钮两阶段返回、保存状态恢复、pop 后阅读位置重入，以及 Fake 请求在路由重建／预测性取消时不重复／不取消，确认 pop 时同步停止。额外检查预测性返回预组合的来源页恢复滚动显隐，以及退出动画未结束时旧助手操作已从读屏树移除且不能点击。预测性测试经 NavigationEvent dispatcher 驱动 Navigation 3，不能替代系统边缘手势验收；配置、草稿与消息不能因新增导航保存状态进入 SavedState。
 
 ### 关键断言（不是执行记录）
 
@@ -95,6 +97,7 @@ adb -s "$ANDROID_SERIAL" shell am instrument -w -r \
 ### 定向截图与预测性取消诊断
 
 - `BenchmarkScreenTest` 可在同一次 runner 中传 `-e captureRegression true`，将简介浅深色、说明弹窗、长说明末尾与窄屏双倍字号 RTL 截图保存到 Debug 应用的外部专属目录 `files/regression-screenshots/`；普通执行不截图，不自动更新任何视觉基线。截图用于人工检查，不替代布局／状态断言。
+- `ChatNavigationTest` 复用该开关和目录，截图前缀为 `chat-`，覆盖浅／深／动态配色的空会话与正常回复、失败／等待、真实 IME、320dp 双倍字号 RTL 与短窗口。仅使用测试状态，不保存生产消息或配置。运行中不要同时启动 Android CLI 的 layout instrumentation，避免竞争同一 UiAutomation 连接。
 - `BenchmarkSharedTransitionTest` 同样支持该开关，保存浅／深主题来源卡片、展开中间帧、完整榜单与收缩中间帧，文件名前缀为 `benchmark-transition-`；成绩专项中间帧使用 `benchmark-results-` 前缀。预测性取消逐帧断言复用每帧同一张 Compose root 截图检查容器边界与 Logo 可见性。
 - 预测性取消像素用例每帧只截图一次，Logo 与容器使用同一张图。像素检查失败时，将最近三帧及比例、帧号、Transition 状态保存在同目录体系的 `files/predictive-failures/<时间戳>/`，日志标签为 `PredictiveCancelTest`。取回证据时同步保留 runner 与设备日志；截图超时不能当作 Logo 缺失，正常截图中的缺失也不能归咎于环境。
 - 同 APK 连续定向通过只说明本轮未复现；有根因与对应修复证据才能称为已修复。批次通过及单跑通过分别记录，不抹掉原失败。

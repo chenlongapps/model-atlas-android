@@ -208,12 +208,14 @@ class NavigationScrollTest {
 
     private fun assertHidden() {
         compose.onNodeWithTag("nav-models").assertDoesNotExist()
+        compose.onNodeWithTag("nav-chat").assertDoesNotExist()
         compose.onNodeWithTag("glass-navigation-motion").assertIsNotDisplayed()
     }
 
     private fun assertShown() {
         compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
         compose.onNodeWithTag("nav-models").assertExists()
+        compose.onNodeWithTag("nav-chat").assertIsDisplayed()
     }
 
     private fun position() = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset

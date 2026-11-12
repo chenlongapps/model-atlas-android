@@ -206,6 +206,26 @@ class ModelAtlasAppTest {
         assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
     }
 
+    @Test fun independentAiRouteAndFollowingTapDoNotResetCatalog() {
+        show()
+        scrollCatalogToModel12()
+        val before = compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("nav-models").performTouchInput { click() }
+        compose.onNodeWithTag("nav-chat").performTouchInput {
+            advanceEventTime(50)
+            click()
+        }
+        compose.onNodeWithTag("chat-screen").assertIsDisplayed()
+        compose.onNodeWithTag("glass-navigation").assertDoesNotExist()
+        pressBack()
+        compose.onNodeWithTag("nav-models").performTouchInput {
+            advanceEventTime(50)
+            click()
+        }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        assertEquals(before, compose.onNodeWithText("测试模型 12").fetchSemanticsNode().boundsInRoot.top, 1f)
+    }
+
     @Test fun catalogScrollPositionSurvivesStateRestoration() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
@@ -431,6 +451,7 @@ class ModelAtlasAppTest {
     @Test fun largeFontAndRtlKeepLabelsAndIndicatorUsable() {
         show(fontScale = 2f, direction = LayoutDirection.Rtl)
         assertIndicatorMatches("nav-models")
+        compose.onNodeWithContentDescription("AI 助手").assertIsDisplayed()
         for ((tag, label) in listOf("nav-models" to "模型", "nav-benchmarks" to "评测", "nav-compare" to "对比", "nav-settings" to "设置", "nav-debug" to "调试")) {
             val results = mutableListOf<TextLayoutResult>()
             compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)

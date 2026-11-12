@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">Model Atlas</string>
     <string name="nav_models">模型</string>
+    <string name="nav_chat">助手</string>
+    <string name="nav_ai">AI</string>
     <string name="nav_favorites">收藏</string>
     <string name="favorites_order">按收藏时间 · 最新在前</string>
     <string name="favorites_empty_title">尚无收藏</string>

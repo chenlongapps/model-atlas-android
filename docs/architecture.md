@@ -10,7 +10,7 @@
 | --- | --- |
 | `ModelAtlasApplication.kt`、`MainActivity.kt` | Hilt 初始化；外观首读、全局主题、edge-to-edge 与系统栏同步 |
 | `ui/ModelAtlasApp.kt` | 顶层 Pager、子页面、状态保存、共享转场宿主与底栏避让 |
-| `ui/navigation/` | 玻璃底栏、按实际栏数／RTL 的命中几何、非消费式滚动显隐 |
+| `ui/navigation/` | 主界面／助手 Navigation 3 路由、玻璃底栏、按实际栏数／RTL 的命中几何、非消费式滚动显隐 |
 | `data/remote/atlas/`、`data/remote/dto/` | Atlas 发布包及 Models.dev 服务商独立 DTO／解析，不包含 UI 或本地主键策略 |
 | `ai/`、`ai/openai/`、`ai/di/` | 集中维护独立 LLM 请求契约、OpenAI 兼容普通／流式客户端与 Hilt 绑定，仍属于 `:app`，不参与目录同步；`ai/config/` 独立管理 DataStore／Keystore [配置持久化](ai-configuration.md)，客户端不读存储；见 [LLM API](llm-api.md) |
 | `data/mapper/`、`data/model/` | DTO → 本地类型；数据库投影 → 独立应用模型及纯业务规则 |
@@ -69,9 +69,10 @@ refresh()（启动自动同步／用户主动刷新共用）
 
 ## 顶层分页与子页面
 
-- Release 为“模型｜评测｜对比｜设置”，Debug 追加调试；同一 `GlassNavigationItem` 列表决定 pageCount、key、内容与导航几何，按条目标识分发。顶层页面持续组合，普通切页不重置滚动、查询、提醒或展开状态。
-- 详情、完整排行榜、外观、AI 助手、来源许可和 Debug 数据库管理是独立子页，隐藏底栏并保留但不放置主 Pager，防绘制、触摸、焦点和读屏穿透。不引入通用导航栈；根 Back 放行，弹层优先处理返回。聊天页自行分流 IME／页面返回，不进入模型／榜单的预测性共享转场控制器。
-- 底栏实测高度保存为 dp，恢复首帧沿用，页面末尾增加实测高度＋32dp 留白；不因底栏显隐改变留白、夹回阅读位置。玻璃采样由 `layerBackdrop` 提供，当前支持设备为 API 33+，设计预览使用实色兜底。
+- `AssistantNavigation` 仅引入 `MainDestination`／`AssistantDestination` 两个可序列化 `NavKey`，由 `rememberNavBackStack`／`NavDisplay` 管理独立全屏助手。Main 内部 Pager 为“模型｜评测｜对比｜设置”，Debug 追加调试，模型默认首页；助手从 Pager 完全移出，不能横滑进入。主界面底栏为起始侧 AI 按钮＋末侧胶囊（Release 四项／Debug 五项），RTL 镜像；AI 只 push 路由并防止重复 push，胶囊条目和 Pager 索引直接一一对应，指示器无需跨助手页映射。视觉、紧凑尺寸与触摸目标见[设计规范](Design.md#ai-助手)。
+- Main 路由使用 Navigation 3 默认保存状态装饰器保留分页、列表与展开状态；主路由内部普通切页仍持续组合。进入助手时旧 Main 立即禁用交互／读屏与页面活动信号，过渡完成后移出组合；返回由保存状态恢复来源页，不重新创建 Activity 级 ViewModel，不触发目录启动刷新。来源页可能在预测性返回时以非活动状态预组合，因此滚动连接的 remember key 包含路由活动状态，确认返回后必须重新启用显隐监听。助手单独使用宿主级 `SaveableStateHolder` 保存阅读／跟随状态，pop 后不清理该 UI 状态，以便下次打开恢复位置；对话、草稿及配置不进入保存状态。助手退出端仍由 NavDisplay 绘制至过渡结束，但从 pop 首帧即统一屏蔽焦点、读屏及全部触摸操作（含消息复制）。
+- 详情、完整排行榜、外观、来源许可和 Debug 数据库管理仍由 Main 内原外壳管理，隐藏底栏并保留但不放置主 Pager，防绘制、触摸、焦点和读屏穿透；不将它们迁入新 NavDisplay，不改变现有模型／榜单共享转场控制器。Main 根 Back 放行，弹层优先处理返回。助手由 Navigation 3 负责路由返回与预测性返回，内部仅拦截可见 IME 以收键盘；无 IME 时 pop 回原页。关闭确认同步调用 `ChatViewModel.stop()`，预测性取消不调用；退出过渡期间可见性同样关闭输入／配置／跟随。详见[聊天](chat.md)。
+- 主界面底栏以圆形入口和胶囊的整组最大高度测量，保存为 dp，恢复首帧沿用，页面末尾增加实测高度＋32dp 留白；不因滚动显隐改变留白、夹回阅读位置。两部分共用显隐外壳，隐藏时共同禁用触摸、焦点与读屏。助手独立全屏不渲染底栏、不接收导航避让，由页面统一消费 IME／系统栏。玻璃采样由 `layerBackdrop` 提供，当前支持设备为 API 33+，设计预览使用实色兜底及静态 Main 路由。
 - `NavigationScrollConnection` 始终零消费，只观察当前停稳页 `UserInput` 已消费纵向位移；松手／反向重置累计，不响应惯性、程序或独立弹层滚动。横向零位移 fling 不当成切页。阈值、动效、触摸探索规则见[设计规范](Design.md#悬浮底部导航)。
 - 模型标签双击走 UI 的 `animateScrollToItem(0, 0)`，不经过 ViewModel 或刷新。监听不消费原点击，拖动／多指／长按／越界／其他标签中断双击序列，另提供等效无障碍操作。
 - Debug 统计仅在切入停稳、重读或刷新结束后读取，离屏预组合不读库。手动刷新复用同一仓库；成功后 `onCatalogRefreshedExternally()` 等既有操作结束，仅重读本地展示快照并清过期反馈。数据库显式修改用 `onCatalogMutatedExternally()` 同样发布本地快照，均不二次联网、不恢复持续目录观察。
