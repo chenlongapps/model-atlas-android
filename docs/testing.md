@@ -4,11 +4,14 @@
 
 ## 先选范围
 
-先列影响与拟执行类／方法，小改可选方法，功能完成补相关类及导航／返回链路；共享组件、全局主题／导航、存储、依赖或构建的大范围修改扩大回归。以下是起点，不是每次全跑的套件；测试源码为 `app/src/test/`、`src/testDebug/`、`src/androidTest/`、`src/androidTestDebug/`。
+先列影响与拟执行类／方法：小改可选方法，功能完成补相关类及导航／返回，共享或全局改动扩大范围。以下只作选测起点，不必全跑。
+
+测试位于 `app/src/` 下的 `test/`、`testDebug/`、`androidTest/`、`androidTestDebug/`。纯文档只查链接、锚点、命令和描述，不构建、不启动模拟器。
+
+### 页面与导航
 
 | 改动 | 优先测试 | 按影响追加 |
 | --- | --- | --- |
-| 纯文档 | 相对链接、标题锚点、命令与当前描述 | 不构建、不启动模拟器 |
 | 搜索／筛选 | `ModelListQueryTest`、`ModelListViewModelTest`、`ModelCatalogControlsTest` | 卡片／状态加 `ModelListScreenTest`，切页恢复加 `ModelAtlasAppTest` |
 | 目录刷新／反馈／骨架 | `ModelRepositoryTest`、`CatalogSnapshotTest`、列表 ViewModel、`CatalogEntriesTest`、`CatalogStatusNoticeTest` | `SilentCatalogUpdateTest`（后台冻结／主动发布／切页及详情返回）、对应 Screen、`CatalogNoticeAnimationTest`／`CatalogNoticeReducedMotionTest`、`ModelCardSkeletonTest`／`ModelCardSkeletonReducedMotionTest` |
 | 详情字段／布局 | `ModelDetailMapperTest`、`ModelDetailViewModelTest`、`ModelDetailScreenTest` | `ModelDetailNavigationTest`，身份／容器变化再加共享转场 |
@@ -17,41 +20,70 @@
 | 收藏／收藏标识 | `FavoritesViewModelTest`、`FavoriteRemovalTransitionTest`、`CatalogEntriesTest`、`CatalogFavoritesTest`、`FavoritesScreenTest`、`ModelCardFavoriteLayoutTest` | 从模型目录进入详情，不使用独立收藏导航；存储加 `FavoriteDatabaseTest`，返回加共享转场／零动画 |
 | 外观／主题 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`AppearanceColorTest`、`AppearanceScreenTest`、`AppearanceNavigationTest` | 全局变化加 `ModelAtlasThemeTest` 与主要页面浅深；备份变化加 `AppearanceBackupRulesTest` |
 | 底栏自动隐藏开关 | `SettingsRepositoryTest`、`AppearanceViewModelTest`、`SettingsScreenTest`、`NavigationScrollTest`、`NavigationScrollReducedMotionTest` | `ChatNavigationTest`、`AppearanceNavigationTest`、`ModelAtlasAppTest`、`ModelDetailNavigationTest`；覆盖默认关闭／旧文件、保存恢复／失败回滚、禁写重试、隐藏时关闭、无障碍优先级与子页返回；显隐测试显式开启偏好 |
-| Models.dev／价格 | `ModelsDevApiTest`、`ModelsDevParserTest`、`InterleavedDtoSerializerTest`、相关 Mapper／Policy／Repository | Room／事务变化加 `CatalogDatabaseTest`，共享字段覆盖所有消费者 |
-| LLM 请求 | `OpenAiCompatibleClientTest`（序列化／SSE／超时／取消／脱敏／资源关闭）、`LlmLiveTestConfigTest`（环境／本地配置优先级） | `LlmLiveTest` 读取环境变量或 `local.properties`，必须用 `-PllmLiveTest=true` 显式开启；默认跳过不计线上通过，命令及密钥边界见 [LLM API](llm-api.md#测试) |
-| AI 聊天 | `ChatViewModelTest`（Fake 客户端、上下文／增量／取消／重试／防重复／配置校验），`ChatScreenTest`、`ChatNavigationTest`、`GlassNavigationBarTest`（导航胶囊↔输入栏形态转换） | 复用客户端测试回归真实 SSE／socket 资源释放；导航加 `ModelAtlasAppTest`、`AppearanceNavigationTest`、`ModelDetailNavigationTest`，IME 首次返回必须不离页；不默认执行真实付费 API |
-| AI 配置存储 | `LlmConfigRepositoryTest`、`ChatViewModelTest`、设备 `KeystoreConfigTest` | `ChatScreenTest`／`ChatNavigationTest`、`AppearanceBackupRulesTest`；真实 DataStore 文件重开、无明文、篡改／丢失密钥、显式恢复损坏文件、保存失败保留；只用随机测试 Keystore 别名，禁止清除生产凭据 |
-| Atlas 发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest` | `AtlasCatalogIntegrationTest`，共享存储加 Catalog／Favorite／Debug DB，来源页与返回 |
 | 来源页／许可 | `ModelAtlasAppTest` 中 `settingsOpensStandaloneSourcePageWithPricesAndBundledLicense` 及三个 `sourcePage*` 方法 | 检查实际应用 assets、当前 Atlas 说明及 Models.dev MIT，按钮／系统返回、阅读位置恢复和大字 RTL |
-| MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、相关 Query／ViewModel | 真实字节经生产映射覆盖列表／详情／对比／筛选；Atlas 集成验证缓存／收藏无须联网或改原值 |
-| 参数量 | `AtlasParametersTest`、`ModelParameterFormattingTest`、详情 Mapper、`CatalogTypeConvertersTest`、快照／仓库／Debug Schema | `ModelParametersScreenTest`、Atlas／Catalog／Favorite／Debug DB、详情／对比及返回 |
 | 榜单 | `BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkResultPresentationTest`、`BenchmarkViewModelTest` | `BenchmarkRankingDatabaseTest`、`BenchmarkScreenTest`、`BenchmarkRefreshTest`、`BenchmarkReentryTest`、`BenchmarkSharedTransitionTest`／`BenchmarkSharedTransitionReducedMotionTest`；刷新协调加 `ModelRepositoryTest`／模型列表 ViewModel，共用提醒加 `CatalogStatusNoticeTest`；入口或底栏变化加外壳／导航／详情返回 |
 | 导航／共享转场 | `NavigationGeometryTest`、`NavigationScrollBehaviorTest`、`GlassNavigationBarTest`（胶囊／独立按钮位置、形态转换与多行输入）、`ChatNavigationTest`（Navigation 3 全屏路由／IME／状态与返回）、`NavigationScrollTest`、`NavigationScrollReducedMotionTest`、`ModelAtlasAppTest` | `ModelDetailNavigationTest`、模型／榜单共享转场及零动画、`ModelSeekableTransitionTest`、`BenchmarkReentryTest`、`SilentCatalogUpdateTest`，根导航／依赖变化扩大范围 |
 | Debug 数据库／双版本 | `DebugDatabaseSchemaTest`、`DebugDatabaseViewModelTest`、`DebugDatabaseStoreTest`、`DebugDatabaseScreenTest`、`DebugFeatureTest` | 外壳、真实 Room 冲突／级联／重开；构建隔离／安装变化按[双版本说明](debug-release-coexistence.md)检查 Release |
 
+### 数据与存储
+
+| 改动 | 优先测试 | 按影响追加 |
+| --- | --- | --- |
+| Models.dev／价格 | `ModelsDevApiTest`、`ModelsDevParserTest`、`InterleavedDtoSerializerTest`、相关 Mapper／Policy／Repository | 事务加 `CatalogDatabaseTest`；共享字段覆盖所有消费者 |
+| Atlas 发布包 | `AtlasReleaseLoaderTest`、`AtlasHttpSourceTest`、`AtlasCatalogMapperTest`、`ModelRepositoryTest` | `AtlasCatalogIntegrationTest`，共享存储加 Catalog／Favorite／Debug DB，来源页与返回 |
+| MIME 模态 | `ModalityCategoryTest`、列表／详情／Atlas Mapper、Query／ViewModel | 真实字节覆盖列表／详情／对比／筛选；缓存／收藏不联网、不改原值 |
+| 参数量 | `AtlasParametersTest`、`ModelParameterFormattingTest`、详情 Mapper、`CatalogTypeConvertersTest`、快照／仓库／Debug Schema | `ModelParametersScreenTest`、Atlas／Catalog／Favorite／Debug DB、详情／对比及返回 |
+
+### AI
+
+| 改动 | 优先测试 | 按影响追加 |
+| --- | --- | --- |
+| LLM 请求 | `OpenAiCompatibleClientTest`、`LlmLiveTestConfigTest` | 协议、SSE、取消、关闭与脱敏；线上测试仅显式启用，见 [LLM API](llm-api.md#测试) |
+| 聊天 | `ChatViewModelTest`、`ChatScreenTest`、`ChatNavigationTest`、`GlassNavigationBarTest` | Fake 客户端覆盖上下文／增量／取消／重试／防重入，UI 覆盖复制、长回复锚点、重建与离屏隔离；导航变化加外壳／外观／详情返回，IME 首次返回不离页 |
+| 配置存储 | `LlmConfigRepositoryTest`、`ChatViewModelTest`、设备 `KeystoreConfigTest` | 真实 DataStore＋JCE 往返／并发／认证／取消／损坏恢复；设备真实 Keystore／随机 IV／密钥不可导出／删除／文件重开；Screen／导航／`AppearanceBackupRulesTest` |
+
+不默认调用付费 API；`LlmLiveTest` 须 `-PllmLiveTest=true`，默认跳过不计线上通过。Keystore 测试只用随机别名与 cache 文件，不删除生产凭据。
+
 ### 测试维护边界
 
-- 沿用 JUnit4、协程虚拟时间／显式 fake、设备 Compose 语义与像素断言、真实 Room／SQLite 集成；不额外引入 Mock、Robolectric 或截图插件。Hilt 提供生产依赖，Screen 测试继续直接传状态，Route 测试使用已有工厂，不为清理改写测试架构。
-- 旧整数版本评测的三类单元、一类集成、v2/v3 样本与归属许可均已删除；Models.dev 测试只保留当前服务商接口，规范模型／成绩用 Atlas DTO 与发布包。不保留仅为废弃协议服务的辅助代码。
-- Room KSP 直接检查生产数据库；不再复制一份未使用的测试数据库或单独配置 Room 的 `kspTest`。真实事务、回滚、文件重开、收藏保留由当前 Atlas／Catalog／Favorite 集成测试覆盖。
-- 只合并同一行为的重复断言／准备逻辑；业务单元、数据库事务与设备 UI 属于不同边界，不因名称类似就删掉。当前仍使用的价格条件、查询恢复、MIME 投影、Atlas 缓存关联修正及零动画回归继续保留。
-- 不保留低于应用 minSdk、永远无法执行的设备用例。发现数量与源码不符时可用 runner 的 `-e log true` 列举实际用例并核对 SDK 过滤；该模式不运行测试，即使返回 `OK` 也不能作为通过证据。
-- 页面导航测试先满足当前可见性规则：默认关闭自动隐藏；显隐专项须显式开启偏好，目录向下浏览隐藏底栏后，反向轻滑唤回再点击，不通过未合并语义树命中不可见导航来绕过行为。
-- `glass-navigation` 为整个分体底栏，`glass-navigation-capsule` 为主 Pager 的单选 Tab 组，`nav-chat` 是独立路由按钮、没有选中语义；主 Pager 横滑直接从对比到设置，不能到助手。进入助手后应断言整个主 Pager、底栏、圆形入口均不存在；返回恢复来源页／位置／展开，胶囊指示器直接与 Pager 条目对应。
-- 助手路由覆盖真实 IME 的系统／按钮两阶段返回、保存状态恢复、pop 后阅读位置重入，以及 Fake 请求在路由重建／预测性取消时不重复／不取消，确认 pop 时同步停止。额外检查预测性返回预组合的来源页恢复滚动显隐，以及退出动画未结束时旧助手操作已从读屏树移除且不能点击。预测性测试经 NavigationEvent dispatcher 驱动 Navigation 3，不能替代系统边缘手势验收；配置、草稿与消息不能因新增导航保存状态进入 SavedState。
+- 沿用 JUnit4、协程虚拟时间／显式 Fake、Compose 语义／像素及真实 Room／SQLite；不新增 Mock、Robolectric 或截图插件。Hilt 供生产依赖，Screen 直接传状态，Route 用已有工厂，不为清理改写架构。
+- Models.dev 测试只覆盖当前服务商接口，规范模型／成绩用 Atlas；不保留废弃协议专用辅助代码或样本，支持范围见[数据源](data-source.md#当前来源与边界)。
+- Room KSP 检查生产数据库，不复制测试数据库或配置 Room `kspTest`；事务、回滚、重开和收藏保留由 Atlas／Catalog／Favorite 集成测。
+- 只合并同一行为的重复断言／准备；单元、事务、设备 UI 不因名称相近而删。保留价格条件、查询恢复、MIME、缓存关联修正及零动画回归。
+- 不保留低于 minSdk 的不可执行设备用例。数量异常可用 runner `-e log true` 核对 SDK 过滤；它仅列举，即使 `OK` 也不是通过。
+- 导航遵守可见性：自动隐藏默认关，专项显式开启；隐藏后先反向轻滑唤回，不用未合并语义树绕过。
 
-### 关键断言（不是执行记录）
+### 助手导航断言
+
+- `glass-navigation` 为共享底栏；主路由的 `glass-navigation-capsule` 为单选 Tab 组，`nav-chat` 为无选中态按钮。横滑从对比到设置，不到助手。
+- 助手内主 Pager、导航条目和 AI 按钮不存在，共享底栏／输入栏仍显示；返回恢复来源页、阅读／展开和指示器。
+- 测真实 IME 系统／按钮两阶段返回、状态恢复、pop 后阅读重入；Fake 请求在重建／预测性取消时不重发、不取消，确认 pop 才同步停止。
+- 测预测性预组合后来源滚动显隐恢复、退出动画中的旧操作不可读屏／点击；凭据、草稿、消息不得入 SavedState。NavigationEvent dispatcher 不是系统边缘手势验收。
+
+## 关键断言（不是执行记录）
+
+### 数据与映射
 
 - 字段／存储：null、空、false、零不混淆；规范模型／服务分开；回滚、文件重开、并发收藏、显式关联；生产 KSP 编译不能替代真实 SQLite 测试。
 - 参数量：BigDecimal 高精度往返，真实稠密／MoE／仅激活／仅组件／未披露，不推算；非法数值／来源拒绝；UI 只显示总量／激活量，切标签／替换／恢复正确。
 - 详情评测：数值一位小数与文本原样、英文 A–Z、同名按未舍入数值降序、平分稳定、文本／缺失置后、全部配置及下标身份保留；不要把 UI 舍入值当原值。
-- 榜单：明确版本按实际版本隔离，`unspecified` 定义接受缺失／不同版本并合榜，指标／单位／唯一关联仍严格；每模型最高原值、同分并列、下架／非 LLM／未匹配过滤；文本／未知方向／低分更优不在榜单展示但详情原记录仍保留。旧 Atlas 缓存离线通过榜单或详情入口修复关联，版本／配置／收藏／release 不变、歧义不套定义、手工成绩不变及文件重开；真实随包 HLE 为 84 个数值 LLM 模型（仅当前快照）。局部轴边界、品牌色、pts／完整单位读屏、模型名后档位。
-- 评测热度：`popularity` 数字／0／缺失／null 的解析与存储往返、错误类型及非有限值整包拒绝；降序、缺失最后、同值稳定兜底，兼容实际版本继承热度；仅热度变化须更新快照及卡片顺序，模型排名及榜单 ID 不变，文件重开仍保留。
-- 榜单恢复：用延迟首个结果的 Repository 和真实 Route／ViewModel，检查双向滑入、底栏切换、连续往返及生命周期恢复期间不插入 loading、不丢卡片／阅读位置，随后应用最新本地结果；成功空榜单不退回 loading，失败清旧数据、重试显示加载，离屏无订阅，完整榜单按钮／系统返回不重建订阅。
-- 评测刷新：真实下拉／读屏动作、首次读取与重复刷新防重入，刷新不换 loading／不主动回顶；成功等提交后本地读完成，覆盖有变化／无变化／空结果，网络或主动读取失败保留内容，失败重试／关闭、浅深提示、无障碍超时及旧计时不清新错误。模型启动同步／评测／Debug 并发只请求一轮，共享成功及失败；等待者取消不影响发起者，发起者取消释放等待者且可重试。真实 Route 刷新后进入／返回榜单不重建持续订阅。
-- 完整榜单简介／弹窗：浅深约 64dp 简介与完整名称，信息按钮至少 48dp，说明默认不占正文、空白无入口、长说明可滚、重建／系统返回仅关弹窗、阅读不变，320dp 双倍字号 RTL，整卡进入／返回。
-- 评测共享转场：整卡中间帧及背景不淡出、Logo／名称以完整榜单 ID 隔离、宽字标等比、入场中返回、左右边缘预测性暂停／取消／100% 确认、零动画。滚动后停身份匹配、退出不强制回顶；重建及返回取消保留榜单位置，完整退出交接后清理，按钮／系统／预测性确认退出后再次打开均从顶部共享进入，总览位置不变；覆盖轻微偏移与深滚动、成绩共享中间帧。来源移除退化淡出、错误不留旧成绩。公共控制器变化同时回归模型共享转场；dispatcher 注入不替代系统边缘手势验收。
-- 成绩共享：前三名的名称／分数／轨道／填充按榜单＋模型 ID＋角色隔离，同名／并列不串动画；加入第四名改变坐标轴的样本，按品牌色像素验证填充的真实端点及中间帧边界、轨道可见性、6→8dp 条高、暂停／取消及返回归位。保持原始分数／各页轴与 `pts`／`points` 端点格式，零长度填充不补造值；窄屏大字 RTL 换行、真实段落宽高不超过文字布局、滚动后停匹配及第四名不共享。检查原有柱条颜色／读屏／卡片点击语义不回退。
+- 榜单：按[分榜／排名契约](architecture.md#排名分榜与坐标)测明确版本与 `unspecified`、歧义、最高原值／并列及不参榜记录；详情仍保留原配置。覆盖局部轴、品牌色、pts／完整单位读屏及模型名后档位。
+- 缓存修正：榜单／详情入口离线修复旧 Atlas 关联，原版本／配置／收藏／release 与手工成绩不变；歧义不套定义、文件重开有效。
+- 热度：数字／0／缺失／null 往返，错误类型／非有限值整包拒绝；缺失最后、同值稳定、实际版本继承。仅热度变化也更新快照／顺序，不改排名／榜单 ID，重开仍保留。
+
+### 评测状态与转场
+
+- **恢复**：延迟首结果的 Repository＋真实 Route／ViewModel，测双向滑入、底栏切换、往返／生命周期恢复无 loading 闪现、保留卡片／位置，再应用新本地值。成功空榜也保留；失败清旧、重试 loading，离屏无订阅、全榜返回不重订阅。
+- **刷新**：真实下拉／读屏、防首次读取与重复请求，不换 loading／回顶；等提交后重读完成，覆盖有变化／无变化／空结果。联网或主动重读失败保留内容，测关闭／重试、浅深／无障碍超时、旧计时不清新错误。
+- **并发**：启动／评测／Debug 一轮共享成功或失败；等待者取消不影响请求，发起者取消释放等待者并可重试；刷新后进出全榜不重订阅。
+- **简介／弹窗**：浅深、64dp 最小高度、完整名、48dp 信息按钮；空白无入口，长说明可滚，重建保留弹窗，系统返回只关弹窗、不改阅读。覆盖 320dp 双倍字号 RTL 与整卡往返。
+- **身份转场**：整卡中间帧、背景不淡出、完整榜单 ID 隔离、宽字标等比；入场中返回、左右边缘暂停／取消／100% 确认、零动画。轻微／深滚动停匹配且不回顶；来源移除淡出、错误不留旧成绩。
+- **退出恢复**：重建／取消保留位置；按钮／系统／预测性确认退出交接后清状态，重入从顶部共享进入，总览不动。公共控制器变更同时回归模型。
+- **成绩转场**：前三名按榜单＋模型＋角色隔离，同名／并列不串；第四名改变轴的样本测真实端点／中间帧、轨道可见、6→8dp 条高、暂停／取消／归位。原分数／各页轴与 pts／points 不变，零长度不补值。
+- **布局与语义**：窄屏大字 RTL、真实段落不超文字布局、滚动后停匹配、第四名不共享；柱色、读屏和卡片点击不回退。
+
+### 其他状态与验证边界
+
 - 收藏：可用项取消后仍保留普通目录卡、返回交接后才重排；下架项先持久化删除、返回后淡出；保存失败不返回。后台目录变化不改本次收藏身份／可用性，用户收藏增删实时生效，显式目录发布才应用新快照。
 - Debug 编辑返回：区分 IME 可见／隐藏；键盘消费返回不等于退出编辑。取消确认后焦点可能恢复并重新打开 IME，测试应明确键盘前提，校验草稿保留及放弃不写库。
 - UI：真实文字边界与像素，浅深／320dp／双倍字号／RTL、键盘／安全区／末尾可达；转场中间帧、暂停／取消／交接与零动画，不只检查最终截图。

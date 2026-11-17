@@ -22,7 +22,7 @@
 - 完整保留七类价格、`tiers`、旧 `context_over_200k`、服务覆盖与 `experimental.modes`。价格 Double 仅用于解析／存储／展示，不是财务结算类型；自由请求 `body`／headers 只存储，不展示或执行。
 - 非法 JSON、顶层错误、缺必需值、已知字段类型错误抛出异常，不伪造成空目录或默认业务值。
 - 客户端连接 15s、读取 30s、整次 60s，不自动重试。429／503 尊重 `Retry-After` 秒数或 HTTP 日期，缺失／非法则冷却 60s，冷却中重试不发请求；不轮询、不增加退出后后台任务。
-- Atlas 整包及价格响应均成功才事务提交，网络／解析／取消不写半份。比较／后台确认／主动刷新策略只在[架构](architecture.md#数据与状态流转)维护。
+- Atlas 整包及价格响应均成功才事务提交，网络／解析／取消不写半份。比较、后台同步与主动刷新见[架构](architecture.md#数据与状态流转)。
 
 ### 收录与规范模型语义
 
@@ -99,6 +99,14 @@ true／false／null 为支持／不支持／未知，缺失集合不是空集合
 - LAB 素材来自 Models.dev Logos（`/logos/labs/{lab}.svg` 同图本地彩色变体），随包 `ic_lab_*.xml`，覆盖 23 个前缀；不运行时下载、不借图、不代表隶属／认可。
 - 服务商源为 `https://models.dev/logos/{provider-ID}.svg`；2026-10-27 的 232 ID 快照收录 212 ID／187 份矢量，只有原 SVG 完全相同才共用。12 个通用图 ID：`alibaba-token-plan-cn`、`chutes`、`cline-pass`、`cortecs`、`gmicloud`、`morph`、`requesty`、`sakana`、`sap-ai-core`、`sarvam`、`synthetic`、`upstage`；8 个无法完整转换 ID：`abliteration-ai`、`atomic-chat`、`hpc-ai`、`kenari`、`orcarouter`、`umans-ai`、`umans-ai-coding-plan`、`wafer.ai`。这些及未知 ID 都用独立兜底，数量不是接口保证。
 - 服务商 SVG 用构建期 Svg2Vector 转换，保留 viewBox／变换／显式颜色，固有 24dp、等比绘制，`currentColor` 固定黑配白底。`lucidquery` 超长路径先 SVGO 优化，不拆复合路径或换品牌；资源注释留地址／日期，更新须验证全部加载与图形，不要求运行时工具。
+
+### Logo 映射与维护
+
+以下 Kotlin 路径相对于 `app/src/main/java/io/github/chenlongapps/modelatlas/`，资源位于 `app/src/main/res/drawable/`：
+
+- LAB：`ic_lab_<lab>.xml`，由 `ui/modellist/LabLogo.kt` 按规范 ID 的 LAB 前缀映射；未知用 `ic_lab_logo_fallback.xml`，不借用其他机构素材。
+- 服务商：`ic_provider_*.xml`，由 `ui/modeldetail/ProviderLogo.kt` 按稳定服务商 ID 精确映射，不借用模型 LAB；来源通用图、无法完整转换或未知 ID 使用 `ic_provider_logo_fallback.xml`。
+- 保留品牌原色及固定浅色／白色圆角底，不随主题染色。新增素材同步更新映射、测试与来源记录；评测素材另见[评测 Logo](benchmark-logos.md)。
 
 ## 核实依据与时效
 

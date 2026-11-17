@@ -36,11 +36,8 @@
 
 `backup_rules.xml`、`data_extraction_rules.xml` 同时排除此配置文件的旧式备份、云备份和设备迁移；其他数据备份规则不变。Keystore 密钥不能随配置迁移，换机需重新填写。Debug 和 Release 使用各自 application ID 的私有存储与 Keystore 命名空间，即使别名相同也不会共用凭据。
 
-## 测试与边界
+## 验证入口
 
-- `LlmConfigRepositoryTest`：真实 DataStore＋JCE AES-GCM，验证文件重开、整份并发提交、无明文、篡改、密钥丢失、加密失败不覆盖、取消传播及损坏文件显式恢复。
-- `ChatViewModelTest`：延迟恢复／保存、防重入、失败保留、重新读取、确认删除及新 ViewModel 只恢复配置，不自动联网。
-- `KeystoreConfigTest`：设备真实 AndroidKeyStore、不可导出密钥、随机 IV、认证失败、密钥删除和生产存储文件重开；使用随机测试别名和 cache 文件，绝不删除用户真实配置或生产别名。
-- `ChatScreenTest`／`ChatNavigationTest`：配置状态、失败／重试、确认清除及导航；`AppearanceBackupRulesTest` 同时校验两种设置的备份排除范围。
+选测见[测试说明](testing.md#ai)：仓库用真实 DataStore＋JCE，设备测 AndroidKeyStore，ViewModel／UI 测延迟恢复、防重入、失败保留与确认清除，XML 测备份排除。测试只用随机别名和 cache 文件，不删除生产凭据。
 
-实际执行结果见[开发历史](archive/development-history.md)，真实跨厂商 Keystore、系统备份／迁移和进程重启验收以 [TODO](../TODO.md) 为准；文件／对象重开不冒充真实进程恢复。
+实际结果见[历史](archive/development-history.md)，跨厂商 Keystore、系统备份／迁移与进程重启验收见 [TODO](../TODO.md)；文件／对象重开不等于真实进程恢复。

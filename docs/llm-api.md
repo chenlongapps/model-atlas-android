@@ -4,7 +4,7 @@
 
 已实现 OpenAI 兼容的 `POST chat/completions` 文本请求、普通响应、SSE 流式响应，以及 system／user／assistant 有序多轮上下文。不新增依赖，不改变目录同步、数据库或外观持久化。
 
-设置已提供独立[文本聊天 UI](chat.md)，由 `ChatViewModel` 管理多轮上下文及请求生命周期，直接调用 `LlmClient`，没有仅透传的 `ChatRepository`。已提交配置通过独立 DataStore／Keystore [持久化](ai-configuration.md)；尚未实现历史持久化、Function Calling、Agent、后台服务或服务端。
+底部 `AI` 按钮打开独立[文本聊天 UI](chat.md)，由 `ChatViewModel` 管上下文与请求，直接调用 `LlmClient`。配置存储见 [AI 配置持久化](ai-configuration.md)，不属于客户端职责；不提供历史持久化、工具、Agent、后台服务或服务端。
 
 ## 代码边界
 
@@ -66,14 +66,20 @@ llmClient.stream(config, LlmRequest(nextTurn)).collect { chunk ->
 
 ## 测试
 
-测试与生产包对应，位于 `app/src/test/java/io/github/chenlongapps/modelatlas/ai/openai/`。`OpenAiCompatibleClientTest` 使用现有 JUnit4、MockWebServer 与真实 OkHttp，覆盖请求序列化、配置切换、多轮消息、未知字段、UTF-8 拆包／多行 SSE／尾部 usage、冷流、HTTP／远端／协议错误、超时、响应头及响应体阶段取消、提前停止收集、资源关闭、超限及敏感内容不传播。此类测试有真实 socket／OkHttp 超时，使用注入的 IO dispatcher 和明确同步信号，不用协程虚拟时间假装控制网络时钟。
+测试位于 `app/src/test/java/io/github/chenlongapps/modelatlas/ai/openai/`，选测见[测试说明](testing.md)。
+
+### 本地协议回归
+
+`OpenAiCompatibleClientTest` 使用 JUnit4、MockWebServer 与真实 OkHttp，覆盖序列化／配置／多轮消息、未知字段、UTF-8 拆包／多行 SSE／尾部 usage、冷流、错误／超时、响应头及响应体取消、提前停止、资源关闭、超限和脱敏。使用注入的 IO dispatcher 与明确同步信号；协程虚拟时间不能控制真实 socket 超时。
 
 ```sh
 ./gradlew :app:testDebugUnitTest \
   --tests 'io.github.chenlongapps.modelatlas.ai.openai.OpenAiCompatibleClientTest'
 ```
 
-`LlmLiveTest` 为显式启用的线上冒烟，执行两次可能计费的请求：普通响应，以及带上该回复的多轮流式响应。必须指定 `-PllmLiveTest=true` 才执行，默认即使已有凭据仍跳过，避免普通单元测试意外计费。显式开启后如果缺少必要配置则失败，不把未配置误记为线上通过。不会输出配置、提示词或响应。
+### 线上冒烟（显式启用，可能计费）
+
+`LlmLiveTest` 发两次请求：普通响应，以及带上该回复的多轮流式响应。仅 `-PllmLiveTest=true` 启用，默认有凭据也跳过；启用后缺配置须失败。不输出配置、提示词或响应。
 
 在根目录 `local.properties` 保留已有的 `sdk.dir` 等内容，增加以下三项即可一次保存、重复使用（示例不含真实密钥）：
 
