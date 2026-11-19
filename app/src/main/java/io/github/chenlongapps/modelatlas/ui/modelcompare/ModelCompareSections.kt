@@ -44,49 +44,94 @@ import io.github.chenlongapps.modelatlas.ui.modellist.formatCompactTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
-import io.github.chenlongapps.modelatlas.ui.modellist.labDisplayName
 import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
 
 /** 参数仅取规范模型；报价仅取列表已选定的同一条服务报价，不拼接其他服务或模式。 */
 internal fun LazyListScope.comparisonItems(
-    state: ModelCompareUiState, tiersExpanded: Boolean, onToggleTiers: () -> Unit,
+    models: List<ModelDetail>, prices: List<ModelPriceSummary?>,
     expandedDetails: List<String>, onToggleDetail: (String) -> Unit,
 ) {
-    val first = requireNotNull(state.first.detail)
-    val second = requireNotNull(state.second.detail)
-    val models = listOf(first, second)
-    val prices = models.map { model -> state.models.firstOrNull { it.id == model.id }?.price }
-    item("basic") {
+    val metadata = models.map(ModelDetail::metadata)
+    val hasSpecs = metadata.any {
+        it.contextLimitTokens != null || it.outputLimitTokens != null ||
+            it.inputModalities != null || it.outputModalities != null || it.openWeights != null
+    }
+    if (hasSpecs) item("specs") {
+        CompareSection(stringResource(R.string.compare_specs), R.drawable.ic_compare, models) {
+            TokenRow(R.string.model_list_context_label, metadata.map { it.contextLimitTokens }, models)
+            TokenRow(R.string.model_list_output_limit_label, metadata.map { it.outputLimitTokens }, models)
+            ModalityRow(R.string.model_filter_input, metadata.map { it.inputModalities }, models)
+            ModalityRow(R.string.model_filter_output, metadata.map { it.outputModalities }, models)
+            TextRow(R.string.compare_weight_status, metadata.map {
+                it.openWeights?.let { open ->
+                    stringResource(if (open) R.string.model_list_open_weights_yes else R.string.model_list_open_weights_no)
+                }
+            }, models)
+        }
+    }
+    if (prices.any { it != null }) item("prices") {
+        CompareSection(stringResource(R.string.model_list_price_title), R.drawable.ic_calendar, models) {
+            Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextRow(R.string.compare_price_provider, prices.map { it?.providerName }, models, accent = true)
+            PriceRow(R.string.model_list_input_label, prices.map { it?.input }, models)
+            PriceRow(R.string.model_list_output_label, prices.map { it?.output }, models)
+            if (prices.none { it?.input != null || it?.output != null }) {
+                Text(stringResource(R.string.compare_no_base_price), style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(stringResource(R.string.compare_base_price_notice), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    val hasBasic = metadata.any {
+        !it.releaseDate.isNullOrBlank() || !it.family.isNullOrBlank() ||
+            !it.knowledgeCutoff.isNullOrBlank() || it.inputLimitTokens != null
+    }
+    val hasParameters = models.any { it.parameters?.let { p -> p.totalBillion != null || p.activeBillion != null } == true }
+    val hasCapabilities = metadata.any {
+        it.attachment != null || it.toolCall != null || it.reasoning != null ||
+            it.structuredOutput != null || it.temperature != null
+    }
+    val hasLicense = models.any { !it.license.isNullOrBlank() }
+    if (!(hasBasic || hasParameters || hasCapabilities || hasLicense || prices.any { it != null })) return
+    item("more") {
+        CompareToggleCard("more", R.string.compare_more_information, expandedDetails, onToggleDetail)
+    }
+    if ("more" !in expandedDetails) return
+    if (hasBasic) item("basic") {
         CompareSection(stringResource(R.string.compare_basic), R.drawable.ic_document, models) {
-            TextRow(R.string.model_filter_labs, models.map { it.lab?.let(::labDisplayName) }, models, accent = true)
-            TextRow(R.string.model_list_release_date_label, models.map { it.metadata.releaseDate }, models)
-            TextRow(R.string.detail_family, models.map { it.metadata.family }, models)
-            TextRow(R.string.detail_knowledge_cutoff, models.map { it.metadata.knowledgeCutoff }, models)
+            TextRow(R.string.model_list_release_date_label, metadata.map { it.releaseDate }, models)
+            TextRow(R.string.detail_family, metadata.map { it.family }, models)
+            TextRow(R.string.detail_knowledge_cutoff, metadata.map { it.knowledgeCutoff }, models)
+            TokenRow(R.string.detail_input_limit, metadata.map { it.inputLimitTokens }, models)
         }
     }
-    item("io") {
-        CompareSection(stringResource(R.string.compare_io), R.drawable.ic_compare, models) {
-            TokenRow(R.string.model_list_context_label, models.map { it.metadata.contextLimitTokens }, models)
-            TokenRow(R.string.detail_input_limit, models.map { it.metadata.inputLimitTokens }, models)
-            TokenRow(R.string.model_list_output_limit_label, models.map { it.metadata.outputLimitTokens }, models)
-            ModalityRow(R.string.model_filter_input, models.map { it.metadata.inputModalities }, models)
-            ModalityRow(R.string.model_filter_output, models.map { it.metadata.outputModalities }, models)
-        }
-    }
-    item("parameters") {
+    if (hasParameters) item("parameters") {
         CompareSection(stringResource(R.string.detail_parameter_count), R.drawable.ic_nav_models_outline, models) {
             TextRow(R.string.parameter_total, models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }, models)
             TextRow(R.string.parameter_active, models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }, models)
         }
     }
-    item("prices") {
-        CompareSection(stringResource(R.string.model_list_price_title), R.drawable.ic_calendar, models) {
+    if (hasCapabilities) item("capabilities") {
+        CompareSection(stringResource(R.string.compare_capabilities), R.drawable.ic_modality, models) {
+            BooleanRow(R.string.detail_attachment, metadata.map { it.attachment }, models)
+            BooleanRow(R.string.detail_tool_call, metadata.map { it.toolCall }, models)
+            BooleanRow(R.string.detail_reasoning, metadata.map { it.reasoning }, models)
+            BooleanRow(R.string.detail_structured_output, metadata.map { it.structuredOutput }, models)
+            BooleanRow(R.string.detail_temperature, metadata.map { it.temperature }, models)
+            Text(stringResource(R.string.compare_capability_notice), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    if (prices.any { it != null }) item("price-details") {
+        CompareSection(stringResource(R.string.compare_price_details), R.drawable.ic_calendar, models) {
             Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextRow(R.string.compare_price_provider, prices.map { it?.providerName }, models, accent = true)
-            PriceRows(prices, models)
-            CompareDisclosure("service-id", stringResource(R.string.compare_price_service), expandedDetails, onToggleDetail) {
-                TextRow(R.string.compare_price_service, prices.map { it?.offeringId }, models)
+            ExtraPriceRows(prices, models)
+            if (prices.any { !it?.offeringId.isNullOrBlank() }) {
+                CompareDisclosure("service-id", stringResource(R.string.compare_price_service), expandedDetails, onToggleDetail) {
+                    TextRow(R.string.compare_price_service, prices.map { it?.offeringId }, models)
+                }
             }
             Text(stringResource(R.string.compare_price_notice), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -94,28 +139,10 @@ internal fun LazyListScope.comparisonItems(
     }
     // 展开状态留在页面保存域，Lazy 条目回收或异步恢复不会丢失。
     if (prices.any { it?.tiers?.isNotEmpty() == true }) {
-        item("tiers") { CompareTierSection(prices, models, tiersExpanded, onToggleTiers) }
+        item("tiers") { CompareTierSection(prices, models, "tiers" in expandedDetails, { onToggleDetail("tiers") }) }
     }
-    item("capabilities") {
-        CompareSection(stringResource(R.string.compare_capabilities), R.drawable.ic_modality, models) {
-            BooleanRow(R.string.detail_attachment, models.map { it.metadata.attachment }, models)
-            BooleanRow(R.string.detail_tool_call, models.map { it.metadata.toolCall }, models)
-            BooleanRow(R.string.detail_reasoning, models.map { it.metadata.reasoning }, models)
-            BooleanRow(R.string.detail_structured_output, models.map { it.metadata.structuredOutput }, models)
-            BooleanRow(R.string.detail_temperature, models.map { it.metadata.temperature }, models)
-            Text(stringResource(R.string.compare_capability_notice), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-    item("weights") {
+    if (hasLicense) item("weights") {
         CompareSection(stringResource(R.string.detail_weights), R.drawable.ic_database, models) {
-            TextRow(R.string.compare_weight_status, models.map {
-                when (it.metadata.openWeights) {
-                    true -> stringResource(R.string.model_list_open_weights_yes)
-                    false -> stringResource(R.string.model_list_open_weights_no)
-                    null -> null
-                }
-            }, models)
             CompareDisclosure("license", stringResource(R.string.compare_full_license), expandedDetails, onToggleDetail) {
                 TextRow(R.string.detail_license, models.map { it.license }, models)
             }
@@ -157,24 +184,38 @@ private fun CompareColumnHeaders(models: List<ModelDetail>) {
 }
 
 @Composable
+internal fun CompareToggleCard(
+    key: String, title: Int, expandedDetails: List<String>, onToggleDetail: (String) -> Unit,
+) {
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth()) {
+        CompareToggle(key, stringResource(title), key in expandedDetails, onToggleDetail, Modifier.padding(horizontal = 16.dp))
+    }
+}
+
+@Composable
 private fun CompareDisclosure(
     key: String, title: String, expandedDetails: List<String>, onToggleDetail: (String) -> Unit,
     content: @Composable () -> Unit,
 ) {
     val expanded = key in expandedDetails
+    Column {
+        CompareToggle(key, title, expanded, onToggleDetail)
+        if (expanded) content()
+    }
+}
+
+@Composable
+private fun CompareToggle(key: String, title: String, expanded: Boolean, onToggleDetail: (String) -> Unit, modifier: Modifier = Modifier) {
     val action = stringResource(if (expanded) R.string.compare_collapse_detail else R.string.compare_expand_detail, title)
     val state = stringResource(if (expanded) R.string.compare_detail_expanded else R.string.compare_detail_collapsed)
-    Column {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("compare-$key-toggle")
-            .semantics { stateDescription = state }
-            .clickable(role = Role.Button, onClickLabel = action) { onToggleDetail(key) },
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(action, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Icon(painterResource(R.drawable.ic_expand_more), null, Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
-                tint = MaterialTheme.colorScheme.primary)
-        }
-        // 不依赖惰性条目的局部状态，离屏回收和异步恢复仍保留展开。
-        if (expanded) content()
+    Row(modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("compare-$key-toggle")
+        .semantics { stateDescription = state }
+        .clickable(role = Role.Button, onClickLabel = action) { onToggleDetail(key) },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(action, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        Icon(painterResource(R.drawable.ic_expand_more), null, Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
+            tint = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -187,11 +228,13 @@ private data class CompareValue(
 
 @Composable
 private fun TextRow(label: Int, values: List<String?>, models: List<ModelDetail>, accent: Boolean = false) {
+    if (values.all { it.isNullOrBlank() }) return
     CompareRow(stringResource(label), values.map { CompareValue(it?.takeIf(String::isNotBlank) ?: stringResource(R.string.no_data), accent = accent) }, models)
 }
 
 @Composable
 private fun TokenRow(label: Int, values: List<Long?>, models: List<ModelDetail>) {
+    if (values.all { it == null }) return
     CompareRow(stringResource(label), values.map {
         CompareValue(it?.let { "${formatCompactTokenCount(it)} tokens" } ?: stringResource(R.string.no_data),
             it?.let { "${formatTokenCount(it)} tokens" } ?: stringResource(R.string.no_data))
@@ -200,6 +243,7 @@ private fun TokenRow(label: Int, values: List<Long?>, models: List<ModelDetail>)
 
 @Composable
 private fun ModalityRow(label: Int, values: List<List<String>?>, models: List<ModelDetail>) {
+    if (values.all { it == null }) return
     CompareRow(stringResource(label), values.map { modalities ->
         val text = when {
             modalities == null -> stringResource(R.string.no_data)
@@ -212,6 +256,7 @@ private fun ModalityRow(label: Int, values: List<List<String>?>, models: List<Mo
 
 @Composable
 private fun BooleanRow(label: Int, values: List<Boolean?>, models: List<ModelDetail>) {
+    if (values.all { it == null }) return
     CompareRow(stringResource(label), values.map {
         CompareValue(stringResource(when (it) {
             true -> R.string.detail_supported
@@ -272,17 +317,15 @@ private fun CompareCell(label: String, modelName: String, value: CompareValue, m
 }
 
 @Composable
-private fun PriceRows(prices: List<ModelPriceSummary?>, models: List<ModelDetail>) {
-    PriceRow(R.string.model_list_input_label, prices.map { it?.input }, models)
-    PriceRow(R.string.model_list_output_label, prices.map { it?.output }, models)
-    PriceRow(R.string.model_list_price_cache_read_label, prices.map { it?.cacheRead }, models)
+private fun ExtraPriceRows(prices: List<ModelPriceSummary?>, models: List<ModelDetail>) {
     val extras = listOf(
+        R.string.model_list_price_cache_read_label to prices.map { it?.cacheRead },
         R.string.detail_cache_write to prices.map { it?.cacheWrite },
         R.string.detail_reasoning to prices.map { it?.reasoning },
         R.string.detail_input_audio to prices.map { it?.inputAudio },
         R.string.detail_output_audio to prices.map { it?.outputAudio },
     )
-    extras.filter { it.second.any { it != null } }.forEach { (label, values) -> PriceRow(label, values, models) }
+    extras.forEach { (label, values) -> PriceRow(label, values, models) }
 }
 
 @Composable
@@ -297,8 +340,8 @@ private fun CompareTierSection(prices: List<ModelPriceSummary?>, models: List<Mo
     val action = stringResource(if (expanded) R.string.model_list_price_details_collapse else R.string.model_list_price_details_expand)
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth().testTag("compare-tiers-toggle").semantics { stateDescription = stateLabel }
-                .clickable(onClickLabel = action, onClick = onToggle).padding(vertical = 12.dp),
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("compare-tiers-toggle").semantics { stateDescription = stateLabel }
+                .clickable(role = Role.Button, onClickLabel = action, onClick = onToggle).padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.compare_tiers), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(if (expanded) R.string.model_filter_less else R.string.model_filter_more),

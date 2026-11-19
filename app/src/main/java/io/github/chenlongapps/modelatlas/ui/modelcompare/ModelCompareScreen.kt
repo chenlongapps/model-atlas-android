@@ -37,6 +37,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
@@ -116,8 +118,15 @@ internal fun ModelCompareScreen(
     // 异步恢复期间使用另一份列表状态，避免短的加载内容夹回已保存的正文位置。
     val contentState = rememberLazyListState()
     val placeholderState = rememberLazyListState()
-    var tiersExpanded by rememberSaveable(uiState.first.modelId, uiState.second.modelId) { mutableStateOf(false) }
     var expandedDetails by rememberSaveable(uiState.first.modelId, uiState.second.modelId) { mutableStateOf(emptyList<String>()) }
+    val onToggleDetail: (String) -> Unit = { key ->
+        expandedDetails = if (key in expandedDetails) expandedDetails - key else expandedDetails + key
+    }
+    val comparisonModels = if (uiState.isReady) listOf(requireNotNull(uiState.first.detail), requireNotNull(uiState.second.detail))
+        else emptyList()
+    val firstBenchmarks = uiState.first.detail?.benchmarks
+    val secondBenchmarks = uiState.second.detail?.benchmarks
+    val benchmarks = remember(firstBenchmarks, secondBenchmarks) { compareBenchmarkGroups(firstBenchmarks, secondBenchmarks) }
     val direction = LocalLayoutDirection.current
     val windowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -161,11 +170,10 @@ internal fun ModelCompareScreen(
             } else if (uiState.catalogStatus == CompareReadStatus.LOADING && uiState.first.modelId != null && uiState.second.modelId != null) {
                 item("catalog-loading") { CompareMessage(stringResource(R.string.compare_loading), loading = true) }
             }
-            if (uiState.isReady) {
-                comparisonItems(uiState, tiersExpanded, onToggleTiers = { tiersExpanded = !tiersExpanded },
-                    expandedDetails = expandedDetails, onToggleDetail = { key ->
-                        expandedDetails = if (key in expandedDetails) expandedDetails - key else expandedDetails + key
-                    })
+            if (comparisonModels.isNotEmpty()) {
+                compareBenchmarkItems(benchmarks, comparisonModels.map(ModelDetail::name), expandedDetails, onToggleDetail)
+                val prices = comparisonModels.map { model -> uiState.models.firstOrNull { it.id == model.id }?.price }
+                comparisonItems(comparisonModels, prices, expandedDetails, onToggleDetail)
             } else {
                 item("guidance") {
                     val text = when {
@@ -303,10 +311,14 @@ private fun ModelComparePreview() {
     val details = listOf(
         ModelDetail("deepseek/deepseek-v4.1-flash-1017", "DeepSeek V4.1 Flash 1017", ModelDetailMetadata(releaseDate = "2026-10", contextLimitTokens = 1_000_000,
             outputLimitTokens = 131_072, inputModalities = listOf("text", "image"), outputModalities = listOf("text"),
-            reasoning = true, toolCall = true, openWeights = true), license = "MIT", fetchedAtEpochMillis = 0),
+            reasoning = true, toolCall = true, openWeights = true), license = "MIT", fetchedAtEpochMillis = 0,
+            benchmarks = listOf(ModelBenchmark("SWE-bench Pro", 78.4, metric = "pass@1", version = "2", unit = "%",
+                reasoningEffort = "High", benchmarkId = "swe-bench-pro-v2"))),
         ModelDetail("moonshotai/kimi-k3.1-pro", "Kimi K3.1 Pro", ModelDetailMetadata(releaseDate = "2026", contextLimitTokens = 400_000,
             outputLimitTokens = 128_000, inputModalities = listOf("text", "image", "audio"), outputModalities = listOf("text"),
-            reasoning = true, structuredOutput = true, openWeights = false), fetchedAtEpochMillis = 0),
+            reasoning = true, structuredOutput = true, openWeights = false), fetchedAtEpochMillis = 0,
+            benchmarks = listOf(ModelBenchmark("SWE-bench Pro", null, scoreText = "74.5 ± 1.3", metric = "pass@1",
+                version = "2", unit = "%", benchmarkId = "swe-bench-pro-v2"))),
     )
     ModelAtlasTheme(dynamicColor = false) {
         ModelCompareScreen(ModelCompareUiState(

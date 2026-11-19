@@ -1,7 +1,7 @@
 <resources>
     <string name="nav_compare">对比</string>
     <string name="compare_title">模型对比</string>
-    <string name="compare_subtitle">逐项了解两个模型的参数、能力与报价</string>
+    <string name="compare_subtitle">对照两个模型的评测分数、关键规格与报价</string>
     <string name="compare_vs" translatable="false">VS</string>
     <string name="compare_select">选择模型 %1$d</string>
     <string name="compare_unknown_model">模型 %1$d（名称暂无数据）</string>
@@ -17,7 +17,15 @@
     <string name="compare_loading">正在读取本地模型数据…</string>
     <string name="compare_missing">此模型已被移除或不再收录，请替换或移除。</string>
     <string name="compare_basic">基本信息</string>
-    <string name="compare_io">输入输出</string>
+    <string name="compare_specs">关键规格</string>
+    <string name="compare_more_information">更多信息</string>
+    <string name="compare_benchmarks">评测分数</string>
+    <string name="compare_benchmarks_empty">两个模型均暂无评测成绩。</string>
+    <string name="compare_benchmarks_no_shared">没有可并排展示的共同成绩。</string>
+    <string name="compare_benchmarks_single">单侧评测</string>
+    <string name="compare_benchmarks_no_score">暂无对应成绩</string>
+    <string name="compare_benchmarks_version_missing">未注明</string>
+    <string name="compare_benchmarks_test">虚构测试数据，不代表真实评测成绩。</string>
     <string name="compare_capabilities">能力特性</string>
     <string name="compare_model_name">模型名称</string>
     <string name="compare_full_license">完整许可</string>
@@ -28,6 +36,9 @@
     <string name="compare_weight_status">权重状态</string>
     <string name="compare_price_provider">报价服务商</string>
     <string name="compare_price_service">报价服务 ID</string>
+    <string name="compare_price_details">详细报价</string>
+    <string name="compare_base_price_notice">沿用目录默认服务的基础报价，不代表最低价；档位与其他费用以服务商为准。</string>
+    <string name="compare_no_base_price">暂无基础输入／输出报价。</string>
     <string name="compare_price_notice">沿用列表默认报价，不代表最低价或推荐。USD / 百万 tokens；不同服务商、缓存与档位条件不可直接比较，同一任务的 token 数也可能不同。仅展示基础模式，不合计费用，推理价不默认与输出价相加。档位等号归属与适用条件以服务商说明为准。</string>
     <string name="compare_tiers">上下文及其他条件档位</string>
     <string name="compare_no_tiers">此报价未提供精确档位。</string>
