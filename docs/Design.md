@@ -13,23 +13,8 @@
 
 ## 修改流程与验证
 
-1. **读现状**：本文相关章节 → `Theme.kt` → 目标实现与相近组件，明确保留项和修改边界。
-2. **定方案并实现**：优先复用主题和组件，仅增加必要规则；保留未涉及的导航、动画、状态与无障碍行为。
-3. **按影响验证**：浅／深／动态色，窄屏／大字／RTL，触摸目标／换行／完整内容，加载／空／错误／正常态；与现有页面或预览比较，选测见[测试说明](testing.md)。
-4. **交付**：说明受影响页面／公共组件、复用规则、Material 3 自定义差异、全局风格影响，以及实际检查和未验证风险。未执行不得报通过。
-
-## 实现入口
-
-以下路径相对于 [`app/src/main/java/io/github/chenlongapps/modelatlas/`](../app/src/main/java/io/github/chenlongapps/modelatlas/)；修改前先读目标与相近组件。
-
-| 范围 | 入口 |
-| --- | --- |
-| 全局主题 | `ui/theme/Theme.kt`；窗口主题为 `app/src/main/res/values/themes.xml`、`app/src/main/res/values-night/themes.xml` |
-| 目录与查询 | `ui/modellist/ModelCard.kt`、`ModelCatalogControls.kt` |
-| 详情 | `ui/modeldetail/ModelDetailScreen.kt`、`ModelOverview.kt` |
-| 评测与对比 | `ui/benchmark/BenchmarkCard.kt`、`ui/modelcompare/ModelCompareScreen.kt` |
-| 设置 | `ui/settings/SettingsScreen.kt` |
-| 底栏与输入栏 | `ui/navigation/GlassNavigationBar.kt`、`MorphingBottomBar.kt` |
+1. 先读本页对应章节、`ui/theme/Theme.kt`、目标实现和相近组件。涉及启动或系统栏时同时检查 `values/themes.xml` 和 `values-night/themes.xml`。
+2. 按影响检查浅／深／动态色、窄屏／大字／RTL、触摸目标和文字换行，以及加载／空／错误／正常态。选测见[分级测试](testing.md)；交付时区分实际检查与未验证项。
 
 ## 状态与反馈
 
@@ -96,4 +81,4 @@
 - 背景 `surfaceContainerLowest`、横向留白以 16dp 为主；标题 `headlineMedium`，正文 `bodyLarge`／`bodyMedium`，辅助 `bodySmall`／`onSurfaceVariant`。
 - 空态为欢迎语、能力边界和三个可换行问题入口；入口 `surfaceContainerLow`、16dp 圆角、高至少 48dp，点击仅填草稿，不请求。
 - 用户消息末侧对齐、`secondaryContainer`、16dp 圆角；助手起始侧正文，不额外套装饰卡。长文本不截断，复制／失败／停止／重试操作可访问。
-- 系统／按钮返回先收键盘，再返回来源页；弹窗优先。预测性返回取消不停止生成，确认退出才停止；重入不自动续发或唤键盘。内存、阅读锚点和生命周期规则见[聊天](chat.md)。
+- 键盘、弹窗及离页时的请求行为见[聊天返回规则](chat.md#离页与返回)。

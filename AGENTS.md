@@ -25,7 +25,7 @@
 - **快照**：目录／成绩／定义／发布状态同事务提交，收藏不参与远端替换。列表展示快照与后台缓存分离，后台写库不得自动改变当前列表；详情见[数据与状态流转](docs/architecture.md#数据与状态流转)。
 - **存储**：沿用未发布的 Schema v1 开发基线，不自动迁移、破坏性重建或清数据。修改列时同步导出 Schema、Debug 字段白名单及校验，见[本地数据](docs/local-data.md)。
 - **导航**：助手是 Navigation 3 独立路由，不属于主 Pager；既有详情／榜单／设置子页仍在 Main 外壳。局部修改不得附带迁移导航或改写共享转场。
-- **AI 安全**：配置独立 DataStore／Keystore 加密，读取／保存失败不自动覆盖；凭据不进日志、SavedState 或备份，应用运行时不读 `local.properties`。对话／草稿仅内存，不自动重发付费请求，不重定向或重放 POST；修改前读[请求契约](docs/llm-api.md)、[配置存储](docs/ai-configuration.md)及[聊天状态](docs/chat.md)。
+- **AI 安全**：配置独立 DataStore／Keystore 加密，读取／保存失败不自动覆盖；凭据不进日志、SavedState 或备份，应用运行时不读 `local.properties`。对话／草稿仅内存，不自动重发付费请求，不重定向或重放 POST；修改前读[请求契约](docs/llm-api.md)和[聊天与配置存储](docs/chat.md)。
 
 ## UI 修改
 

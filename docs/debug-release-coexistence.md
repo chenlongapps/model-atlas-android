@@ -1,7 +1,5 @@
 # Debug / Release 双版本共存
 
-本文维护安装身份、签名与编译隔离；实际设备验收状态只在 [TODO](../TODO.md#待验收与发布)，历史构建／模拟器结果见[归档](archive/development-history.md#7-debug-调试双版本与许可说明)。
-
 ## 安装身份与隔离
 
 配置入口为 [app/build.gradle.kts](../app/build.gradle.kts) 和 `app/src/debug/res/`。
@@ -10,16 +8,15 @@
 | --- | --- | --- |
 | 名称 | Model Atlas | Model Atlas Debug |
 | Application ID | `io.github.chenlongapps.modelatlas` | `io.github.chenlongapps.modelatlas.debug` |
-| Version Name | 当前 `1.0` | 基础版本加 `-debug` |
+| Version Name | 基础版本 | 基础版本加 `-debug` |
 | 可调试 | 否 | 是 |
 | 图标 | 原版 | 普通／圆形／单色均有 DEBUG 绶带 |
 | 底栏 | 模型／评测／对比／设置 | 追加同级调试，不放设置入口 |
 
-- Debug 用 `applicationIdSuffix = ".debug"`、`versionNameSuffix = "-debug"`，不改 namespace／Kotlin 包名／Release 安装身份，不引入 flavors 或新模块。
-- 图标原白底图形右上叠绿色 45° 绶带和白色 `DEBUG`，主图略下移避让；由桌面遮罩裁边、文字在安全区，单色图层保留角标但颜色由系统决定。当前 minSdk 33，自适应图标覆盖即可，不能按旧 API 29 文案安排安装验收。
+- Debug 用 `applicationIdSuffix = ".debug"`、`versionNameSuffix = "-debug"`，不改 namespace、Kotlin 包名或 Release 安装身份。
 - `main` 只依赖统一 `ui.debug.DebugFeature` 接口；Debug source set 提供导航条目／Route／Screen／ViewModel／数据库工具与专用资源，Release 同签名空实现、条目 null。没有 `BuildConfig.DEBUG` 运行时分支，Release 不编译真实工具／专用资源。
 - 两 Application ID 各自沙盒，Room 无需改名或 Schema。旧原包名 Debug 的数据仍属原应用，不自动迁移到新 Debug；不能为了安装而卸载旧应用或清数据。
-- 备份身份隔离不等于备份／迁移服务已验证；外观文件单独排除见[外观说明](appearance-settings.md#存储和备份边界)。未来自定义 Provider authorities 用 `${applicationId}`，不要写死 Release 包名；当前主 Manifest 无自定义 Provider，也须检查依赖合并项。
+- 检查合并 Manifest 的 Provider authorities；自定义项应使用 `${applicationId}`，不要写死 Release 包名。两套沙盒不等于已验证备份或迁移。
 
 调试页统计／刷新与子页导航见[架构](architecture.md#顶层分页与子页面)，数据库五表 CRUD 的安全／覆盖边界只在[本地数据](local-data.md#debug-数据库管理)维护。
 

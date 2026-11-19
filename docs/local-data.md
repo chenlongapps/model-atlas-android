@@ -18,24 +18,21 @@
 | `benchmark_definitions`（`BenchmarkDefinitionEntity`） | `id` | 名称／版本／指标、双语说明、兼容版本、单位／方向／边界及可空 REAL 热度 `popularity` 等定义 |
 | `catalog_release`（`CatalogReleaseEntity`） | `id = 1` | 内容哈希、git 提交、发布时间，不可排序的发布身份 |
 
-当前数据库共七张业务表；旧整数版本表及相关 DAO 同步接口已删除。“三表”指目录模型／服务商／服务，“五表”指 Debug 开放编辑的原业务表，不代表数据库总表数。
+「三表」指目录模型／服务商／服务；Debug 仅开放前五张表。
 
 ## 标识、关联与来源
 
 - 模型 `id` 为 Atlas `models.json` 路径键，无内嵌 ID；其 `remoteId` 明确取路径键。服务商 ID 为 `api.json` 顶层键，服务 ID 为该服务商模型字典键，`remoteId` 另留 DTO 条目内 ID，不假定两者相同。
 - 服务复合主键只在服务商内唯一，不使用自增或拼接；`providerId` 外键级联服务，复合索引已以前缀覆盖，不再建重复单列索引。
 - `canonicalModelId` 仅保留显式关联、可空、普通索引但无模型外键：来源暂不同步或模型缺失仍可保存服务，不以模糊匹配修正。
-- 当前模型 `source = model-atlas-data`，服务商／服务为 `models.dev`；来源字段不代表支持任意多来源共用 ID。
-- `fetchedAtEpochMillis` 必须由调用方显式给 Unix 毫秒，同一响应保持一致；`sourceLastUpdated` 保留原字符串，不等同抓取时间或价格生效时间。
-- 能力 Boolean?，限制 Long?，日期／类型／状态／模态保留开放字符串；缺失、false、零、空集合各自保存。LAB 是 UI 的 ID 前缀标签，不新增已核实开发商关联。
+- 模型 `source = model-atlas-data`，服务商／服务为 `models.dev`。调用方显式传入 Unix 毫秒 `fetchedAtEpochMillis`，同一响应取值一致；`sourceLastUpdated` 保留原字符串。能力为可空 Boolean，限制为可空 Long，区分缺失、false、零及空集合。
 
 ## 快照事务与查询
 
 - `CatalogSnapshot` 包含三目录表，正式 Atlas 发布须同时含 `scores`／`definitions`／`release`。`readCatalog()` 同事务读取；有 release 才携带发布附属数据，无 release 的三表快照供本地目录编辑及定向测试，不代表支持旧远程协议。
 - `replaceCatalog()` 事务顺序为删旧服务／模型、upsert 服务商、写新模型／服务、删不在新快照的服务商；不对服务商用 REPLACE，防意外级联。正式发布还替换成绩／定义／发布状态，并更新仍可用的收藏身份，任一步失败整体回滚。
 - 合法空发布可清目录／成绩，不删除收藏；无 release 的三表局部替换不碰成绩。Debug 改目录／成绩可能被正式更新覆盖，不加持久覆盖层。
-- `hasCatalog()` 判断三表任一记录存在，不以 LLM 筛选结果替代；首次导入还检查发布标记，已提交空包不重复初始化。
-- `hasSameContentAs()` 按稳定主键比全部映射内容及发布身份，忽略抓取时间／字典顺序。增删及内容变化均自动提交，相同内容不写库；无待确认候选，后台缓存与列表展示快照的边界见[架构](architecture.md#数据与状态流转)。
+- `hasCatalog()` 看三张目录表，不看 LLM 筛选结果；首次导入同时检查发布标记。`hasSameContentAs()` 按稳定主键比较全部映射内容及发布身份，忽略抓取时间和字典顺序。
 
 | 查询 | 读取边界 |
 | --- | --- |
@@ -58,10 +55,9 @@
 
 - `benchmark_scores` 的 `modelId`／`benchmarkId` 非空，无模型外键，分别建索引；一个模型／评测允许多个配置，ID 按模型路径＋来源数组下标生成，保留原身份。
 - 原数值 `score` 为可空 REAL／Double，文本 `scoreText` 原样保存、导入二选一；不提取文本中心值或补零。Debug 至少填写一种，有限数值才合法。
-- 可空元数据：`name`、`version`、`variant`、`cost`、`metric`、`unit`、`higherIsBetter`、`subset`、`harness`、`reasoningEffort`、`toolsEnabled`、`sourceUrl`、`sourceType`、`evaluatedAt`。cost 为 REAL／Double、口径与币种未定，不计算或显示；未知布尔／日期保留，不推断可比性。
+- 元数据可空，`cost` 为 REAL／Double，口径与币种未定，不计算或显示。
 - 新成绩名称取 name、旧记录回退 benchmarkId；唯一匹配才关联定义，否则 `unmapped:` 隔离，不套单位／方向／中文。定义为 `unspecified` 的版本例外及其余匹配规则见[接入契约](atlas-data.md#成绩及本地化)。
-- `reconcileUnspecifiedBenchmarkScores()` 在有正式 release 时，同事务读取定义与成绩；仅对 `atlas:` ID 且名称／指标命中 `unspecified` 定义的成绩重算唯一关联，只写改变的 `benchmarkId`／`unit`／`higherIsBetter` 派生值。原始成绩／版本／配置、定义、目录、收藏及发布身份不改；手工成绩不处理，无改变不写库。榜单或详情仓库开始观察时调用，因此旧 Atlas 缓存离线也可恢复关联；这是当前数据的派生关联修正，不是旧远程协议兼容，不清数据。
-- 成绩／定义／release 正式同事务替换，详情同事务关联；仅保留成绩 DAO 的逐条读写，目录仓库不再暴露独立成绩 Flow，也不依赖旧递增版本逻辑。
+- 详情或榜单开始观察时，`reconcileUnspecifiedBenchmarkScores()` 在有正式 release 的库内离线重算命中 `unspecified` 定义的 `atlas:` 成绩关联。只事务更新变化的 `benchmarkId`、`unit`、`higherIsBetter`，不改原成绩、手工记录或发布身份。
 
 ## 列与本地 JSON
 
@@ -76,7 +72,7 @@
 
 - null 写 SQL NULL，区分 `[]`、`{}`、全字段缺失的价格对象；未知对象字段可忽略，非法 JSON／已知类型错误／未知密封变体抛错，不伪造成默认值。
 - `InterleavedLocal` 用 `{"type":"toggle","enabled":false}` 或 `{"type":"field","field":"reasoning_content"}`，不是远端布尔／对象格式；推理选项保留 null，模式保持字典键，body／headers 仅存储。
-- `ModelParametersLocal` 只在规范模型，可空 TEXT；总量／激活量 BigDecimal、B 单位，专用数字序列化器不经过 Double。来源／说明／组件原顺序保留，不扩服务／收藏／列表投影。数值与来源校验见[参数契约](atlas-data.md#模型参数量)。
+- `ModelParametersLocal` 只在规范模型，存可空 TEXT，保留来源、说明和组件顺序；数值校验见[参数契约](atlas-data.md#模型参数量)。
 - `OfferingPricingLocal` 分开保存七类单价、完整 tiers、旧兼容字段及模式价，不落库“选中报价”或自动最低价；计价解释见[价格语义](data-source.md#报价范围与适用条件)。
 - JSON 当前不承担复杂 SQL 筛选／排序；将来明确需要再评估列化，不假定设备具备 SQLite JSON 扩展。
 
@@ -88,4 +84,4 @@
 - 仅写改变列，未改 JSON 不重写／丢未知字段；损坏 JSON 可查看修复，输入按本地类型校验，参数按相同数值／来源规则，不接受远端蛇形结构替代。
 - 行编辑不走收藏业务校验／身份同步，可构造不可用收藏；删模型不删服务／收藏，删服务商级联服务。刷新仍同步可用身份，可能覆盖调试改动，不暂停自动检查。
 - `providerOverride`／`experimentalModes` 默认隐藏可主动展开，不入诊断复制／日志；草稿只在 ViewModel 内存，配置变化可保留、进程死不恢复，不写 SavedState／库／剪贴板。
-- 提交后 `onCatalogMutatedExternally()` 仅重读本地并发布列表展示快照，不二次联网、不恢复持续目录观察。测试入口集中于[分级测试](testing.md)，实际执行／遗留问题只在 [TODO](../TODO.md#待验收与发布)与历史记录维护。
+- 提交后 `onCatalogMutatedExternally()` 只重读本地并发布展示快照，不二次联网。
