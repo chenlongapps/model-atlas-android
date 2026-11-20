@@ -36,29 +36,9 @@
 
 ## 构建与验证
 
-按影响选测，不默认全量回归。具体用例与执行方式见 [分级测试](docs/testing.md)。
+每轮修改后，**先分析 Git Diff，再选测**：包含暂存、未暂存及相关新增文件，按实际受影响行为和调用方确定用例。具体选择和命令见 [分级测试](docs/testing.md)。
 
-| 改动 | 验证范围 |
-| --- | --- |
-| 纯文档 | 链接、锚点、命令及描述一致性；不构建、不启动模拟器 |
-| 逻辑 | 相关单元测试；按风险补 Debug 构建与 Lint |
-| UI | 相关单元及页面／方法 instrumentation；覆盖受影响导航／返回链路，按需视觉检查 |
-| 跨功能共享组件、全局主题／导航、存储、依赖／构建 | 扩大受影响范围回归 |
-| 发布前 | 全量单元、Debug Lint、全量 instrumentation 及必要真机验收 |
-
-Release 构建／Lint 仅在涉及 Release 优化、资源／构建类型隔离、签名或发布时追加，不作为普通页面修改的固定流程。
-
-常用命令（按需选择，不是每次全跑）：
-
-```sh
-./gradlew :app:assembleDebug
-./gradlew :app:testDebugUnitTest --tests 'io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModelTest'
-./gradlew :app:testDebugUnitTest
-./gradlew :app:lintDebug
-./gradlew :app:connectedDebugAndroidTest # 全量，设备 API 33+
-```
-
-- 同轮 instrumentation 合并构建、安装后批量执行；源码／测试未变复用本轮 APK，失败先定向重跑，修复后补受影响范围。
-- 不为常规验证执行 `clean`、清数据、卸载或重建模拟器；不默认调用真实付费 API。
-- **核对实际类名、数量与最终结果**，不只看 Gradle 成功。本机曾出现 class 参数漏跑；必要时按测试文档显式运行 `adb shell am instrument`，核对 `numtests` 和最终 `OK`，缺类／零项／中断不算通过。
-- 交付说明改动范围、实际验证结果及未验证风险；不冒用历史结果。
+- 纯文档只做静态检查。代码改动默认只跑受影响的 JVM 单元测试，不启动模拟器；仅在涉及 UI、导航、数据库或系统行为时补对应的 Instrumentation。
+- 同轮设备用例合并执行；优先复用已就绪设备、匹配当前改动的 APK 和已有安装。保留 Gradle Daemon 与缓存，不为日常验证执行 `clean`、清数据、卸载或重建模拟器，也不默认调用付费 API。
+- 仅重大架构调整、发布前或明确要求时做完整回归。需要扩大覆盖时先补受影响范围，不因耗时删除必要测试。
+- 核对实际执行的类／方法和结果；交付简报测试范围、通过／失败／跳过数及未验证项。
