@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
@@ -499,15 +500,48 @@ class ModelCompareScreenTest {
         compose.onNode(hasText("权重未公开") and selectionCards, useUnmergedTree = true).assertDoesNotExist()
         scrollToDescription("Kimi K3.1 Pro，上下文长度：131,072 tokens")
         val label = compose.onNodeWithText("上下文长度").fetchSemanticsNode().boundsInRoot
-        val firstValue = compose.onNodeWithContentDescription("Kimi K3.1 Pro，上下文长度：131,072 tokens").fetchSemanticsNode().boundsInRoot
-        val secondValue = compose.onNodeWithContentDescription("DeepSeek V4.1 Flash 1017，上下文长度：400,000 tokens").fetchSemanticsNode().boundsInRoot
+        val (firstValue, secondValue) = assertValuePair("Kimi K3.1 Pro，上下文长度：131,072 tokens",
+            "DeepSeek V4.1 Flash 1017，上下文长度：400,000 tokens")
         assertTrue(label.bottom <= firstValue.top)
-        assertEquals(firstValue.top, secondValue.top, 1f)
-        assertEquals(firstValue.width, secondValue.width, 1f)
-        assertTrue(firstValue.right < secondValue.left)
         assertEquals(label.left, firstValue.left, 1f)
+        assertEquals(compose.onNodeWithTag("compare-slot-0").fetchSemanticsNode().boundsInRoot.left, firstValue.left, 1f)
+        assertEquals(compose.onNodeWithTag("compare-slot-1").fetchSemanticsNode().boundsInRoot.right, secondValue.right, 1f)
         compose.onNode(hasText(first.name) and hasAnyAncestor(hasTestTag("compare-specs")), useUnmergedTree = true)
             .assertDoesNotExist()
+    }
+
+    @Test fun phoneReusesAlignedValuePairsAcrossGroupsAndCentersShortTextBesideLongLicense() {
+        val license = "A complete license name that must not be truncated even when the text wraps across several lines"
+        val state = ready.copy(first = ready.first.copy(detail = details[0].copy(license = license)),
+            second = ready.second.copy(detail = details[1].copy(license = "MIT")))
+        showAtWidth(400.dp, state, darkTheme = true)
+        val rows = listOf(
+            "Model A，输出：$0.003" to "Model B，输出：暂无数据",
+            "Model A，发布时间：2026-10" to "Model B，发布时间：暂无数据",
+            "Model A，工具调用：不支持" to "Model B，工具调用：暂无数据",
+            "Model A，模型许可：$license" to "Model B，模型许可：MIT",
+        )
+        val pairs = rows.map { (first, second) ->
+            scrollToDescription(first)
+            assertValuePair(first, second)
+        }
+        val (longCell, shortCell) = pairs.last()
+        assertTrue(longCell.height > pairs.first().first.height)
+        pairs.forEach { (first, second) ->
+            assertEquals(longCell.left, first.left, 1f)
+            assertEquals(shortCell.right, second.right, 1f)
+        }
+        val shortText = compose.onNodeWithText("MIT", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(shortCell.center.x, shortText.center.x, 1f)
+        assertEquals(shortCell.center.y, shortText.center.y, 1f)
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(license, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertTrue(layout.lineCount > 1)
+        assertFalse(layout.hasVisualOverflow)
+        assertEquals(license.length, layout.getLineEnd(layout.lineCount - 1))
+        saveRegressionScreenshot("compare-long-license-dark")
     }
 
     @Test fun selectionCardsCollapseTogetherDuringSwipesAndReturnBelowTitle() {
@@ -550,10 +584,12 @@ class ModelCompareScreenTest {
         assertTrue(name.fetchSemanticsNode().boundsInRoot.right <= arrow.left)
         compose.onNodeWithTag("compare-lab-0", useUnmergedTree = true).assertIsNotDisplayed()
         compose.onNodeWithText("VS", ignoreCase = true, useUnmergedTree = true).assertDoesNotExist()
-        fun scrollPosition() = list.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
-        val beforeFurtherScroll = scrollPosition()
+        // LazyColumn 的语义滚动位置是估算值，跨过较高的分区时不一定单调。
+        val prices = compose.onNodeWithText("API 价格").assertIsDisplayed()
+        val beforeFurtherScroll = prices.fetchSemanticsNode().positionInRoot.y
         swipeList(forward = true)
-        assertTrue(scrollPosition() > beforeFurtherScroll)
+        prices.assertIsDisplayed()
+        assertTrue(prices.fetchSemanticsNode().positionInRoot.y < beforeFurtherScroll)
         first.assertIsDisplayed()
         second.assertIsDisplayed()
         assertEquals(pinned, first.fetchSemanticsNode().boundsInRoot)
@@ -649,7 +685,7 @@ class ModelCompareScreenTest {
         val label = compose.onNodeWithText("上下文长度").fetchSemanticsNode().boundsInRoot
         val firstValue = compose.onNodeWithContentDescription("Model A，上下文长度：131,072 tokens").fetchSemanticsNode().boundsInRoot
         val secondValue = compose.onNodeWithContentDescription("Model B，上下文长度：400,000 tokens").fetchSemanticsNode().boundsInRoot
-        assertEquals(label.top, firstValue.top, 1f)
+        assertEquals(label.center.y, firstValue.center.y, 1f)
         assertEquals(firstValue.top, secondValue.top, 1f)
         assertTrue(label.right < firstValue.left)
         assertTrue(firstValue.right < secondValue.left)
@@ -839,6 +875,18 @@ class ModelCompareScreenTest {
             selectionTextLayout("compare-$field-0")
             selectionTextLayout("compare-$field-1")
         }
+    }
+
+    private fun assertValuePair(
+        firstDescription: String, secondDescription: String, direction: LayoutDirection = LayoutDirection.Ltr,
+    ): Pair<Rect, Rect> {
+        val first = compose.onNodeWithContentDescription(firstDescription).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val second = compose.onNodeWithContentDescription(secondDescription).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertEquals(first.top, second.top, 1f)
+        assertEquals(first.height, second.height, 1f)
+        assertEquals(first.width, second.width, 1f)
+        assertTrue(if (direction == LayoutDirection.Ltr) first.right < second.left else second.right < first.left)
+        return first to second
     }
 
     private fun selectionTextLayout(tag: String): TextLayoutResult {

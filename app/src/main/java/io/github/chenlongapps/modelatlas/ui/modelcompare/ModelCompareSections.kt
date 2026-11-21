@@ -1,18 +1,20 @@
 package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +29,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
@@ -39,7 +42,6 @@ import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
 
 internal enum class CompareLayout { Table, Pair, Stacked }
-internal val CompareCardPadding = 12.dp
 
 @Composable
 internal fun CompareKeySpecs(
@@ -140,9 +142,8 @@ internal fun LazyListScope.compareModelInfoItems(
 
 @Composable
 internal fun CompareSection(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(CompareCardPadding), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
-    }
+    Column(modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
 
 @Composable
@@ -151,14 +152,9 @@ internal fun CompareHeading(@StringRes title: Int, modifier: Modifier = Modifier
 }
 
 @Composable
-internal fun CompareNote(text: String) {
+internal fun CompareNote(text: String, textAlign: TextAlign = TextAlign.Start) {
     Text(text, style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.ContentOrLtr),
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-@Composable
-internal fun CompareDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = textAlign)
 }
 
 internal data class CompareValue(
@@ -222,58 +218,53 @@ private fun PriceRow(label: Int, values: List<Double?>, names: List<String>, lay
 @Composable
 internal fun CompareRow(
     label: String, first: CompareValue, second: CompareValue, names: List<String>, layout: CompareLayout,
-    different: Boolean = false, divider: Boolean = true, spokenLabel: String = label, isHeading: Boolean = false,
+    modifier: Modifier = Modifier, different: Boolean = false, spokenLabel: String = label, isHeading: Boolean = false,
 ) {
     val differentLabel = if (different) stringResource(R.string.compare_field_differs) else null
     val field: @Composable (Modifier) -> Unit = { modifier ->
         Text(label, modifier.semantics {
             if (isHeading) heading()
             differentLabel?.let { stateDescription = it }
-        }, style = if (isHeading) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelMedium,
-            color = when {
-                different -> MaterialTheme.colorScheme.primary
-                isHeading -> MaterialTheme.colorScheme.onSurface
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            })
+        }, style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isHeading || different) FontWeight.SemiBold else null,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (divider) CompareDivider()
-        when (layout) {
-            CompareLayout.Table -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                field(Modifier.weight(0.9f))
-                CompareCell(spokenLabel, names[0], first, Modifier.weight(1.2f), different = different)
-                CompareCell(spokenLabel, names[1], second, Modifier.weight(1.2f), different = different)
-            }
-            CompareLayout.Pair -> {
-                field(Modifier)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CompareCell(spokenLabel, names[0], first, Modifier.weight(1f), different = different)
-                    CompareCell(spokenLabel, names[1], second, Modifier.weight(1f), different = different)
-                }
-            }
-            CompareLayout.Stacked -> {
-                field(Modifier)
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (layout != CompareLayout.Table) field(Modifier)
+        if (layout == CompareLayout.Stacked) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 CompareCell(spokenLabel, names[0], first, Modifier.fillMaxWidth(), slot = 0, different = different)
                 CompareCell(spokenLabel, names[1], second, Modifier.fillMaxWidth(), slot = 1, different = different)
+            }
+        } else {
+            // 先按各列宽度计算换行高度，再让两个值框占满同一行。
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (layout == CompareLayout.Table) field(Modifier.weight(0.75f))
+                CompareCell(spokenLabel, names[0], first, Modifier.weight(1f).fillMaxHeight(), different = different)
+                CompareCell(spokenLabel, names[1], second, Modifier.weight(1f).fillMaxHeight(), different = different)
             }
         }
     }
 }
 
 @Composable
-internal fun CompareCell(label: String, name: String, value: CompareValue, modifier: Modifier, slot: Int? = null,
+private fun CompareCell(label: String, name: String, value: CompareValue, modifier: Modifier, slot: Int? = null,
     different: Boolean = false) {
-    Column(modifier.clearAndSetSemantics { contentDescription = "$name，$label：${value.spoken}" }) {
-        if (slot != null) CompareNote(stringResource(R.string.compare_slot_label, slot + 1))
-        val style = if (value.prominent) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium
+    Column(
+        modifier.heightIn(min = 48.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.medium)
+            .clearAndSetSemantics { contentDescription = "$name，$label：${value.spoken}" }
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (slot != null) CompareNote(stringResource(R.string.compare_slot_label, slot + 1), TextAlign.Center)
+        val style = if (value.prominent) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge
         // 只镜像列顺序，不让 RTL 反转由数字／中性符号组成的成绩（如 899 ± 18）。
-        Text(value.text, style = style.copy(textDirection = TextDirection.ContentOrLtr),
-            fontWeight = if (different) FontWeight.SemiBold else null,
-            color = when {
-                value.missing -> MaterialTheme.colorScheme.onSurfaceVariant
-                different -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurface
-            })
-        value.supportingText?.let { CompareNote(it) }
+        Text(value.text, style = style.copy(textDirection = TextDirection.ContentOrLtr), textAlign = TextAlign.Center,
+            fontWeight = if (different) FontWeight.Bold else null,
+            color = if (value.missing) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+        value.supportingText?.let { CompareNote(it, TextAlign.Center) }
     }
 }

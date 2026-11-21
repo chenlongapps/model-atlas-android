@@ -169,13 +169,12 @@ internal fun ModelCompareScreen(
             val cardWidth = with(density) {
                 (maxWidth.roundToPx() - start.roundToPx() - end.roundToPx()).coerceAtLeast(0).toDp()
             }
-            val valueWidth = cardWidth - CompareCardPadding * 2
-            val layout = when {
-                valueWidth >= 600.dp * fontScale -> CompareLayout.Table
-                valueWidth >= 240.dp * fontScale -> CompareLayout.Pair
-                else -> CompareLayout.Stacked
-            }
             val readySelection = if (uiState.isReady) compareSelectionLayout(selectionSlots, cardWidth) else null
+            val layout = when {
+                readySelection?.stacked == true -> CompareLayout.Stacked
+                cardWidth >= 600.dp * fontScale.coerceAtLeast(1f) -> CompareLayout.Table
+                else -> CompareLayout.Pair
+            }
             // 用紧凑态的文字和布局尺寸判断，不让展开或过渡高度改变同一个列表项是否吸顶。
             val readableHeight = maxHeight - topInset - bottomPadding
             val pinHeightLimit = minOf(readableHeight / 2, readableHeight - 144.dp)
