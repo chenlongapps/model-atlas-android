@@ -6,7 +6,7 @@
     <string name="compare_select">选择模型 %1$d</string>
     <string name="compare_unknown_model">模型 %1$d（名称暂无数据）</string>
     <string name="compare_replace">替换模型：%1$s</string>
-    <string name="compare_change">更换模型</string>
+    <string name="compare_change">更换</string>
     <string name="compare_remove">移除对比模型：%1$s</string>
     <string name="compare_picker_title">选择对比模型</string>
     <string name="compare_selected">已在另一侧选择</string>
@@ -18,6 +18,11 @@
     <string name="compare_missing">此模型已被移除或不再收录，请替换或移除。</string>
     <string name="compare_basic">基本信息</string>
     <string name="compare_specs">关键规格</string>
+    <string name="compare_only_differences">仅看差异</string>
+    <string name="compare_no_differences">已提供的规格相同。</string>
+    <string name="compare_no_specs">暂无规格数据。</string>
+    <string name="compare_field_differs">两侧不同</string>
+    <string name="compare_slot_label">模型 %1$d</string>
     <string name="compare_more_information">更多信息</string>
     <string name="compare_benchmarks">评测分数</string>
     <string name="compare_benchmarks_empty">两个模型均暂无评测成绩。</string>
@@ -25,7 +30,25 @@
     <string name="compare_benchmarks_single">单侧评测</string>
     <string name="compare_benchmarks_no_score">暂无对应成绩</string>
     <string name="compare_benchmarks_version_missing">未注明</string>
+    <string name="compare_benchmark_summary_version">版本 %1$s</string>
+    <string name="compare_benchmark_metric_missing">指标未注明</string>
     <string name="compare_benchmarks_test">虚构测试数据</string>
+    <string name="compare_no_comparable_scores">暂无共同可比成绩</string>
+    <string name="compare_conditions_missing">未注明运行条件</string>
+    <string name="compare_configuration_unpaired">未可靠匹配，不可直接比较</string>
+    <string name="compare_raw_record">原始记录</string>
+    <string name="compare_raw_score">原始成绩</string>
+    <string name="compare_raw_score_text">成绩原文</string>
+    <string name="compare_benchmark_source_type">来源类型</string>
+    <string name="compare_benchmark_id">评测 ID</string>
+    <string name="compare_benchmark_name">原始名称</string>
+    <string name="compare_record_count_label">成绩记录</string>
+    <plurals name="compare_benchmark_records">
+        <item quantity="other">%d 条</item>
+    </plurals>
+    <plurals name="compare_comparable_configurations">
+        <item quantity="other">%d 组可比配置，展开查看</item>
+    </plurals>
     <string name="compare_capabilities">能力特性</string>
     <string name="compare_model_name">模型名称</string>
     <string name="compare_full_license">完整许可</string>
@@ -35,6 +58,9 @@
     <string name="compare_detail_collapsed">已收起</string>
     <string name="compare_weight_status">权重状态</string>
     <string name="compare_price_provider">报价服务商</string>
+    <string name="compare_api_prices">API 价格</string>
+    <string name="compare_price_unit">USD / 1M tokens</string>
+    <string name="compare_price_conditions">报价适用条件以各服务商为准。</string>
     <string name="compare_price_service">报价服务 ID</string>
     <string name="compare_price_details">详细报价</string>
     <string name="compare_no_base_price">暂无基础输入／输出报价。</string>

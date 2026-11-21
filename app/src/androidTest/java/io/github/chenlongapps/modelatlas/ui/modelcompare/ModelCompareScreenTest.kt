@@ -2,6 +2,7 @@ package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,8 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
@@ -25,7 +28,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
@@ -46,6 +48,7 @@ import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.testing.realAtlasModalityFixture
+import io.github.chenlongapps.modelatlas.testing.saveRegressionScreenshot
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.*
@@ -77,42 +80,78 @@ class ModelCompareScreenTest {
     )
     private val summaries = details.mapIndexed { index, detail -> ModelSummary(detail.id, detail.name,
         price = if (index == 0) ModelPriceSummary("provider", "Default Provider", false, input = 0.0, output = 0.003,
+            cacheRead = 0.001,
             tiers = listOf(ModelPriceTierSummary("context", 272_001, input = 0.004, output = 2.0,
                 reasoning = 0.0001, inputAudio = 0.5)), offeringId = "selected-service") else null) }
     private val ready = ModelCompareUiState(summaries, CompareReadStatus.CONTENT,
         CompareModelState(details[0].id, CompareReadStatus.CONTENT, details[0]),
         CompareModelState(details[1].id, CompareReadStatus.CONTENT, details[1]))
     private val assessment = ModelBenchmark("Example Benchmark", 0.0, benchmarkId = "assessment", version = "1",
-        metric = "accuracy", unit = "%", toolsEnabled = false)
+        metric = "accuracy", unit = "%", toolsEnabled = false, dataset = "full", harness = "runner 1",
+        source = "https://example.org/results", date = "2026-11-01", higherIsBetter = true)
 
-    @Test fun showsCommonScoresWithConfigurationsAndKeepsSingleSideCollapsedUntilRequested() {
+    @Test fun showsSummaryWithUniquePairThenConfigurationsAndOriginalMetadata() {
         val first = details[0].copy(benchmarks = listOf(assessment,
-            assessment.copy(score = 78.4, reasoningEffort = "High", toolsEnabled = true),
+            assessment.copy(score = 78.4325, reasoningEffort = "High", toolsEnabled = true),
             assessment.copy(benchmarkId = "solo", name = "Single Benchmark", score = 83.0)))
         val longName = "Model B Long Context Reasoning Preview"
         val second = details[1].copy(name = longName,
-            benchmarks = listOf(assessment.copy(score = null, scoreText = "74.5 ± 1.3", toolsEnabled = null)))
+            benchmarks = listOf(assessment.copy(score = null, scoreText = "74.5 ± 1.3")))
         showAtWidth(400.dp, ready.copy(first = ready.first.copy(detail = first), second = ready.second.copy(detail = second)))
-        compose.onNodeWithText("模型对比").assertIsDisplayed()
-        compose.onNodeWithText("对照两个模型的评测分数、关键规格与报价").assertDoesNotExist()
-        compose.onNodeWithTag("compare-list").performScrollToNode(hasText("评测分数"))
-        compose.onNodeWithText("不同来源和配置的结果不一定可以直接比较。").assertDoesNotExist()
+        compose.waitForIdle()
+        saveRegressionScreenshot("compare-overview")
+        val list = compose.onNodeWithTag("compare-list")
+        val index = list.fetchSemanticsNode().config[SemanticsProperties.IndexForKey]
+        val indices = listOf("selection", "specs", "prices", "benchmark-heading", "more").map(index)
+        assertTrue(indices.first() >= 0 && indices.zipWithNext().all { (before, after) -> before < after })
         val firstScore = "Model A，Example Benchmark，分数：0.0 %"
         val secondScore = "$longName，Example Benchmark，分数：74.5 ± 1.3 %"
+        val extraScore = "Model A，Example Benchmark，分数：78.4 %"
         scrollToDescription(firstScore)
         val left = compose.onNodeWithContentDescription(firstScore).fetchSemanticsNode().boundsInRoot
         val right = compose.onNodeWithContentDescription(secondScore).fetchSemanticsNode().boundsInRoot
         assertEquals(left.top, right.top, 1f)
         assertTrue(left.right < right.left)
-        scrollToDescription("Model A，Example Benchmark，分数：78.4 %")
+        compose.onNodeWithContentDescription("Model A，成绩记录：2 条").assertIsDisplayed()
+        compose.onNodeWithContentDescription(extraScore).assertDoesNotExist()
+        saveRegressionScreenshot("compare-benchmark-summary")
+        val groupKey = benchmarkKey()
+        toggleDetail(groupKey)
+        scrollToDescription(extraScore)
         compose.onNodeWithText("推理设置：High").assertIsDisplayed()
-        compose.onNodeWithText("工具使用：未启用").assertIsDisplayed()
         compose.onNodeWithText("工具使用：已启用").assertIsDisplayed()
+        compose.onNodeWithText("未可靠匹配，不可直接比较").assertIsDisplayed()
+        compose.onNodeWithText("原始成绩：78.4325").assertDoesNotExist()
+        toggleDetail("$groupKey/config:0:1")
+        scrollToText("原始成绩：78.4325")
+        scrollToText("评测来源：https://example.org/results")
+        scrollToText("评测日期：2026-11-01")
         compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-single-benchmarks-toggle"))
         compose.onNodeWithText("Single Benchmark").assertDoesNotExist()
         toggleDetail("single-benchmarks")
+        val single = requireNotNull(first.benchmarks).last()
+        toggleDetail(benchmarkKey(single))
         scrollToDescription("Model A，Single Benchmark，分数：83.0 %")
-        scrollToDescription("$longName，Single Benchmark：暂无对应成绩")
+    }
+
+    @Test fun incompleteConfigurationsShowNoSummaryAndExpandedRecordsSurviveRestoration() {
+        val incomplete = assessment.copy(harness = null)
+        val first = details[0].copy(benchmarks = listOf(incomplete))
+        val second = details[1].copy(benchmarks = listOf(incomplete.copy(score = null)))
+        val state = mutableStateOf(ready.copy(first = ready.first.copy(detail = first), second = ready.second.copy(detail = second)))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state.value) } }
+        scrollToText("暂无共同可比成绩")
+        compose.onNodeWithContentDescription("Model A，Example Benchmark，分数：0.0 %").assertDoesNotExist()
+        val key = benchmarkKey(incomplete)
+        toggleDetail(key)
+        scrollToDescription("Model B，Example Benchmark，分数：暂无对应成绩")
+        toggleDetail("$key/config:0:0")
+        scrollToText("评测框架／执行配置：暂无数据")
+        val before = compose.onNodeWithText("评测框架／执行配置：暂无数据").fetchSemanticsNode().boundsInRoot.top
+        restoration.emulateSavedInstanceStateRestore()
+        assertEquals(before, compose.onNodeWithText("评测框架／执行配置：暂无数据").fetchSemanticsNode().boundsInRoot.top, 1f)
+        scrollToText("原始成绩：0.0")
     }
 
     @Test fun changingModelClearsOldScoresAndResetsSingleSideExpansion() {
@@ -124,6 +163,7 @@ class ModelCompareScreenTest {
         compose.onNodeWithText("没有可并排展示的共同成绩。").assertIsDisplayed()
         toggleDetail("single-benchmarks")
         val oldScore = "Model B，Example Benchmark，分数：80.0 %"
+        toggleDetail(benchmarkKey(assessment.copy(version = "2")))
         scrollToDescription(oldScore)
         compose.runOnIdle { state.value = state.value.copy(second = CompareModelState("new/model")) }
         compose.onNodeWithContentDescription(oldScore).assertDoesNotExist()
@@ -140,7 +180,7 @@ class ModelCompareScreenTest {
         compose.onNodeWithContentDescription("Replacement，Example Benchmark，分数：25.0 points").assertDoesNotExist()
     }
 
-    @Test fun narrowLargeFontStacksBenchmarkScoresUnderTheirModelNames() {
+    @Test fun narrowLargeFontStacksBenchmarkScoresWithSlotLabels() {
         val first = details[0].copy(benchmarks = listOf(assessment))
         val second = details[1].copy(benchmarks = listOf(assessment.copy(score = null, scoreText = "899 ± 18")))
         showAtWidth(320.dp, ready.copy(first = ready.first.copy(detail = first), second = ready.second.copy(detail = second)),
@@ -152,6 +192,12 @@ class ModelCompareScreenTest {
         val end = compose.onNodeWithContentDescription(secondScore).fetchSemanticsNode().boundsInRoot
         assertTrue(start.bottom < end.top)
         assertEquals(start.right, end.right, 1f)
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("899 ± 18", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val scoreLayout = layouts.single()
+        assertTrue(scoreLayout.getBoundingBox(0).left < scoreLayout.getBoundingBox(6).left)
+        saveRegressionScreenshot("compare-benchmark-narrow-dark-rtl")
     }
 
     @Test fun selectsTwoDifferentModelsThroughSearchAndCanRemoveOrReplace() {
@@ -245,10 +291,12 @@ class ModelCompareScreenTest {
         scrollToDescription("Model A，输入：$0.00")
         scrollToDescription("Model A，输出：$0.003")
         scrollToDescription("Model B，输入：暂无数据")
+        scrollToText("查看详细报价")
+        compose.onNodeWithText("缓存命中输入").assertDoesNotExist()
+        toggleDetail("price-details")
+        scrollToDescription("Model A，缓存命中输入：$0.001")
         compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-more-toggle"))
         compose.onNodeWithText("能力特性").assertDoesNotExist()
-        compose.onNodeWithText("详细报价").assertDoesNotExist()
-        compose.onNodeWithText("缓存命中输入").assertDoesNotExist()
         toggleDetail("more")
         scrollToDescription("Model A，工具调用：不支持")
         scrollToDescription("Model A，推理：支持")
@@ -260,9 +308,46 @@ class ModelCompareScreenTest {
         compose.onNodeWithText("开放权重不等于开源或允许商用，请核对模型许可与使用条款。").assertDoesNotExist()
     }
 
+    @Test fun differencesToggleKeepsItsAnchorAndMissingValuesAndRestoresItsState() {
+        val first = details[0].copy(metadata = details[0].metadata.copy(
+            contextLimitTokens = 131_070, inputLimitTokens = 1000, openWeights = false,
+        ))
+        val second = details[1].copy(metadata = details[1].metadata.copy(
+            contextLimitTokens = 131_072, inputLimitTokens = 1000,
+        ))
+        val state = ready.copy(first = ready.first.copy(detail = first), second = ready.second.copy(detail = second))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state) } }
+        // 下方保持足够的滚动空间，验证规格区域缩短不会主动跳到其他条目。
+        toggleDetail("more")
+        val filter = compose.onNodeWithTag("compare-differences")
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-differences"))
+        filter.assertIsOff()
+        val before = filter.fetchSemanticsNode().boundsInRoot.top
+        filter.performClick().assertIsOn()
+        assertEquals(before, filter.fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.onNodeWithText("最大输入").assertDoesNotExist()
+        compose.onNodeWithText("权重状态").assertDoesNotExist()
+        compose.onNodeWithText("131,070", useUnmergedTree = true).assertIsDisplayed()
+        scrollToDescription("Model B，最大输出：暂无数据")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-differences"))
+        filter.assertIsOn().performClick().assertIsOff()
+        scrollToDescription("Model A，最大输入：1,000 tokens")
+    }
+
+    @Test fun matchingSpecsHaveAnEmptyDifferencesState() {
+        val second = details[1].copy(metadata = details[0].metadata)
+        showAtWidth(400.dp, ready.copy(second = ready.second.copy(detail = second)))
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-differences"))
+        compose.onNodeWithTag("compare-differences").performClick().assertIsOn()
+        compose.onNodeWithText("已提供的规格相同。").assertIsDisplayed()
+        compose.onNodeWithText("上下文长度").assertDoesNotExist()
+    }
+
     @Test fun baseQuoteAloneDoesNotOfferEmptyMoreInformation() {
         val models = summaries.map { summary ->
-            summary.copy(price = summary.price?.copy(tiers = emptyList(), offeringId = null))
+            summary.copy(price = summary.price?.copy(tiers = emptyList(), offeringId = null, cacheRead = null))
         }
         val state = ready.copy(models = models, first = ready.first.copy(
             detail = details[0].copy(metadata = ModelDetailMetadata(), license = null),
@@ -270,7 +355,7 @@ class ModelCompareScreenTest {
         compose.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state) } }
 
         scrollToDescription("Model A，报价服务商：Default Provider")
-        compose.onNodeWithText("美元 / 1M tokens").assertIsDisplayed()
+        compose.onNodeWithText("USD / 1M tokens").assertIsDisplayed()
         scrollToDescription("Model A，输出：$0.003")
         compose.onNodeWithTag("compare-more-toggle").assertDoesNotExist()
     }
@@ -314,13 +399,13 @@ class ModelCompareScreenTest {
         val label = compose.onNodeWithText("上下文长度").fetchSemanticsNode().boundsInRoot
         val firstValue = compose.onNodeWithContentDescription("Kimi K3.1 Pro，上下文长度：131,072 tokens").fetchSemanticsNode().boundsInRoot
         val secondValue = compose.onNodeWithContentDescription("DeepSeek V4.1 Flash 1017，上下文长度：400,000 tokens").fetchSemanticsNode().boundsInRoot
-        assertTrue(label.bottom < firstValue.top)
+        assertTrue(label.bottom <= firstValue.top)
         assertEquals(firstValue.top, secondValue.top, 1f)
         assertEquals(firstValue.width, secondValue.width, 1f)
         assertTrue(firstValue.right < secondValue.left)
         assertEquals(label.left, firstValue.left, 1f)
-        compose.onAllNodesWithTag("compare-column-0")[0].assertTextEquals(first.name)
-        compose.onNodeWithText("模型名称").assertDoesNotExist()
+        compose.onNode(hasText(first.name) and hasAnyAncestor(hasTestTag("compare-specs")), useUnmergedTree = true)
+            .assertDoesNotExist()
     }
 
     @Test fun selectionCardsGrowBeyondTwoLinesAndShrinkAfterReplacement() {
@@ -356,8 +441,8 @@ class ModelCompareScreenTest {
         assertTrue(first.left > other.right)
     }
 
-    @Test fun wideLayoutKeepsFieldColumnAndAlignedModelHeaders() {
-        showAtWidth(840.dp)
+    @Test fun wideLayoutKeepsAlignedFieldAndValueColumns() {
+        showAtWidth(840.dp, maxHeight = 400.dp, dynamicColor = true)
         scrollToDescription("Model A，上下文长度：131,072 tokens")
         val label = compose.onNodeWithText("上下文长度").fetchSemanticsNode().boundsInRoot
         val firstValue = compose.onNodeWithContentDescription("Model A，上下文长度：131,072 tokens").fetchSemanticsNode().boundsInRoot
@@ -366,10 +451,9 @@ class ModelCompareScreenTest {
         assertEquals(firstValue.top, secondValue.top, 1f)
         assertTrue(label.right < firstValue.left)
         assertTrue(firstValue.right < secondValue.left)
-        val firstHeader = compose.onAllNodesWithTag("compare-column-0")[0].fetchSemanticsNode().boundsInRoot
-        val secondHeader = compose.onAllNodesWithTag("compare-column-1")[0].fetchSemanticsNode().boundsInRoot
-        assertEquals(firstHeader.left, firstValue.left, 1f)
-        assertEquals(secondHeader.left, secondValue.left, 1f)
+        scrollToDescription("Model A，报价服务商：Default Provider")
+        assertEquals(firstValue.left,
+            compose.onNodeWithContentDescription("Model A，报价服务商：Default Provider").fetchSemanticsNode().boundsInRoot.left, 1f)
     }
 
     @Test fun detailDisclosuresDefaultCollapsedSurviveRecyclingAndRestoreButResetOnReplacement() {
@@ -560,6 +644,7 @@ class ModelCompareScreenTest {
     private fun showAtWidth(
         width: Dp, state: ModelCompareUiState = ready, fontScale: Float = 1f,
         direction: LayoutDirection = LayoutDirection.Ltr, darkTheme: Boolean = false,
+        maxHeight: Dp = Dp.Infinity, dynamicColor: Boolean = false,
     ) {
         compose.setContent {
             BoxWithConstraints {
@@ -567,8 +652,8 @@ class ModelCompareScreenTest {
                 val scale = minOf(1f, maxWidth / width)
                 CompositionLocalProvider(LocalDensity provides Density(density.density * scale, fontScale),
                     LocalLayoutDirection provides direction) {
-                    ModelAtlasTheme(darkTheme = darkTheme, dynamicColor = false) {
-                        Box(Modifier.width(width)) { ModelCompareScreen(state) }
+                    ModelAtlasTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
+                        Box(Modifier.width(width).heightIn(max = maxHeight)) { ModelCompareScreen(state) }
                     }
                 }
             }
@@ -615,4 +700,12 @@ class ModelCompareScreenTest {
         compose.onNodeWithTag("compare-list").performScrollToNode(hasContentDescription(description))
         compose.onNodeWithContentDescription(description).assertIsDisplayed()
     }
+
+    private fun scrollToText(text: String) {
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasText(text))
+        compose.onNodeWithText(text).assertIsDisplayed()
+    }
+
+    private fun benchmarkKey(record: ModelBenchmark = assessment) =
+        compareBenchmarkGroups(listOf(record), null).single().key.itemKey
 }

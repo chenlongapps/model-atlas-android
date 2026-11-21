@@ -1,29 +1,30 @@
 package io.github.chenlongapps.modelatlas.ui.modelcompare
 
-import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -33,331 +34,341 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
-import io.github.chenlongapps.modelatlas.ui.model.ModelInfoBadge
 import io.github.chenlongapps.modelatlas.ui.model.formatBillionParameters
 import io.github.chenlongapps.modelatlas.ui.modellist.formatCompactTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatUsdPerMillionTokens
-import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
 
-/** 参数仅取规范模型；报价仅取列表已选定的同一条服务报价，不拼接其他服务或模式。 */
-internal fun LazyListScope.comparisonItems(
-    models: List<ModelDetail>, prices: List<ModelPriceSummary?>,
-    expandedDetails: List<String>, onToggleDetail: (String) -> Unit,
+internal enum class CompareLayout { Table, Pair, Stacked }
+internal val CompareCardPadding = 12.dp
+
+@Composable
+internal fun CompareKeySpecs(
+    specs: CompareSpecs, names: List<String>, layout: CompareLayout,
+    onlyDifferences: Boolean, onOnlyDifferences: (Boolean) -> Unit,
 ) {
-    val metadata = models.map(ModelDetail::metadata)
-    val hasSpecs = metadata.any {
-        it.contextLimitTokens != null || it.outputLimitTokens != null ||
-            it.inputModalities != null || it.outputModalities != null || it.openWeights != null
-    }
-    if (hasSpecs) item("specs") {
-        CompareSection(stringResource(R.string.compare_specs), R.drawable.ic_compare, models) {
-            TokenRow(R.string.model_list_context_label, metadata.map { it.contextLimitTokens }, models)
-            TokenRow(R.string.model_list_output_limit_label, metadata.map { it.outputLimitTokens }, models)
-            ModalityRow(R.string.model_filter_input, metadata.map { it.inputModalities }, models)
-            ModalityRow(R.string.model_filter_output, metadata.map { it.outputModalities }, models)
-            TextRow(R.string.compare_weight_status, metadata.map {
-                it.openWeights?.let { open ->
-                    stringResource(if (open) R.string.model_list_open_weights_yes else R.string.model_list_open_weights_no)
+    CompareSection(Modifier.testTag("compare-specs")) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompareHeading(R.string.compare_specs, Modifier.weight(1f))
+            if (specs.fields.any { it.isVisible(false) }) {
+                Row(Modifier.weight(1f).heightIn(min = 48.dp).testTag("compare-differences")
+                    .toggleable(onlyDifferences, role = Role.Switch, onValueChange = onOnlyDifferences),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.compare_only_differences), Modifier.weight(1f, fill = false),
+                        style = MaterialTheme.typography.labelMedium)
+                    Switch(checked = onlyDifferences, onCheckedChange = null)
                 }
-            }, models)
+            }
+        }
+        if (specs.fields.none { it.isVisible(onlyDifferences) }) {
+            CompareNote(stringResource(if (specs.fields.any { it.isVisible(false) }) R.string.compare_no_differences
+                else R.string.compare_no_specs))
+        }
+        TokenRow(R.string.model_list_context_label, specs.context, names, layout, onlyDifferences, prominent = true)
+        TokenRow(R.string.model_list_output_limit_label, specs.output, names, layout, onlyDifferences, prominent = true)
+        TokenRow(R.string.detail_input_limit, specs.input, names, layout, onlyDifferences)
+        SpecRow(R.string.model_filter_input, specs.inputModalities, names, layout, onlyDifferences) { ModalityValue(it) }
+        SpecRow(R.string.model_filter_output, specs.outputModalities, names, layout, onlyDifferences) { ModalityValue(it) }
+        SpecRow(R.string.compare_weight_status, specs.weights, names, layout, onlyDifferences) {
+            CompareValue(stringResource(if (it) R.string.model_list_open_weights_yes else R.string.model_list_open_weights_no))
         }
     }
-    if (prices.any { it != null }) item("prices") {
-        CompareSection(stringResource(R.string.model_list_price_title), R.drawable.ic_calendar, models) {
-            Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextRow(R.string.compare_price_provider, prices.map { it?.providerName }, models, accent = true)
-            PriceRow(R.string.model_list_input_label, prices.map { it?.input }, models)
-            PriceRow(R.string.model_list_output_label, prices.map { it?.output }, models)
-            if (prices.none { it?.input != null || it?.output != null }) {
-                Text(stringResource(R.string.compare_no_base_price), style = MaterialTheme.typography.bodyMedium)
+}
+
+/** 报价仅取列表已选定的同一条服务报价，不拼接其他服务或模式。 */
+@Composable
+internal fun ComparePrices(
+    prices: List<ModelPriceSummary?>, names: List<String>, layout: CompareLayout,
+    expanded: Boolean, onToggle: (String) -> Unit,
+) {
+    CompareSection {
+        CompareHeading(R.string.compare_api_prices)
+        if (prices.any { it != null }) {
+            CompareNote(stringResource(R.string.compare_price_unit))
+            TextRow(R.string.compare_price_provider, prices.map { it?.providerName }, names, layout)
+            PriceRow(R.string.model_list_input_label, prices.map { it?.input }, names, layout, prominent = true)
+            PriceRow(R.string.model_list_output_label, prices.map { it?.output }, names, layout, prominent = true)
+        }
+        if (prices.none { it?.input != null || it?.output != null }) {
+            CompareNote(stringResource(R.string.compare_no_base_price))
+        }
+        if (prices.all { it != null }) CompareNote(stringResource(R.string.compare_price_conditions))
+        val extras = listOf(
+            R.string.model_list_price_cache_read_label to prices.map { it?.cacheRead },
+            R.string.detail_cache_write to prices.map { it?.cacheWrite },
+            R.string.detail_reasoning to prices.map { it?.reasoning },
+            R.string.detail_input_audio to prices.map { it?.inputAudio },
+            R.string.detail_output_audio to prices.map { it?.outputAudio },
+        ).filter { (_, values) -> values.any { it != null } }
+        if (extras.isNotEmpty()) {
+            CompareDisclosure("price-details", R.string.compare_price_details, expanded, onToggle) {
+                extras.forEach { (label, values) -> PriceRow(label, values, names, layout) }
             }
         }
     }
-    val hasBasic = metadata.any {
-        !it.releaseDate.isNullOrBlank() || !it.family.isNullOrBlank() ||
-            !it.knowledgeCutoff.isNullOrBlank() || it.inputLimitTokens != null
-    }
+}
+
+internal fun LazyListScope.compareMoreItems(
+    models: List<ModelDetail>, prices: List<ModelPriceSummary?>, names: List<String>, layout: CompareLayout,
+    expandedDetails: Set<String>, onToggleDetail: (String) -> Unit,
+) {
+    val metadata = models.map(ModelDetail::metadata)
+    val hasBasic = metadata.any { !it.releaseDate.isNullOrBlank() || !it.family.isNullOrBlank() || !it.knowledgeCutoff.isNullOrBlank() }
     val hasParameters = models.any { it.parameters?.let { p -> p.totalBillion != null || p.activeBillion != null } == true }
     val hasCapabilities = metadata.any {
         it.attachment != null || it.toolCall != null || it.reasoning != null ||
             it.structuredOutput != null || it.temperature != null
     }
     val hasLicense = models.any { !it.license.isNullOrBlank() }
-    val extraPrices = listOf(
-        R.string.model_list_price_cache_read_label to prices.map { it?.cacheRead },
-        R.string.detail_cache_write to prices.map { it?.cacheWrite },
-        R.string.detail_reasoning to prices.map { it?.reasoning },
-        R.string.detail_input_audio to prices.map { it?.inputAudio },
-        R.string.detail_output_audio to prices.map { it?.outputAudio },
-    ).filter { (_, values) -> values.any { it != null } }
     val hasServiceId = prices.any { !it?.offeringId.isNullOrBlank() }
-    val hasPriceDetails = extraPrices.isNotEmpty() || hasServiceId
     val hasTiers = prices.any { it?.tiers?.isNotEmpty() == true }
-    if (!(hasBasic || hasParameters || hasCapabilities || hasLicense || hasPriceDetails || hasTiers)) return
-    item("more") {
-        CompareToggleCard("more", R.string.compare_more_information, expandedDetails, onToggleDetail)
+    if (!(hasBasic || hasParameters || hasCapabilities || hasLicense || hasServiceId || hasTiers)) return
+    item("more", contentType = "toggle") {
+        CompareToggleCard("more", R.string.compare_more_information, "more" in expandedDetails, onToggleDetail)
     }
     if ("more" !in expandedDetails) return
-    if (hasBasic) item("basic") {
-        CompareSection(stringResource(R.string.compare_basic), R.drawable.ic_document, models) {
-            TextRow(R.string.model_list_release_date_label, metadata.map { it.releaseDate }, models)
-            TextRow(R.string.detail_family, metadata.map { it.family }, models)
-            TextRow(R.string.detail_knowledge_cutoff, metadata.map { it.knowledgeCutoff }, models)
-            TokenRow(R.string.detail_input_limit, metadata.map { it.inputLimitTokens }, models)
+    if (hasBasic || hasParameters) item("basic", contentType = "section") {
+        CompareSection {
+            CompareHeading(R.string.compare_basic)
+            TextRow(R.string.model_list_release_date_label, metadata.map { it.releaseDate }, names, layout)
+            TextRow(R.string.detail_family, metadata.map { it.family }, names, layout)
+            TextRow(R.string.detail_knowledge_cutoff, metadata.map { it.knowledgeCutoff }, names, layout)
+            TextRow(R.string.parameter_total, models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }, names, layout)
+            TextRow(R.string.parameter_active, models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }, names, layout)
         }
     }
-    if (hasParameters) item("parameters") {
-        CompareSection(stringResource(R.string.detail_parameter_count), R.drawable.ic_nav_models_outline, models) {
-            TextRow(R.string.parameter_total, models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }, models)
-            TextRow(R.string.parameter_active, models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }, models)
+    if (hasCapabilities) item("capabilities", contentType = "section") {
+        CompareSection {
+            CompareHeading(R.string.compare_capabilities)
+            BooleanRow(R.string.detail_attachment, metadata.map { it.attachment }, names, layout)
+            BooleanRow(R.string.detail_tool_call, metadata.map { it.toolCall }, names, layout)
+            BooleanRow(R.string.detail_reasoning, metadata.map { it.reasoning }, names, layout)
+            BooleanRow(R.string.detail_structured_output, metadata.map { it.structuredOutput }, names, layout)
+            BooleanRow(R.string.detail_temperature, metadata.map { it.temperature }, names, layout)
         }
     }
-    if (hasCapabilities) item("capabilities") {
-        CompareSection(stringResource(R.string.compare_capabilities), R.drawable.ic_modality, models) {
-            BooleanRow(R.string.detail_attachment, metadata.map { it.attachment }, models)
-            BooleanRow(R.string.detail_tool_call, metadata.map { it.toolCall }, models)
-            BooleanRow(R.string.detail_reasoning, metadata.map { it.reasoning }, models)
-            BooleanRow(R.string.detail_structured_output, metadata.map { it.structuredOutput }, models)
-            BooleanRow(R.string.detail_temperature, metadata.map { it.temperature }, models)
+    if (hasServiceId) item("service-id", contentType = "section") {
+        CompareSection {
+            CompareDisclosure("service-id", R.string.compare_price_service, "service-id" in expandedDetails, onToggleDetail) {
+                TextRow(R.string.compare_price_service, prices.map { it?.offeringId }, names, layout)
+            }
         }
     }
-    if (hasPriceDetails) item("price-details") {
-        CompareSection(stringResource(R.string.compare_price_details), R.drawable.ic_calendar, models) {
-            Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            extraPrices.forEach { (label, values) -> PriceRow(label, values, models) }
-            if (hasServiceId) {
-                CompareDisclosure("service-id", stringResource(R.string.compare_price_service), expandedDetails, onToggleDetail) {
-                    TextRow(R.string.compare_price_service, prices.map { it?.offeringId }, models)
+    if (hasTiers) item("tiers", contentType = "section") {
+        CompareSection {
+            CompareDisclosure("tiers", R.string.compare_tiers, "tiers" in expandedDetails, onToggleDetail,
+                titleAsAction = false) {
+                CompareNote(stringResource(R.string.compare_price_unit))
+                // 档位条件未必相同，逐侧展示而非逐条配对。
+                prices.forEachIndexed { index, price ->
+                    CompareDivider()
+                    Column(Modifier.semantics { contentDescription = names[index] },
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val slot = stringResource(R.string.compare_slot_label, index + 1)
+                        Text(listOfNotNull(slot, price?.providerName).joinToString(" · "), style = MaterialTheme.typography.titleSmall)
+                        if (price?.tiers.isNullOrEmpty()) CompareNote(stringResource(R.string.compare_no_tiers))
+                        price?.tiers?.forEach { CompareTier(it) }
+                    }
                 }
             }
         }
     }
-    // 展开状态留在页面保存域，Lazy 条目回收或异步恢复不会丢失。
-    if (hasTiers) {
-        item("tiers") { CompareTierSection(prices, models, "tiers" in expandedDetails, { onToggleDetail("tiers") }) }
-    }
-    if (hasLicense) item("weights") {
-        CompareSection(stringResource(R.string.detail_weights), R.drawable.ic_database, models) {
-            CompareDisclosure("license", stringResource(R.string.compare_full_license), expandedDetails, onToggleDetail) {
-                TextRow(R.string.detail_license, models.map { it.license }, models)
+    if (hasLicense) item("weights", contentType = "section") {
+        CompareSection {
+            CompareHeading(R.string.detail_weights)
+            CompareDisclosure("license", R.string.compare_full_license, "license" in expandedDetails, onToggleDetail) {
+                TextRow(R.string.detail_license, models.map { it.license }, names, layout)
             }
         }
     }
 }
 
 @Composable
-private fun CompareSection(title: String, @DrawableRes icon: Int, models: List<ModelDetail>, content: @Composable () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(painterResource(icon), null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
-            }
-            CompareColumnHeaders(models)
-            content()
-        }
-    }
-}
-
-// 与正文共享列宽；空间不足以并排时由每个值重复模型名，不再额外堆叠表头。
-@Composable
-private fun CompareColumnHeaders(models: List<ModelDetail>) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val fontScale = LocalDensity.current.fontScale
-        val table = maxWidth >= 600.dp * fontScale
-        if (maxWidth >= 240.dp * fontScale) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (table) Spacer(Modifier.weight(0.9f))
-                models.forEachIndexed { index, model ->
-                    Text(model.name, Modifier.weight(1.2f).testTag("compare-column-$index"),
-                        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
+internal fun CompareSection(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.padding(CompareCardPadding), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
     }
 }
 
 @Composable
-internal fun CompareToggleCard(
-    key: String, title: Int, expandedDetails: List<String>, onToggleDetail: (String) -> Unit,
+internal fun CompareHeading(@StringRes title: Int, modifier: Modifier = Modifier) {
+    Text(stringResource(title), modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+}
+
+@Composable
+internal fun CompareNote(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.ContentOrLtr),
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+internal fun CompareDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+}
+
+@Composable
+internal fun CompareToggleCard(key: String, @StringRes title: Int, expanded: Boolean, onToggle: (String) -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
+        CompareToggle(key, stringResource(title), expanded, onToggle, Modifier.padding(horizontal = CompareCardPadding),
+            isHeading = true)
+    }
+}
+
+@Composable
+internal fun CompareDisclosure(
+    key: String, @StringRes title: Int, expanded: Boolean, onToggle: (String) -> Unit,
+    titleAsAction: Boolean = true, content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth()) {
-        CompareToggle(key, stringResource(title), key in expandedDetails, onToggleDetail, Modifier.padding(horizontal = 16.dp))
-    }
-}
-
-@Composable
-private fun CompareDisclosure(
-    key: String, title: String, expandedDetails: List<String>, onToggleDetail: (String) -> Unit,
-    content: @Composable () -> Unit,
-) {
-    val expanded = key in expandedDetails
     Column {
-        CompareToggle(key, title, expanded, onToggleDetail)
-        if (expanded) content()
+        CompareToggle(key, stringResource(title), expanded, onToggle, titleAsAction = titleAsAction)
+        AnimatedVisibility(expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
+        }
     }
 }
 
 @Composable
-private fun CompareToggle(key: String, title: String, expanded: Boolean, onToggleDetail: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun CompareToggle(
+    key: String, title: String, expanded: Boolean, onToggle: (String) -> Unit,
+    modifier: Modifier = Modifier, isHeading: Boolean = false, titleAsAction: Boolean = false,
+) {
     val action = stringResource(if (expanded) R.string.compare_collapse_detail else R.string.compare_expand_detail, title)
     val state = stringResource(if (expanded) R.string.compare_detail_expanded else R.string.compare_detail_collapsed)
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "compare-chevron")
     Row(modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("compare-$key-toggle")
-        .semantics { stateDescription = state }
-        .clickable(role = Role.Button, onClickLabel = action) { onToggleDetail(key) },
+        .semantics { stateDescription = state; if (isHeading) heading() }
+        .clickable(role = Role.Button, onClickLabel = action) { onToggle(key) },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(action, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-        Icon(painterResource(R.drawable.ic_expand_more), null, Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
-            tint = MaterialTheme.colorScheme.primary)
+        Text(if (titleAsAction) action else title, Modifier.weight(1f), style = if (isHeading)
+            MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
+            color = if (isHeading) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary)
+        Icon(painterResource(R.drawable.ic_expand_more), null, Modifier.size(20.dp).graphicsLayer { rotationZ = rotation },
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-private data class CompareValue(
-    val text: String,
-    val spoken: String = text,
-    val accent: Boolean = false,
-    val modalities: List<String>? = null,
+internal data class CompareValue(
+    val text: String, val spoken: String = text, val unit: String? = null,
+    val prominent: Boolean = false, val missing: Boolean = false,
 )
 
 @Composable
-private fun TextRow(label: Int, values: List<String?>, models: List<ModelDetail>, accent: Boolean = false) {
+internal fun MissingCompareValue(@StringRes label: Int = R.string.no_data): CompareValue =
+    CompareValue(stringResource(label), missing = true)
+
+@Composable
+private fun <T : Any> SpecRow(
+    @StringRes label: Int, spec: CompareSpec<T>, names: List<String>, layout: CompareLayout,
+    onlyDifferences: Boolean, value: @Composable (T) -> CompareValue,
+) {
+    if (!spec.isVisible(onlyDifferences)) return
+    CompareRow(stringResource(label), spec.first?.let { value(it) } ?: MissingCompareValue(),
+        spec.second?.let { value(it) } ?: MissingCompareValue(), names, layout,
+        different = spec.difference == SpecDifference.DIFFERENT)
+}
+
+@Composable
+private fun TokenRow(label: Int, spec: CompareSpec<Long>, names: List<String>, layout: CompareLayout,
+    onlyDifferences: Boolean, prominent: Boolean = false) {
+    val showExact = spec.difference == SpecDifference.DIFFERENT &&
+        formatCompactTokenCount(requireNotNull(spec.first)) == formatCompactTokenCount(requireNotNull(spec.second))
+    SpecRow(label, spec, names, layout, onlyDifferences) {
+        val unit = stringResource(R.string.model_list_token_unit)
+        val exact = formatTokenCount(it)
+        CompareValue(if (showExact) exact else formatCompactTokenCount(it), "$exact $unit", unit, prominent)
+    }
+}
+
+@Composable
+private fun ModalityValue(modalities: Set<String>): CompareValue =
+    CompareValue(if (modalities.isEmpty()) stringResource(R.string.model_list_no_modalities)
+        else modalities.map { formatModality(it) }.joinToString("、"))
+
+@Composable
+private fun TextRow(label: Int, values: List<String?>, names: List<String>, layout: CompareLayout) {
     if (values.all { it.isNullOrBlank() }) return
-    CompareRow(stringResource(label), values.map { CompareValue(it?.takeIf(String::isNotBlank) ?: stringResource(R.string.no_data), accent = accent) }, models)
+    val cells = values.map { it?.takeIf(String::isNotBlank)?.let { text -> CompareValue(text) } ?: MissingCompareValue() }
+    CompareRow(stringResource(label), cells[0], cells[1], names, layout)
 }
 
 @Composable
-private fun TokenRow(label: Int, values: List<Long?>, models: List<ModelDetail>) {
+private fun BooleanRow(label: Int, values: List<Boolean?>, names: List<String>, layout: CompareLayout) =
+    TextRow(label, values.map {
+        it?.let { supported -> stringResource(if (supported) R.string.detail_supported else R.string.detail_unsupported) }
+    }, names, layout)
+
+@Composable
+private fun PriceRow(label: Int, values: List<Double?>, names: List<String>, layout: CompareLayout, prominent: Boolean = false) {
     if (values.all { it == null }) return
-    CompareRow(stringResource(label), values.map {
-        CompareValue(it?.let { "${formatCompactTokenCount(it)} tokens" } ?: stringResource(R.string.no_data),
-            it?.let { "${formatTokenCount(it)} tokens" } ?: stringResource(R.string.no_data))
-    }, models)
+    val cells = values.map { it?.let { price -> CompareValue(formatUsdPerMillionTokens(price), prominent = prominent) }
+        ?: MissingCompareValue() }
+    CompareRow(stringResource(label), cells[0], cells[1], names, layout)
 }
 
 @Composable
-private fun ModalityRow(label: Int, values: List<List<String>?>, models: List<ModelDetail>) {
-    if (values.all { it == null }) return
-    CompareRow(stringResource(label), values.map { modalities ->
-        val text = when {
-            modalities == null -> stringResource(R.string.no_data)
-            modalities.isEmpty() -> stringResource(R.string.model_list_no_modalities)
-            else -> modalities.map { formatModality(it) }.joinToString("、")
-        }
-        CompareValue(text, modalities = modalities?.takeIf { it.isNotEmpty() })
-    }, models)
-}
-
-@Composable
-private fun BooleanRow(label: Int, values: List<Boolean?>, models: List<ModelDetail>) {
-    if (values.all { it == null }) return
-    CompareRow(stringResource(label), values.map {
-        CompareValue(stringResource(when (it) {
-            true -> R.string.detail_supported
-            false -> R.string.detail_unsupported
-            null -> R.string.no_data
-        }), accent = it == true)
-    }, models)
-}
-
-@Composable
-private fun CompareRow(label: String, values: List<CompareValue>, models: List<ModelDetail>) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val fontScale = LocalDensity.current.fontScale
-        // 手机优先给两侧数值完整的半屏宽度，只有宽屏才额外放入字段列。
-        val table = maxWidth >= 600.dp * fontScale
-        val dual = maxWidth >= 240.dp * fontScale
-        val value: @Composable (Int, Modifier, Boolean) -> Unit = { index, modifier, showName ->
-            CompareCell(label, models[index].name, values[index], modifier, showName)
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-            if (table) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(label, Modifier.weight(0.9f),
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    value(0, Modifier.weight(1.2f), false)
-                    value(1, Modifier.weight(1.2f), false)
+internal fun CompareRow(
+    label: String, first: CompareValue, second: CompareValue, names: List<String>, layout: CompareLayout,
+    different: Boolean = false, divider: Boolean = true, spokenLabel: String = label,
+) {
+    val differentLabel = if (different) stringResource(R.string.compare_field_differs) else null
+    val field: @Composable (Modifier) -> Unit = { modifier ->
+        Text(label, modifier.semantics { differentLabel?.let { stateDescription = it } },
+            style = MaterialTheme.typography.labelMedium,
+            color = if (different) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (divider) CompareDivider()
+        when (layout) {
+            CompareLayout.Table -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                field(Modifier.weight(0.9f))
+                CompareCell(spokenLabel, names[0], first, Modifier.weight(1.2f), different = different)
+                CompareCell(spokenLabel, names[1], second, Modifier.weight(1.2f), different = different)
+            }
+            CompareLayout.Pair -> {
+                field(Modifier)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CompareCell(spokenLabel, names[0], first, Modifier.weight(1f), different = different)
+                    CompareCell(spokenLabel, names[1], second, Modifier.weight(1f), different = different)
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (dual) Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        value(0, Modifier.weight(1f), false)
-                        value(1, Modifier.weight(1f), false)
-                    } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        value(0, Modifier.fillMaxWidth(), true)
-                        value(1, Modifier.fillMaxWidth(), true)
-                    }
-                }
+            }
+            CompareLayout.Stacked -> {
+                field(Modifier)
+                CompareCell(spokenLabel, names[0], first, Modifier.fillMaxWidth(), slot = 0, different = different)
+                CompareCell(spokenLabel, names[1], second, Modifier.fillMaxWidth(), slot = 1, different = different)
             }
         }
     }
 }
 
 @Composable
-private fun CompareCell(label: String, modelName: String, value: CompareValue, modifier: Modifier, showName: Boolean) {
-    Column(modifier.clearAndSetSemantics {
-        contentDescription = "$modelName，$label：${value.spoken}"
-    }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (showName) Text(modelName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (value.modalities != null) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                value.modalities.forEach { ModelInfoBadge(formatModality(it), icon = modalityIcon(it), showText = false) }
-            }
-        } else Text(value.text, style = MaterialTheme.typography.bodyMedium,
-            color = if (value.accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-    }
-}
-
-@Composable
-private fun PriceRow(label: Int, values: List<Double?>, models: List<ModelDetail>) {
-    TextRow(label, values.map { it?.let(::formatUsdPerMillionTokens) }, models, accent = true)
-}
-
-@Composable
-private fun CompareTierSection(prices: List<ModelPriceSummary?>, models: List<ModelDetail>, expanded: Boolean, onToggle: () -> Unit) {
-    if (prices.none { it?.tiers?.isNotEmpty() == true }) return
-    val stateLabel = stringResource(if (expanded) R.string.model_list_price_details_expanded else R.string.model_list_price_details_collapsed)
-    val action = stringResource(if (expanded) R.string.model_list_price_details_collapse else R.string.model_list_price_details_expand)
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("compare-tiers-toggle").semantics { stateDescription = stateLabel }
-                .clickable(role = Role.Button, onClickLabel = action, onClick = onToggle).padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.compare_tiers), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(if (expanded) R.string.model_filter_less else R.string.model_filter_more),
-                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            AnimatedVisibility(expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    prices.forEachIndexed { index, price ->
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(models[index].name, style = MaterialTheme.typography.titleMedium)
-                            Text(price?.providerName ?: stringResource(R.string.no_data), style = MaterialTheme.typography.bodySmall)
-                            if (price?.tiers.isNullOrEmpty()) Text(stringResource(R.string.compare_no_tiers))
-                            price?.tiers?.forEach { tier -> CompareTier(tier) }
-                        }
-                    }
-                }
-            }
-        }
+internal fun CompareCell(label: String, name: String, value: CompareValue, modifier: Modifier, slot: Int? = null,
+    different: Boolean = false) {
+    Column(modifier.clearAndSetSemantics { contentDescription = "$name，$label：${value.spoken}" }) {
+        if (slot != null) CompareNote(stringResource(R.string.compare_slot_label, slot + 1))
+        val style = if (value.prominent) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium
+        // 只镜像列顺序，不让 RTL 反转由数字／中性符号组成的成绩（如 899 ± 18）。
+        Text(value.text, style = style.copy(textDirection = TextDirection.ContentOrLtr),
+            fontWeight = if (different) FontWeight.SemiBold else null,
+            color = when {
+                value.missing -> MaterialTheme.colorScheme.onSurfaceVariant
+                different -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurface
+            })
+        value.unit?.let { CompareNote(it) }
     }
 }
 
 @Composable
 private fun CompareTier(tier: ModelPriceTierSummary) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(if (tier.conditionType == "context") stringResource(R.string.compare_context_tier, formatTokenCount(tier.conditionSizeTokens))
             else stringResource(R.string.compare_other_tier, tier.conditionType, formatTokenCount(tier.conditionSizeTokens)),
             style = MaterialTheme.typography.bodyMedium)
@@ -368,7 +379,7 @@ private fun CompareTier(tier: ModelPriceTierSummary) {
             R.string.detail_output_audio to tier.outputAudio,
         ).forEach { (label, price) ->
             if (price != null) Text("${stringResource(label)}：${formatUsdPerMillionTokens(price)}",
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

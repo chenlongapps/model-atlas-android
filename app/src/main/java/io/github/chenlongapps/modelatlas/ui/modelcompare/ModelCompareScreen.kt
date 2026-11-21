@@ -2,7 +2,6 @@ package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -38,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,8 +52,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -118,16 +118,36 @@ internal fun ModelCompareScreen(
     // 异步恢复期间使用另一份列表状态，避免短的加载内容夹回已保存的正文位置。
     val contentState = rememberLazyListState()
     val placeholderState = rememberLazyListState()
-    var expandedDetails by rememberSaveable(uiState.first.modelId, uiState.second.modelId) { mutableStateOf(emptyList<String>()) }
+    var expandedDetails by rememberSaveable(uiState.first.modelId, uiState.second.modelId, stateSaver = ExpandedKeysSaver) {
+        mutableStateOf(emptySet<String>())
+    }
+    var expandedRecords by rememberSaveable(uiState.first.modelId, uiState.second.modelId, stateSaver = ExpandedKeysSaver) {
+        mutableStateOf(emptySet<String>())
+    }
+    var onlyDifferences by rememberSaveable { mutableStateOf(false) }
     val onToggleDetail: (String) -> Unit = { key ->
         expandedDetails = if (key in expandedDetails) expandedDetails - key else expandedDetails + key
     }
-    val comparisonModels = if (uiState.isReady) listOf(requireNotNull(uiState.first.detail), requireNotNull(uiState.second.detail))
-        else emptyList()
-    val firstBenchmarks = uiState.first.detail?.benchmarks
-    val secondBenchmarks = uiState.second.detail?.benchmarks
-    val benchmarks = remember(firstBenchmarks, secondBenchmarks) { compareBenchmarkGroups(firstBenchmarks, secondBenchmarks) }
+    val onToggleRecord: (String) -> Unit = { key ->
+        expandedRecords = if (key in expandedRecords) expandedRecords - key else expandedRecords + key
+    }
+    val first = uiState.first.detail
+    val second = uiState.second.detail
+    val firstBenchmarks = first?.benchmarks
+    val secondBenchmarks = second?.benchmarks
+    val (shared, singleSide) = remember(firstBenchmarks, secondBenchmarks) {
+        compareBenchmarkGroups(firstBenchmarks, secondBenchmarks).partition(CompareBenchmarkGroup::shared)
+    }
+    val models = remember(first, second) { if (first != null && second != null) listOf(first, second) else emptyList() }
+    val modelNames = remember(models) { models.map(ModelDetail::name) }
+    val specs = remember(first?.metadata, second?.metadata) {
+        if (first != null && second != null) CompareSpecs(first.metadata, second.metadata) else null
+    }
+    val prices = remember(uiState.models, first?.id, second?.id) {
+        listOf(uiState.models.firstOrNull { it.id == first?.id }?.price, uiState.models.firstOrNull { it.id == second?.id }?.price)
+    }
     val direction = LocalLayoutDirection.current
+    val fontScale = LocalDensity.current.fontScale
     val windowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
     Scaffold(
@@ -143,41 +163,62 @@ internal fun ModelCompareScreen(
         containerColor = background,
         contentWindowInsets = windowInsets,
     ) { padding ->
-        LazyColumn(
-            state = if (uiState.isReady) contentState else placeholderState,
-            modifier = Modifier.fillMaxSize().consumeWindowInsets(padding).testTag("compare-list"),
-            contentPadding = PaddingValues(
-                start = padding.calculateStartPadding(direction) + 16.dp,
-                end = padding.calculateEndPadding(direction) + 16.dp,
-                top = padding.calculateTopPadding() + 28.dp,
-                bottom = padding.calculateBottomPadding() + bottomOverlayPadding + 16.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item("title") {
-                Text(stringResource(R.string.compare_title), style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() })
+        val start = padding.calculateStartPadding(direction) + 16.dp
+        val end = padding.calculateEndPadding(direction) + 16.dp
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val cardWidth = maxWidth - start - end
+            val valueWidth = cardWidth - CompareCardPadding * 2
+            val layout = when {
+                valueWidth >= 600.dp * fontScale -> CompareLayout.Table
+                valueWidth >= 240.dp * fontScale -> CompareLayout.Pair
+                else -> CompareLayout.Stacked
             }
-            item("selection") {
-                CompareSelection(uiState, onChoose = { pickerSlot = it }, onRemove, onRetry)
-            }
-            if (uiState.catalogStatus == CompareReadStatus.ERROR) {
-                item("catalog-error") { CompareMessage(stringResource(R.string.compare_catalog_error), onRetryCatalog) }
-            } else if (uiState.catalogStatus == CompareReadStatus.LOADING && uiState.first.modelId != null && uiState.second.modelId != null) {
-                item("catalog-loading") { CompareMessage(stringResource(R.string.compare_loading), loading = true) }
-            }
-            if (comparisonModels.isNotEmpty()) {
-                compareBenchmarkItems(benchmarks, comparisonModels.map(ModelDetail::name), expandedDetails, onToggleDetail)
-                val prices = comparisonModels.map { model -> uiState.models.firstOrNull { it.id == model.id }?.price }
-                comparisonItems(comparisonModels, prices, expandedDetails, onToggleDetail)
-            } else {
-                item("guidance") {
+            LazyColumn(
+                state = if (uiState.isReady) contentState else placeholderState,
+                modifier = Modifier.fillMaxSize().consumeWindowInsets(padding).testTag("compare-list"),
+                contentPadding = PaddingValues(
+                    start = start,
+                    end = end,
+                    top = padding.calculateTopPadding() + 20.dp,
+                    bottom = padding.calculateBottomPadding() + bottomOverlayPadding + 16.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item("title", contentType = "title") {
+                    Text(stringResource(R.string.compare_title), style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() })
+                }
+                item("selection", contentType = "selection") {
+                    CompareSelection(uiState, cardWidth, fontScale, onChoose = { pickerSlot = it }, onRemove, onRetry)
+                }
+                if (uiState.catalogStatus == CompareReadStatus.ERROR) {
+                    item("catalog-error", contentType = "message") {
+                        CompareMessage(stringResource(R.string.compare_catalog_error), onRetryCatalog)
+                    }
+                } else if (uiState.catalogStatus == CompareReadStatus.LOADING && uiState.first.modelId != null && uiState.second.modelId != null) {
+                    item("catalog-loading", contentType = "message") {
+                        CompareMessage(stringResource(R.string.compare_loading), loading = true)
+                    }
+                }
+                if (uiState.isReady && specs != null) {
+                    item("specs", contentType = "section") {
+                        CompareKeySpecs(specs, modelNames, layout, onlyDifferences) { onlyDifferences = it }
+                    }
+                    item("prices", contentType = "section") {
+                        ComparePrices(prices, modelNames, layout, "price-details" in expandedDetails, onToggleDetail)
+                    }
+                    compareBenchmarkItems(shared, singleSide, modelNames, layout, expandedDetails, onToggleDetail,
+                        isRecordExpanded = { it in expandedRecords }, onToggleRecord = onToggleRecord)
+                    compareMoreItems(models, prices, modelNames, layout, expandedDetails, onToggleDetail)
+                } else {
                     val text = when {
                         uiState.first.modelId != null && uiState.second.modelId != null -> null
                         uiState.first.modelId != null || uiState.second.modelId != null -> R.string.compare_one_selected
                         else -> R.string.compare_empty
                     }
-                    text?.let { CompareMessage(stringResource(it)) }
+                    if (text != null) item("guidance", contentType = "message") {
+                        CompareMessage(stringResource(text))
+                    }
                 }
             }
         }
@@ -191,13 +232,18 @@ internal fun ModelCompareScreen(
     }
 }
 
+private val ExpandedKeysSaver = Saver<Set<String>, List<String>>(
+    save = { ArrayList(it) }, restore = { it.toSet() },
+)
+
 @Composable
 private fun CompareSelection(
-    state: ModelCompareUiState, onChoose: (Int) -> Unit, onRemove: (Int) -> Unit, onRetry: (Int) -> Unit,
+    state: ModelCompareUiState, width: Dp, fontScale: Float,
+    onChoose: (Int) -> Unit, onRemove: (Int) -> Unit, onRetry: (Int) -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    run {
         val density = LocalDensity.current
-        val stacked = maxWidth < 280.dp * density.fontScale
+        val stacked = width < 280.dp * fontScale
         val slots = listOf(state.first, state.second)
         val summaries = slots.map { slot -> state.models.firstOrNull { it.id == slot.modelId } }
         val names = slots.mapIndexed { index, slot ->
@@ -210,13 +256,13 @@ private fun CompareSelection(
         val textMeasurer = rememberTextMeasurer()
         // 以较窄一列的实际文字宽度测量，首帧就同步两侧字段高度，不通过布局回调反复补高。
         val textWidth = with(density) {
-            ((maxWidth.roundToPx() - 12.dp.roundToPx()) / 2 - 2 * 12.dp.roundToPx()).coerceAtLeast(1)
+            ((width.roundToPx() - 12.dp.roundToPx()) / 2 - 2 * 10.dp.roundToPx()).coerceAtLeast(1)
         }
         fun sharedTextHeight(texts: List<String>, style: TextStyle): Dp = if (stacked) 0.dp else with(density) {
             texts.maxOf { textMeasurer.measure(it, style = style, constraints = Constraints(maxWidth = textWidth)).size.height }.toDp()
         }
         val nameHeight = sharedTextHeight(titles, MaterialTheme.typography.titleMedium)
-        val labHeight = sharedTextHeight(labNames, MaterialTheme.typography.bodyMedium)
+        val labHeight = sharedTextHeight(labNames, MaterialTheme.typography.bodySmall)
         val card: @Composable (Int, Modifier) -> Unit = { index, modifier ->
             CompareSelectionCard(slots[index], names[index], labs[index], labNames[index], index,
                 { onChoose(index) }, { onRemove(index) }, { onRetry(index) }, modifier, nameHeight, labHeight)
@@ -243,16 +289,21 @@ private fun CompareSelectionCard(
 ) {
     val label = if (name == null) stringResource(R.string.compare_select, index + 1)
         else stringResource(R.string.compare_replace, name)
-    Surface(onClick = onChoose, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface,
+    Surface(onClick = onChoose, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface,
         modifier = modifier.testTag("compare-slot-$index"),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (state.modelId == null) {
-                    Icon(painterResource(R.drawable.ic_compare), null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-                } else LabLogo(lab, size = 40.dp)
-                Box(Modifier.weight(1f))
-                if (state.modelId != null) {
+                    Icon(painterResource(R.drawable.ic_compare), null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+                } else {
+                    LabLogo(lab, size = 28.dp)
+                    Text(stringResource(R.string.compare_change),
+                        modifier = Modifier.weight(1f).padding(start = 4.dp).testTag("compare-change-$index").semantics {
+                            contentDescription = label
+                        },
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     IconButton(onClick = onRemove, modifier = Modifier.testTag("compare-remove-$index")) {
                         Icon(painterResource(R.drawable.ic_close), stringResource(R.string.compare_remove,
                             name ?: stringResource(R.string.compare_unknown_model, index + 1)),
@@ -264,11 +315,8 @@ private fun CompareSelectionCard(
                 modifier = Modifier.heightIn(min = nameMinHeight).testTag("compare-name-$index"))
             if (name != null) {
                 Text(labName, modifier = Modifier.heightIn(min = labMinHeight).testTag("compare-lab-$index"),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (name != null) Text(stringResource(R.string.compare_change),
-                modifier = Modifier.testTag("compare-change-$index").semantics { contentDescription = label },
-                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             if (state.modelId != null) {
                 when (state.status) {
                     CompareReadStatus.LOADING -> Text(stringResource(R.string.compare_loading), style = MaterialTheme.typography.bodySmall)

@@ -89,7 +89,7 @@
 
 ### 视觉诊断
 
-`BenchmarkScreenTest`、`BenchmarkSharedTransitionTest`、`ChatNavigationTest` 支持 runner 参数 `-e captureRegression true`，截图在 Debug 应用外部专属目录 `files/regression-screenshots/`。预测性取消的像素失败证据在 `files/predictive-failures/`，日志标签为 `PredictiveCancelTest`。不要同时启动其他 UI instrumentation；截图超时与正常截图中的内容缺失分开判断。
+`BenchmarkScreenTest`、`BenchmarkSharedTransitionTest`、`ModelCompareScreenTest`、`ChatNavigationTest` 支持 runner 参数 `-e captureRegression true`，截图在 Debug 应用外部专属目录 `files/regression-screenshots/`。预测性取消的像素失败证据在 `files/predictive-failures/`，日志标签为 `PredictiveCancelTest`。不要同时启动其他 UI instrumentation；截图超时与正常截图中的内容缺失分开判断。
 
 ## 核对结果
 
