@@ -9,6 +9,7 @@ build/
 !/.agents/**/references/**/build/
 
 # Android packages and profiling data
+/app/release/
 *.apk
 *.aab
 *.ap_
