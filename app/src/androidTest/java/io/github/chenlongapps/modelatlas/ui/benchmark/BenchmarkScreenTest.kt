@@ -160,7 +160,7 @@ class BenchmarkScreenTest {
         compose.onNodeWithText("Terminal-Bench").assertIsDisplayed()
         compose.onNodeWithContentDescription("第 1 名，模型 A，分数 72.4%", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithContentDescription("图表范围 55% 至 75%；柱长按局部刻度绘制，不代表绝对比例", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithText("各模型最高成绩 · 版本／配置可能不同 · 柱条使用局部刻度").assertIsDisplayed()
+        compose.onNodeWithText("各模型最高成绩 · 局部刻度").assertDoesNotExist()
         for (text in listOf("Top 3", "查看完整排行榜", "版本：4.0.0", "编程", board.metric, "55%", "75%", "1", "2", "3")) {
             compose.onNodeWithText(text, useUnmergedTree = true).assertDoesNotExist()
         }

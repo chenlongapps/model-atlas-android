@@ -25,7 +25,7 @@
     <string name="compare_benchmarks_single">单侧评测</string>
     <string name="compare_benchmarks_no_score">暂无对应成绩</string>
     <string name="compare_benchmarks_version_missing">未注明</string>
-    <string name="compare_benchmarks_test">虚构测试数据，不代表真实评测成绩。</string>
+    <string name="compare_benchmarks_test">虚构测试数据</string>
     <string name="compare_capabilities">能力特性</string>
     <string name="compare_model_name">模型名称</string>
     <string name="compare_full_license">完整许可</string>
@@ -37,12 +37,9 @@
     <string name="compare_price_provider">报价服务商</string>
     <string name="compare_price_service">报价服务 ID</string>
     <string name="compare_price_details">详细报价</string>
-    <string name="compare_base_price_notice">沿用目录默认服务的基础报价，不代表最低价；档位与其他费用以服务商为准。</string>
     <string name="compare_no_base_price">暂无基础输入／输出报价。</string>
-    <string name="compare_price_notice">沿用列表默认报价，不代表最低价或推荐。USD / 百万 tokens；不同服务商、缓存与档位条件不可直接比较，同一任务的 token 数也可能不同。仅展示基础模式，不合计费用，推理价不默认与输出价相加。档位等号归属与适用条件以服务商说明为准。</string>
     <string name="compare_tiers">上下文及其他条件档位</string>
     <string name="compare_no_tiers">此报价未提供精确档位。</string>
     <string name="compare_context_tier">上下文档位门槛：%1$s tokens</string>
     <string name="compare_other_tier">%1$s 档位门槛：%2$s（来源原值）</string>
-    <string name="compare_capability_notice">能力来自规范模型记录，不代表每个 API 服务均支持，也不代表模型质量排名。</string>
 </resources>

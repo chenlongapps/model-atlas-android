@@ -68,6 +68,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.LocalModelListVisible
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListRoute
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
+import io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModel
 import io.github.chenlongapps.modelatlas.ui.navigation.AssistantNavigation
 import io.github.chenlongapps.modelatlas.ui.navigation.BottomBarMode
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
@@ -75,6 +76,7 @@ import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollConnectio
 import io.github.chenlongapps.modelatlas.ui.navigation.MorphingBottomBar
 import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollState
 import io.github.chenlongapps.modelatlas.ui.navigation.rememberTouchExplorationEnabled
+import io.github.chenlongapps.modelatlas.ui.settings.DataSourceRoute
 import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
 import io.github.chenlongapps.modelatlas.ui.settings.SettingsScreen
 import io.github.chenlongapps.modelatlas.ui.settings.AppearanceScreen
@@ -126,6 +128,8 @@ fun ModelAtlasApp(
 ) {
     // Activity 作用域：弹出独立路由不丢对话／草稿，配置重建不取消请求。
     val chatViewModel: ChatViewModel = hiltViewModel()
+    // 模型页与设置中的目录总数使用同一份已发布快照。
+    val modelListViewModel: ModelListViewModel = hiltViewModel()
     // 只读取 State 对象，不在此处订阅值；输入变化只重组共享底栏。
     val chatState = chatViewModel.uiState.collectAsStateWithLifecycle()
     ModelAtlasScaffold(
@@ -136,6 +140,7 @@ fun ModelAtlasApp(
         settingsReadError = settingsReadError,
         onRetrySettings = onRetrySettings,
         appearanceContent = appearanceContent,
+        dataSourceContent = { onBack -> DataSourceRoute(modelListViewModel, onBack) },
         chatUiState = chatState,
         onChatInput = chatViewModel::setInput,
         onChatSend = chatViewModel::send,
@@ -150,7 +155,12 @@ fun ModelAtlasApp(
         benchmarkContent = { bottomPadding, isVisible, onOpen -> BenchmarkRoute(bottomPadding, isVisible, onOpen) },
         leaderboardContent = { id, onBack -> BenchmarkLeaderboardRoute(id, onBack) },
     ) { bottomOverlayPadding, listState, onModelClick ->
-        ModelListRoute(bottomOverlayPadding = bottomOverlayPadding, listState = listState, onModelClick = onModelClick)
+        ModelListRoute(
+            bottomOverlayPadding = bottomOverlayPadding,
+            viewModel = modelListViewModel,
+            listState = listState,
+            onModelClick = onModelClick,
+        )
     }
 }
 
@@ -191,6 +201,7 @@ internal fun ModelAtlasScaffold(
     settingsEditable: Boolean = true,
     settingsReadError: Boolean = false,
     onRetrySettings: () -> Unit = {},
+    dataSourceContent: @Composable (onBack: () -> Unit) -> Unit = { onBack -> DataSourceScreen(onBack) },
     modelContent: @Composable (bottomOverlayPadding: Dp, listState: LazyListState, onModelClick: (String) -> Unit) -> Unit,
 ) {
     val navigationItems = remember {
@@ -229,6 +240,7 @@ internal fun ModelAtlasScaffold(
                 settingsEditable = settingsEditable,
                 settingsReadError = settingsReadError,
                 onRetrySettings = onRetrySettings,
+                dataSourceContent = dataSourceContent,
                 modelContent = modelContent,
             )
         },
@@ -307,6 +319,7 @@ private fun MainAtlasScaffold(
     settingsEditable: Boolean,
     settingsReadError: Boolean,
     onRetrySettings: () -> Unit,
+    dataSourceContent: @Composable (() -> Unit) -> Unit,
     modelContent: @Composable (Dp, LazyListState, (String) -> Unit) -> Unit,
 ) {
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -483,7 +496,7 @@ private fun MainAtlasScaffold(
             }
         }
         if (showDataSource) {
-            DataSourceScreen(onBack = { showDataSource = false })
+            dataSourceContent { showDataSource = false }
         }
         if (showAppearance) {
             appearanceContent { showAppearance = false }

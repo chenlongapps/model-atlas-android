@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,11 +33,20 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModel
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 @Composable
-internal fun DataSourceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun DataSourceRoute(viewModel: ModelListViewModel, onBack: () -> Unit) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val catalogCount = state.takeUnless { it.isLoading || it.error != null }?.models?.size
+    DataSourceScreen(onBack, catalogCount = catalogCount)
+}
+
+@Composable
+internal fun DataSourceScreen(onBack: () -> Unit, modifier: Modifier = Modifier, catalogCount: Int? = null) {
     val resources = LocalResources.current
     val license = remember(resources) {
         resources.openRawResource(R.raw.models_dev_license).bufferedReader().use { it.readText() }
@@ -69,16 +79,22 @@ internal fun DataSourceScreen(onBack: () -> Unit, modifier: Modifier = Modifier)
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                item(key = "display-guide") {
+                    DataSourceSection(
+                        title = stringResource(R.string.data_display_guide),
+                        paragraphs = listOfNotNull(
+                            catalogCount?.let { stringResource(R.string.model_list_count, it) },
+                            stringResource(R.string.model_list_order),
+                            stringResource(R.string.model_list_price_notice),
+                            stringResource(R.string.benchmark_overview_notice),
+                            stringResource(R.string.compare_subtitle),
+                        ),
+                    )
+                }
                 item(key = "source") {
                     DataSourceSection(
                         title = stringResource(R.string.data_source_notice_title),
                         text = stringResource(R.string.model_list_source_notice),
-                    )
-                }
-                item(key = "prices") {
-                    DataSourceSection(
-                        title = stringResource(R.string.model_list_price_notice_title),
-                        text = stringResource(R.string.model_list_price_notice),
                     )
                 }
                 item(key = "license") {
@@ -104,6 +120,13 @@ private fun DataSourceSection(
     title: String,
     text: String,
     bodyStyle: TextStyle = MaterialTheme.typography.bodyMedium,
+) = DataSourceSection(title, listOf(text), bodyStyle)
+
+@Composable
+private fun DataSourceSection(
+    title: String,
+    paragraphs: List<String>,
+    bodyStyle: TextStyle = MaterialTheme.typography.bodyMedium,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -115,7 +138,9 @@ private fun DataSourceSection(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(title, modifier = Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
-            Text(text, style = bodyStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            paragraphs.forEach {
+                Text(it, style = bodyStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -125,5 +150,5 @@ private fun DataSourceSection(
 @Preview(name = "Data source · Large font", showBackground = true, widthDp = 320, fontScale = 2f)
 @Composable
 private fun DataSourceScreenPreview() {
-    ModelAtlasTheme(dynamicColor = false) { DataSourceScreen(onBack = {}) }
+    ModelAtlasTheme(dynamicColor = false) { DataSourceScreen(onBack = {}, catalogCount = 42) }
 }

@@ -115,7 +115,7 @@ private fun PriceSection(price: ModelPriceSummary, expanded: Boolean, onToggle: 
         modifier = Modifier.fillMaxWidth().testTag("model-price-section").animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        PriceHeader(hasTiers = price.tiers.isNotEmpty(), expanded = expanded, onToggle = onToggle)
+        if (price.tiers.isNotEmpty()) PriceTierToggle(expanded, onToggle)
         PriceMetrics(price)
         // 缺失不补零，推理价不与输出价相加；仍然展示选中报价的原有类别。
         if (price.cacheWrite != null || price.reasoning != null ||
@@ -133,7 +133,7 @@ private fun PriceSection(price: ModelPriceSummary, expanded: Boolean, onToggle: 
 }
 
 @Composable
-private fun PriceHeader(hasTiers: Boolean, expanded: Boolean, onToggle: () -> Unit) {
+private fun PriceTierToggle(expanded: Boolean, onToggle: () -> Unit) {
     val toggleLabel = stringResource(
         if (expanded) R.string.model_list_price_details_collapse else R.string.model_list_price_details_expand,
     )
@@ -141,39 +141,27 @@ private fun PriceHeader(hasTiers: Boolean, expanded: Boolean, onToggle: () -> Un
         if (expanded) R.string.model_list_price_details_expanded else R.string.model_list_price_details_collapsed,
     )
     Row(
-        modifier = Modifier.fillMaxWidth().then(
-            if (hasTiers) {
-                // clickable 在布局外扩展最小触摸区域，不再用 48dp 最小高度撑大标题行。
-                Modifier.clickable(onClickLabel = toggleLabel, role = Role.Button, onClick = onToggle)
-                    .semantics {
-                        contentDescription = toggleLabel
-                        stateDescription = description
-                    }
-            } else Modifier,
-        ),
+        // clickable 在布局外扩展最小触摸区域，不用 48dp 最小高度撑大这一行。
+        modifier = Modifier.fillMaxWidth()
+            .clickable(onClickLabel = toggleLabel, role = Role.Button, onClick = onToggle)
+            .semantics {
+                contentDescription = toggleLabel
+                stateDescription = description
+            },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FlowRow(
+        Text(
+            stringResource(R.string.model_list_price_tiers),
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(R.string.model_list_price_title), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Text(
-                stringResource(R.string.model_list_price_unit),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (hasTiers) {
-            val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "price-chevron")
-            Icon(
-                painterResource(R.drawable.ic_expand_more), contentDescription = null,
-                modifier = Modifier.size(16.dp).testTag("price-chevron").rotate(rotation), tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "price-chevron")
+        Icon(
+            painterResource(R.drawable.ic_expand_more), contentDescription = null,
+            modifier = Modifier.size(16.dp).testTag("price-chevron").rotate(rotation), tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

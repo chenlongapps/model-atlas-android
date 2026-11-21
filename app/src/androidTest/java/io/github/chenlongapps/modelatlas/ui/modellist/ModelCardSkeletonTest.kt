@@ -79,6 +79,7 @@ class ModelCardSkeletonTest {
             }
         }
         compose.waitForIdle()
+        compose.onNodeWithText("匹配 0 / 0 个模型").assertDoesNotExist()
         val controlTags = buildList {
             add("catalog-query")
             add("model-search")
@@ -200,7 +201,7 @@ class ModelCardSkeletonTest {
         compose.onNodeWithTag("model-skeleton:0").assertDoesNotExist()
         compose.onNodeWithContentDescription("正在加载模型目录…").assertDoesNotExist()
         compose.onNodeWithText("已加载模型").assertIsDisplayed()
-        compose.onNodeWithText("模型目录 · 1 个模型").assertIsDisplayed()
+        compose.onNodeWithText("模型目录 · 1 个模型").assertDoesNotExist()
     }
 
     @Test fun initialFailureRemovesSkeletonAndRetryRestoresIt() {

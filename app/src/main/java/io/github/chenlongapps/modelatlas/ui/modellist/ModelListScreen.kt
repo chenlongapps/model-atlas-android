@@ -39,6 +39,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -269,7 +270,7 @@ internal fun ModelListScreen(
             ) {
                 item(key = "catalog-header") {
                     Column {
-                        CatalogHeader(uiState = uiState)
+                        CatalogHeader(uiState, shimmerProgress.takeIf { showSkeletons })
                         AnimatedCatalogStatusNotice(
                             notice = uiState.catalogNotice(),
                             onRefresh = onRefresh,
@@ -292,20 +293,6 @@ internal fun ModelListScreen(
                     item(key = "favorites-error") {
                         CatalogStateCard(title = stringResource(R.string.nav_favorites),
                             message = stringResource(R.string.favorites_read_error), onRetry = onRetryFavorites)
-                    }
-                }
-                if (showSkeletons || entries.isNotEmpty()) {
-                    item(key = "sort-order", contentType = "sort-order") {
-                        Text(
-                            text = stringResource(R.string.model_list_order),
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                                .modelSkeletonPlaceholder(
-                                    shimmerProgress.takeIf { showSkeletons },
-                                    RoundedCornerShape(4.dp),
-                                ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
                 when {
@@ -392,7 +379,7 @@ internal fun ModelListError.messageResource() = when (this) {
 }
 
 @Composable
-private fun CatalogHeader(uiState: ModelListUiState) {
+private fun CatalogHeader(uiState: ModelListUiState, skeletonProgress: State<Float>?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -405,19 +392,14 @@ private fun CatalogHeader(uiState: ModelListUiState) {
             modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.headlineMedium,
         )
-        Text(
-            text = if (!uiState.isLoading && uiState.error == null) {
-                if (uiState.query.isActive) {
-                    stringResource(R.string.model_query_count, uiState.visibleModels.size, uiState.models.size)
-                } else {
-                    stringResource(R.string.model_list_count, uiState.models.size)
-                }
-            } else {
-                stringResource(R.string.model_list_title)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (uiState.error == null && uiState.query.isActive && (!uiState.isLoading || skeletonProgress != null)) {
+            Text(
+                text = stringResource(R.string.model_query_count, uiState.visibleModels.size, uiState.models.size),
+                modifier = Modifier.modelSkeletonPlaceholder(skeletonProgress, RoundedCornerShape(4.dp)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

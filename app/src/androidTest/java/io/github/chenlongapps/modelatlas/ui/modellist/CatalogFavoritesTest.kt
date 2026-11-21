@@ -22,6 +22,7 @@ import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -45,13 +46,14 @@ class CatalogFavoritesTest {
         }
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/b"))
         compose.onNodeWithTag("model-favorite:lab/b", useUnmergedTree = true).assertExists()
-        compose.runOnIdle { assertEquals(3, listState.layoutInfo.visibleItemsInfo.single { it.key == "model:lab/b" }.index) }
+        val savedIndex = compose.runOnIdle { listState.layoutInfo.visibleItemsInfo.single { it.key == "model:lab/b" }.index }
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("favorite-unavailable:old/gone"))
-        compose.runOnIdle { assertEquals(4, listState.layoutInfo.visibleItemsInfo.single { it.key == "model:old/gone" }.index) }
+        val missingIndex = compose.runOnIdle { listState.layoutInfo.visibleItemsInfo.single { it.key == "model:old/gone" }.index }
         compose.onNodeWithTag("favorite-unavailable:old/gone").performClick()
         compose.runOnIdle { assertEquals("old/gone", opened) }
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("model:lab/a"))
-        compose.runOnIdle { assertEquals(5, listState.layoutInfo.visibleItemsInfo.single { it.key == "model:lab/a" }.index) }
+        val ordinaryIndex = compose.runOnIdle { listState.layoutInfo.visibleItemsInfo.single { it.key == "model:lab/a" }.index }
+        assertTrue(savedIndex < missingIndex && missingIndex < ordinaryIndex)
     }
 
     @Test fun backgroundFavoriteProjectionKeepsSnapshotIdentityUntilExplicitCatalogPublication() {

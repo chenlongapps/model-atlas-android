@@ -42,6 +42,7 @@ import io.github.chenlongapps.modelatlas.data.model.ModelPriceTierSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
+import io.github.chenlongapps.modelatlas.ui.settings.DataSourceScreen
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -267,7 +268,7 @@ class ModelAtlasAppTest {
 
     @Test fun doubleClickPreservesExpandedPriceDetails() {
         show(models = listOf(tieredModel) + List(20) { ModelSummary("lab/model-$it", "测试模型 $it") })
-        compose.onNodeWithText("API 价格").performClick()
+        compose.onNodeWithContentDescription("展开档位价格").performClick()
         scrollCatalogToModel12()
         compose.onNodeWithTag("nav-models").performTouchInput { doubleClick() }
         compose.onNodeWithText("上下文 ≥ 100 tokens：输入 $0.20 · 输出 $0.30").assertIsDisplayed()
@@ -306,7 +307,7 @@ class ModelAtlasAppTest {
                 }
             }
         }
-        compose.onNodeWithText("API 价格").performClick()
+        compose.onNodeWithContentDescription("展开档位价格").performClick()
         compose.onNodeWithText("上下文 ≥ 100 tokens：输入 $0.20 · 输出 $0.30").assertIsDisplayed()
         compose.onNodeWithTag("nav-settings").performClick()
         restoration.emulateSavedInstanceStateRestore()
@@ -332,19 +333,22 @@ class ModelAtlasAppTest {
         compose.onNodeWithTag("data-source-screen").assertIsDisplayed()
         compose.onNodeWithTag("main-pager").assertIsNotDisplayed()
         compose.onNodeWithTag("glass-navigation").assertIsNotDisplayed()
+        for (text in listOf("展示说明", "模型目录 · 30 个模型", "收藏优先 · 组内按发布时间从新到旧",
+            priceNotice, "各模型最高成绩 · 局部刻度", "对照两个模型的评测分数、关键规格与报价")) {
+            compose.onNodeWithTag("data-source-content").performScrollToNode(hasText(text))
+            compose.onNodeWithText(text).assertIsDisplayed()
+        }
+        compose.onAllNodesWithText(priceNotice).assertCountEquals(1)
         compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("ModelAtlas Data", substring = true))
         compose.onNodeWithText("ModelAtlas Data", substring = true).assertIsDisplayed()
         compose.onNodeWithText("https://chenlongapps.github.io/model-atlas-data/", substring = true).assertExists()
         compose.onNodeWithText("本应用为独立第三方", substring = true).assertExists()
-        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText(priceNotice))
-        compose.onNodeWithText(priceNotice).assertIsDisplayed()
-        compose.onAllNodesWithText(priceNotice).assertCountEquals(1)
         compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("Copyright (c) 2025 models.dev", substring = true))
         compose.onNodeWithText("Copyright (c) 2025 models.dev", substring = true).assertIsDisplayed()
         compose.onNodeWithText("THE SOFTWARE IS PROVIDED", substring = true).assertExists()
-        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("Benchmark 数据来源与许可"))
-        compose.onNodeWithText("Benchmark 数据来源与许可").assertIsDisplayed()
-        compose.onNodeWithText("评测成绩来自 ModelAtlas Data", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("data-source-content").performScrollToNode(hasText("评测数据来源"))
+        compose.onNodeWithText("评测数据来源").assertIsDisplayed()
+        compose.onNodeWithText("评测成绩、定义与中文说明来自 ModelAtlas Data。").assertIsDisplayed()
         compose.onNodeWithText("DeepSeek", substring = true).assertDoesNotExist()
         val assets = InstrumentationRegistry.getInstrumentation().targetContext.assets
         assertFalse(assets.list("").orEmpty().contains("benchmark-attributions.json"))
@@ -519,7 +523,9 @@ class ModelAtlasAppTest {
                 LocalLayoutDirection provides direction,
             ) {
                 ModelAtlasTheme(darkTheme = darkTheme, dynamicColor = false) {
-                    ModelAtlasScaffold { bottomPadding, listState, _ ->
+                    ModelAtlasScaffold(
+                        dataSourceContent = { onBack -> DataSourceScreen(onBack, catalogCount = models.size) },
+                    ) { bottomPadding, listState, _ ->
                         ModelListScreen(
                             uiState = ModelListUiState(
                                 models = models,
@@ -549,5 +555,5 @@ class ModelAtlasAppTest {
         ),
     )
 
-    private val priceNotice = "价格为上游目录中某个服务商对该模型服务的报价，口径为 USD / 百万 tokens；同一模型的不同服务商价格不可直接比较，缓存、档位、模式与订阅等适用条件以服务商说明为准。"
+    private val priceNotice = "API 报价单位为美元／百万 tokens，具体计费以服务商说明为准。"
 }

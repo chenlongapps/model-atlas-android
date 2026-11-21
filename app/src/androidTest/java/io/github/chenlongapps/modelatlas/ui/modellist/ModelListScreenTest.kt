@@ -2,7 +2,6 @@ package io.github.chenlongapps.modelatlas.ui.modellist
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -34,7 +33,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
@@ -93,14 +91,13 @@ class ModelListScreenTest {
         assertPullRequestsRefresh(emptyList())
     }
 
-    @Test fun refreshFailureIsNonBlockingAndKeepsCatalogCount() {
+    @Test fun refreshFailureIsNonBlockingAndKeepsCatalogContent() {
         show(ModelListUiState(
             models = listOf(ModelSummary("lab/cached", "本地模型")),
             isLoading = false,
             refreshError = ModelListError.NETWORK,
         ))
         compose.onNodeWithText("本地模型").assertIsDisplayed()
-        compose.onNodeWithText("模型目录 · 1 个模型").assertIsDisplayed()
         compose.onNodeWithText("无法连接模型目录，请检查网络后重试。").assertIsDisplayed()
         compose.onNodeWithText("暂时无法加载").assertDoesNotExist()
     }
@@ -223,7 +220,8 @@ class ModelListScreenTest {
 
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
         compose.onNodeWithText(appName).assertIsDisplayed()
-        compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
+        compose.onNodeWithText("模型目录 · 40 个模型").assertDoesNotExist()
+        compose.onNodeWithText("收藏优先 · 组内按发布时间从新到旧").assertDoesNotExist()
     }
 
     @Test fun showsNameLabCompactMetadataAndDirectionalModalities() {
@@ -254,7 +252,6 @@ class ModelListScreenTest {
         listOf("输入", "输出").forEach {
             compose.onNodeWithContentDescription(it, useUnmergedTree = true).assertIsDisplayed()
         }
-        compose.onNodeWithText("模型目录 · 1 个模型").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("API 服务商：", substring = true).assertDoesNotExist()
         compose.onNodeWithText("本地示例数据", substring = true).assertDoesNotExist()
     }
@@ -383,7 +380,7 @@ class ModelListScreenTest {
         listOf(
             "API 价格",
             "美元 / 1M tokens",
-        ).forEach { text -> compose.onNodeWithText(text).performScrollTo().assertIsDisplayed() }
+        ).forEach { text -> compose.onNodeWithText(text).assertDoesNotExist() }
         assertField("price-input", "$0.60")
         assertField("price-output", "$0.15")
         assertField("price-cache-read", "缓存命中输入")
@@ -453,12 +450,10 @@ class ModelListScreenTest {
     }
 
     @Test fun narrowDarkCardWithLargeFontKeepsAllPriceColumnsReadable() {
-        var headerStyle = TextStyle.Default
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
                 ModelAtlasTheme(darkTheme = true, dynamicColor = false) {
-                    headerStyle = MaterialTheme.typography.labelSmall
                     ModelListScreen(
                         uiState = ModelListUiState(listOf(ModelSummary(
                             id = "deepseek/model",
@@ -472,15 +467,6 @@ class ModelListScreenTest {
                     )
                 }
             }
-        }
-        listOf("API 价格", "美元 / 1M tokens").forEach { text ->
-            val layouts = mutableListOf<TextLayoutResult>()
-            compose.onNodeWithText(text, useUnmergedTree = true).performScrollTo()
-                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            val layout = layouts.single()
-            assertEquals("Price header must use compact typography", headerStyle.fontSize, layout.layoutInput.style.fontSize)
-            assertEquals("Price header must use compact line height", headerStyle.lineHeight, layout.layoutInput.style.lineHeight)
-            assertNoTextClipping(text, layout)
         }
         listOf(
             "price-input" to "$0.0000000000000000001", "price-output" to "$123.45", "price-cache-read" to "$0.00",
@@ -722,9 +708,9 @@ class ModelListScreenTest {
         divider.assertIsDisplayed()
         val sectionBounds = section.getUnclippedBoundsInRoot()
         val dividerBounds = divider.getUnclippedBoundsInRoot()
-        val titleBounds = compose.onNodeWithText("API 价格").getUnclippedBoundsInRoot()
+        val inputBounds = compose.onNodeWithTag("price-input").getUnclippedBoundsInRoot()
         assertEquals("Price section must align with the divider", dividerBounds.left.value, sectionBounds.left.value, 0.5f)
-        assertEquals("Price title must not retain inner card padding", sectionBounds.left.value, titleBounds.left.value, 0.5f)
+        assertEquals("First price must not retain inner card padding", sectionBounds.left.value, inputBounds.left.value, 0.5f)
         assertTrue("Divider must precede the price section", dividerBounds.bottom < sectionBounds.top)
 
         // 比较实际绘制背景，避免仅移除 Surface 层级、却遗留独立底色。
@@ -757,7 +743,6 @@ class ModelListScreenTest {
         }
         listOf(
             compose.onNodeWithText(appName),
-            compose.onNodeWithText("模型目录 · 40 个模型"),
             compose.onNodeWithTag("model:lab/model-0"),
         ).forEach { node ->
             assertTrue("Initial content must avoid the top safe area", node.fetchSemanticsNode().boundsInRoot.top >= topInsetPx)
@@ -778,7 +763,6 @@ class ModelListScreenTest {
         compose.onNodeWithText(appName).assertIsNotDisplayed()
         compose.onNodeWithTag("model-list").performScrollToNode(hasTestTag("catalog-header"))
         compose.onNodeWithText(appName).assertIsDisplayed()
-        compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
         compose.onNodeWithTag("model-list")
             .performScrollToNode(hasTestTag("model:lab/model-39"))
             .performTouchInput { swipeUp() }

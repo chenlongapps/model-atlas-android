@@ -36,9 +36,11 @@ internal fun LazyListScope.compareBenchmarkItems(
             val note = when {
                 groups.isEmpty() -> R.string.compare_benchmarks_empty
                 shared.isEmpty() -> R.string.compare_benchmarks_no_shared
-                else -> R.string.detail_benchmarks_notice
+                else -> null
             }
-            Text(stringResource(note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (note != null) {
+                Text(stringResource(note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
     shared.forEach { group ->

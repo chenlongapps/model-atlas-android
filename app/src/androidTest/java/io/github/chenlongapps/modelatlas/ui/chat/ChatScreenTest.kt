@@ -87,6 +87,7 @@ class ChatScreenTest {
     @Test fun missingConfigAndWhitespaceCannotSendAndSuggestionsOnlyFillInput() {
         show(configured = false)
         compose.onNodeWithText("请先配置 API 和模型").assertIsDisplayed()
+        compose.onNodeWithText("消息将发送至你配置的 API。助手无法查看本地目录或实时价格。").assertIsDisplayed()
         compose.onNodeWithTag("chat-send").assertIsNotEnabled()
         compose.onNodeWithText("上下文长度和最大输出有什么区别？").performClick()
         compose.onNodeWithTag("chat-input").assert(hasText("上下文长度和最大输出有什么区别？"))
@@ -105,7 +106,7 @@ class ChatScreenTest {
         compose.onAllNodesWithTag("chat-turn-1").assertCountEquals(1)
         compose.onNodeWithTag("chat-stop").performClick()
         compose.waitUntil { fake.active.get() == 0 }
-        compose.onNodeWithText("已停止，回复未完成。此轮不会加入后续对话上下文。").assertIsDisplayed()
+        compose.onNodeWithText("已停止生成。").assertIsDisplayed()
         compose.onNodeWithTag("chat-reply-1").assert(hasText("第一段\n第二段"))
         compose.onNodeWithTag("chat-retry").performClick()
         compose.waitUntil { fake.calls.get() == 2 }
@@ -120,6 +121,7 @@ class ChatScreenTest {
         fake.channel.close(LlmException.Protocol())
         compose.onNodeWithTag("chat-reply-1").assert(hasText("部分文本"))
         compose.onNodeWithText("响应格式错误或传输中断，回复未完成。").assertIsDisplayed()
+        compose.onNodeWithText("重新生成会替换本轮回复，可能再次计费。").assertIsDisplayed()
         compose.onNodeWithTag("chat-retry").assertIsDisplayed()
         assertEquals(1, fake.calls.get())
     }
@@ -144,6 +146,7 @@ class ChatScreenTest {
         compose.onNodeWithText("取消").performClick()
         compose.runOnIdle { assertEquals("model", vm.uiState.value.modelId) }
         compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
+        compose.onNodeWithText("将删除本机 API 配置和当前对话，无法撤销。").assertIsDisplayed()
         compose.onNodeWithTag("chat-config-clear-confirm").performClick()
         compose.onNodeWithText("请先配置 API 和模型").assertIsDisplayed()
         compose.onNodeWithTag("chat-send").assertIsNotEnabled()

@@ -183,12 +183,8 @@ internal fun BenchmarkScreen(
             ) {
                 item("title") {
                     Column {
-                        Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(stringResource(R.string.benchmark_page_title), style = MaterialTheme.typography.headlineMedium,
-                                modifier = Modifier.semantics { heading() })
-                            Text(stringResource(R.string.benchmark_overview_notice), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        Text(stringResource(R.string.benchmark_page_title), style = MaterialTheme.typography.headlineMedium,
+                            modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() })
                         AnimatedCatalogStatusNotice(notice, onRefresh, onDismissNotice,
                             updatedMessage = stringResource(R.string.benchmark_updated))
                     }

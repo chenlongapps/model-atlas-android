@@ -99,7 +99,8 @@ class ModelCatalogControlsTest {
         }
         compose.onNodeWithText("目录暂时为空").assertDoesNotExist()
         compose.onNodeWithText("清除全部条件").performScrollTo().performClick()
-        compose.onNodeWithText("模型目录 · 3 个模型").assertIsDisplayed()
+        compose.onNodeWithText("模型目录 · 3 个模型").assertDoesNotExist()
+        compose.onNodeWithText("匹配 0 / 3 个模型").assertDoesNotExist()
         compose.onNodeWithText("筛选 · 0").assertIsDisplayed()
         compose.runOnIdle { state.value = state.value.copy(models = emptyList()) }
         compose.onNodeWithText("目录暂时为空").assertIsDisplayed()

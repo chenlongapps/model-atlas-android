@@ -24,6 +24,7 @@ import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailScreen
 import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailStatus
 import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelDetailUiState
+import io.github.chenlongapps.modelatlas.ui.settings.DataSourceRoute
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
@@ -94,6 +95,28 @@ class SilentCatalogUpdateTest {
         compose.runOnIdle { assertEquals(4, repository.requests) }
     }
 
+    @Test fun settingsCountUsesDisplayedSnapshotNotFilterOrBackgroundUpdate() {
+        show()
+        compose.runOnIdle { viewModel.setQuery(ModelListQuery(search = "lab/0")) }
+        compose.onNodeWithText("匹配 1 / 40 个模型").assertIsDisplayed()
+        finishBackground()
+        openDataSource()
+        compose.onNodeWithText("模型目录 · 40 个模型").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithTag("nav-models").performClick()
+        compose.runOnIdle { viewModel.setQuery(ModelListQuery()) }
+        refreshThroughAccessibility()
+        compose.onNodeWithText("Latest").assertIsDisplayed()
+        openDataSource()
+        compose.onNodeWithText("模型目录 · 1 个模型").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(2, repository.requests) }
+    }
+
+    private fun openDataSource() {
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.onNodeWithText("数据来源与许可").performClick()
+    }
+
     private fun refreshThroughAccessibility() {
         val actions = compose.onNodeWithTag("model-list").fetchSemanticsNode().config[SemanticsActions.CustomActions]
         compose.runOnIdle { check(actions.single { it.label == "刷新目录" }.action()) }
@@ -113,13 +136,16 @@ class SilentCatalogUpdateTest {
         compose.setContent {
             val state by viewModel.uiState.collectAsState()
             ModelAtlasTheme(dynamicColor = false) {
-                ModelAtlasScaffold(detailContent = { id, back ->
-                    val models by repository.models.collectAsState()
-                    val model = models.firstOrNull { it.id == id }
-                    ModelDetailScreen(ModelDetailUiState(id,
-                        if (model == null) ModelDetailStatus.NOT_FOUND else ModelDetailStatus.CONTENT,
-                        model?.let { ModelDetail(it.id, it.name, fetchedAtEpochMillis = 1) }), onBack = back)
-                }) { padding, listState, click ->
+                ModelAtlasScaffold(
+                    dataSourceContent = { back -> DataSourceRoute(viewModel, back) },
+                    detailContent = { id, back ->
+                        val models by repository.models.collectAsState()
+                        val model = models.firstOrNull { it.id == id }
+                        ModelDetailScreen(ModelDetailUiState(id,
+                            if (model == null) ModelDetailStatus.NOT_FOUND else ModelDetailStatus.CONTENT,
+                            model?.let { ModelDetail(it.id, it.name, fetchedAtEpochMillis = 1) }), onBack = back)
+                    },
+                ) { padding, listState, click ->
                     ModelListScreen(state, onRefresh = viewModel::refresh, onDismissNotice = viewModel::clearMessage,
                         bottomOverlayPadding = padding, listState = listState, onModelClick = click)
                 }

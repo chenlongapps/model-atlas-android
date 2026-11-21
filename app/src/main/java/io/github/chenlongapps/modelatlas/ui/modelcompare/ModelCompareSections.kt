@@ -79,8 +79,6 @@ internal fun LazyListScope.comparisonItems(
             if (prices.none { it?.input != null || it?.output != null }) {
                 Text(stringResource(R.string.compare_no_base_price), style = MaterialTheme.typography.bodyMedium)
             }
-            Text(stringResource(R.string.compare_base_price_notice), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     val hasBasic = metadata.any {
@@ -93,7 +91,17 @@ internal fun LazyListScope.comparisonItems(
             it.structuredOutput != null || it.temperature != null
     }
     val hasLicense = models.any { !it.license.isNullOrBlank() }
-    if (!(hasBasic || hasParameters || hasCapabilities || hasLicense || prices.any { it != null })) return
+    val extraPrices = listOf(
+        R.string.model_list_price_cache_read_label to prices.map { it?.cacheRead },
+        R.string.detail_cache_write to prices.map { it?.cacheWrite },
+        R.string.detail_reasoning to prices.map { it?.reasoning },
+        R.string.detail_input_audio to prices.map { it?.inputAudio },
+        R.string.detail_output_audio to prices.map { it?.outputAudio },
+    ).filter { (_, values) -> values.any { it != null } }
+    val hasServiceId = prices.any { !it?.offeringId.isNullOrBlank() }
+    val hasPriceDetails = extraPrices.isNotEmpty() || hasServiceId
+    val hasTiers = prices.any { it?.tiers?.isNotEmpty() == true }
+    if (!(hasBasic || hasParameters || hasCapabilities || hasLicense || hasPriceDetails || hasTiers)) return
     item("more") {
         CompareToggleCard("more", R.string.compare_more_information, expandedDetails, onToggleDetail)
     }
@@ -119,26 +127,22 @@ internal fun LazyListScope.comparisonItems(
             BooleanRow(R.string.detail_reasoning, metadata.map { it.reasoning }, models)
             BooleanRow(R.string.detail_structured_output, metadata.map { it.structuredOutput }, models)
             BooleanRow(R.string.detail_temperature, metadata.map { it.temperature }, models)
-            Text(stringResource(R.string.compare_capability_notice), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    if (prices.any { it != null }) item("price-details") {
+    if (hasPriceDetails) item("price-details") {
         CompareSection(stringResource(R.string.compare_price_details), R.drawable.ic_calendar, models) {
             Text(stringResource(R.string.model_list_price_unit), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ExtraPriceRows(prices, models)
-            if (prices.any { !it?.offeringId.isNullOrBlank() }) {
+            extraPrices.forEach { (label, values) -> PriceRow(label, values, models) }
+            if (hasServiceId) {
                 CompareDisclosure("service-id", stringResource(R.string.compare_price_service), expandedDetails, onToggleDetail) {
                     TextRow(R.string.compare_price_service, prices.map { it?.offeringId }, models)
                 }
             }
-            Text(stringResource(R.string.compare_price_notice), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     // 展开状态留在页面保存域，Lazy 条目回收或异步恢复不会丢失。
-    if (prices.any { it?.tiers?.isNotEmpty() == true }) {
+    if (hasTiers) {
         item("tiers") { CompareTierSection(prices, models, "tiers" in expandedDetails, { onToggleDetail("tiers") }) }
     }
     if (hasLicense) item("weights") {
@@ -314,18 +318,6 @@ private fun CompareCell(label: String, modelName: String, value: CompareValue, m
         } else Text(value.text, style = MaterialTheme.typography.bodyMedium,
             color = if (value.accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
     }
-}
-
-@Composable
-private fun ExtraPriceRows(prices: List<ModelPriceSummary?>, models: List<ModelDetail>) {
-    val extras = listOf(
-        R.string.model_list_price_cache_read_label to prices.map { it?.cacheRead },
-        R.string.detail_cache_write to prices.map { it?.cacheWrite },
-        R.string.detail_reasoning to prices.map { it?.reasoning },
-        R.string.detail_input_audio to prices.map { it?.inputAudio },
-        R.string.detail_output_audio to prices.map { it?.outputAudio },
-    )
-    extras.forEach { (label, values) -> PriceRow(label, values, models) }
 }
 
 @Composable

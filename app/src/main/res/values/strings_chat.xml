@@ -4,7 +4,7 @@
     <string name="chat_config_title">会话配置</string>
     <string name="chat_config_required">请先配置 API 和模型</string>
     <string name="chat_welcome">想了解模型的哪些方面？</string>
-    <string name="chat_notice">使用你配置的模型进行文本对话。助手未连接本地目录，无法读取当前页面或实时价格；回答仅供参考，请核对来源。对话将发送至你选择的 API 服务。</string>
+    <string name="chat_notice">消息将发送至你配置的 API。助手无法查看本地目录或实时价格。</string>
     <string name="chat_suggestion_context">上下文长度和最大输出有什么区别？</string>
     <string name="chat_suggestion_price">如何理解每百万 tokens 的输入和输出价格？</string>
     <string name="chat_suggestion_weights">开放权重和开源有什么区别？</string>
@@ -14,7 +14,7 @@
     <string name="chat_user">你</string>
     <string name="chat_waiting">正在等待回复…</string>
     <string name="chat_copy">复制消息</string>
-    <string name="chat_stopped">已停止，回复未完成。此轮不会加入后续对话上下文。</string>
+    <string name="chat_stopped">已停止生成。</string>
     <string name="chat_error_network">网络连接失败，回复未完成。</string>
     <string name="chat_error_timeout">请求超时，回复未完成。</string>
     <string name="chat_error_http">服务请求失败（HTTP %1$d），请检查配置或稍后重试。</string>
@@ -22,9 +22,9 @@
     <string name="chat_error_remote">模型服务返回错误，回复未完成。</string>
     <string name="chat_error_unknown">请求失败，回复未完成。</string>
     <string name="chat_empty_response">模型未返回文本。</string>
-    <string name="chat_retry_notice">失败或停止的轮次不加入后续上下文。重试将替换本轮部分回复，并重新发起可能计费的请求。</string>
+    <string name="chat_retry_notice">重新生成会替换本轮回复，可能再次计费。</string>
     <string name="chat_retry">重新生成</string>
-    <string name="chat_config_notice">API 地址和 Model ID 保存在本机；API Key 通过 Android Keystore 加密保存，不参与备份或设备迁移。对话仅保留在内存中。应用配置成功后才生效，更改配置会清空对话；不会自动发送请求。</string>
+    <string name="chat_config_notice">API 配置保存在本机，密钥加密保存且不备份。应用不保存聊天记录，更改配置会清空当前对话。</string>
     <string name="chat_base_url">API Base URL</string>
     <string name="chat_base_url_hint">完整 API 根路径（HTTPS），不自动补 /v1；不要填写 chat/completions。</string>
     <string name="chat_api_key">API Key</string>
@@ -38,6 +38,6 @@
     <string name="chat_config_key_error">无法加密或解密 API Key。请重试；若密钥已丢失或失效，请清除已保存配置后重新填写。</string>
     <string name="chat_config_reload">重试读取</string>
     <string name="chat_config_clear">清除已保存配置</string>
-    <string name="chat_config_clear_notice">将删除本机 API 配置、加密密钥和当前内存对话。此操作不可撤销，不影响服务商账户。</string>
+    <string name="chat_config_clear_notice">将删除本机 API 配置和当前对话，无法撤销。</string>
     <string name="chat_config_clear_confirm">确认清除</string>
 </resources>

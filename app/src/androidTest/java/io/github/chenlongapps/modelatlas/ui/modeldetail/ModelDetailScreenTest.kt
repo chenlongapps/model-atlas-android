@@ -743,6 +743,7 @@ class ModelDetailScreenTest {
             ModelBenchmark("Zero evaluation", 0.0, source = "javascript:alert(1)"),
         )))
         selectTab("BENCHMARKS")
+        compose.onNodeWithText("不同来源和配置的结果不一定可以直接比较。").assertDoesNotExist()
         listOf("Example evaluation", "84.1", "v2", "no tools", "Zero evaluation", "0.0").forEach {
             scrollTo(it)
             compose.onNodeWithText(it).assertIsDisplayed()
@@ -790,8 +791,8 @@ class ModelDetailScreenTest {
     @Test fun benchmarkTestDataIsExplicitlyLabeled() {
         show(detail().copy(benchmarks = listOf(ModelBenchmark("示例评测", 42.0, sourceType = "test", unit = "points", toolsEnabled = false))))
         selectTab("BENCHMARKS")
-        scrollTo("以下包含虚构测试数据，不代表真实评测成绩。")
-        compose.onNodeWithText("以下包含虚构测试数据，不代表真实评测成绩。").assertIsDisplayed()
+        scrollTo("包含虚构测试数据")
+        compose.onNodeWithText("包含虚构测试数据").assertIsDisplayed()
         scrollTo("points")
         compose.onNodeWithText("points").assertIsDisplayed()
         scrollTo("未启用")

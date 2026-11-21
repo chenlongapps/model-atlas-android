@@ -93,6 +93,10 @@ class ModelCompareScreenTest {
         val second = details[1].copy(name = longName,
             benchmarks = listOf(assessment.copy(score = null, scoreText = "74.5 ± 1.3", toolsEnabled = null)))
         showAtWidth(400.dp, ready.copy(first = ready.first.copy(detail = first), second = ready.second.copy(detail = second)))
+        compose.onNodeWithText("模型对比").assertIsDisplayed()
+        compose.onNodeWithText("对照两个模型的评测分数、关键规格与报价").assertDoesNotExist()
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasText("评测分数"))
+        compose.onNodeWithText("不同来源和配置的结果不一定可以直接比较。").assertDoesNotExist()
         val firstScore = "Model A，Example Benchmark，分数：0.0 %"
         val secondScore = "$longName，Example Benchmark，分数：74.5 ± 1.3 %"
         scrollToDescription(firstScore)
@@ -254,6 +258,21 @@ class ModelCompareScreenTest {
         toggleDetail("license")
         scrollToDescription("Model A，模型许可：A complete license name that must not be truncated")
         compose.onNodeWithText("开放权重不等于开源或允许商用，请核对模型许可与使用条款。").assertDoesNotExist()
+    }
+
+    @Test fun baseQuoteAloneDoesNotOfferEmptyMoreInformation() {
+        val models = summaries.map { summary ->
+            summary.copy(price = summary.price?.copy(tiers = emptyList(), offeringId = null))
+        }
+        val state = ready.copy(models = models, first = ready.first.copy(
+            detail = details[0].copy(metadata = ModelDetailMetadata(), license = null),
+        ), second = ready.second.copy(detail = details[1].copy(metadata = ModelDetailMetadata())))
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state) } }
+
+        scrollToDescription("Model A，报价服务商：Default Provider")
+        compose.onNodeWithText("美元 / 1M tokens").assertIsDisplayed()
+        scrollToDescription("Model A，输出：$0.003")
+        compose.onNodeWithTag("compare-more-toggle").assertDoesNotExist()
     }
 
     @Test fun canonicalIdsAreNotShownButPickerCanStillSearchAndSelectById() {

@@ -33,20 +33,20 @@ import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 
 internal fun LazyListScope.benchmarkItems(model: ModelDetail) {
     val benchmarks = model.benchmarks
-    item(key = "benchmark-notice") {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (benchmarks.isNullOrEmpty()) {
-                Text(stringResource(if (benchmarks == null) R.string.detail_benchmarks_missing else R.string.detail_benchmarks_empty),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                Text(stringResource(R.string.detail_benchmarks_notice), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (benchmarks?.any { it.sourceType == "test" } == true) {
-                Text(stringResource(R.string.detail_benchmark_test_notice), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error)
-            }
-        }
+    val message = when {
+        benchmarks == null -> R.string.detail_benchmarks_missing
+        benchmarks.isEmpty() -> R.string.detail_benchmarks_empty
+        benchmarks.any { it.sourceType == "test" } -> R.string.detail_benchmark_test_notice
+        else -> null
+    }
+    if (message != null) item(key = "benchmark-notice") {
+        val isTestNotice = message == R.string.detail_benchmark_test_notice
+        Text(
+            stringResource(message),
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            style = if (isTestNotice) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = if (isTestNotice) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
     // 定义 ID 不是成绩 ID；名称 A–Z、同名数值降序，平分稳定，条目 key 仍使用源下标。
     benchmarks?.let(::alphabeticalBenchmarkEntries)?.forEach { (index, benchmark) ->

@@ -155,12 +155,8 @@ internal fun ModelCompareScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item("title") {
-                Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(stringResource(R.string.compare_title), style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.semantics { heading() })
-                    Text(stringResource(R.string.compare_subtitle), style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                Text(stringResource(R.string.compare_title), style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() })
             }
             item("selection") {
                 CompareSelection(uiState, onChoose = { pickerSlot = it }, onRemove, onRetry)

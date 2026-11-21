@@ -126,17 +126,14 @@ internal fun ModelCardSkeleton(
                 }
             }
             HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SkeletonBlock(shimmerProgress, Modifier.fillMaxWidth(0.55f).height(labelHeight))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    repeat(3) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            SkeletonBlock(shimmerProgress, Modifier.fillMaxWidth(0.6f).height(labelHeight))
-                            SkeletonBlock(shimmerProgress, Modifier.fillMaxWidth(0.85f).height(titleHeight))
-                        }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                repeat(3) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        SkeletonBlock(shimmerProgress, Modifier.fillMaxWidth(0.6f).height(labelHeight))
+                        SkeletonBlock(shimmerProgress, Modifier.fillMaxWidth(0.85f).height(titleHeight))
                     }
                 }
             }
