@@ -2,6 +2,7 @@ package io.github.chenlongapps.modelatlas.ui.settings
 
 import androidx.lifecycle.ViewModelStore
 import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
+import io.github.chenlongapps.modelatlas.data.model.CompareModelSelection
 import io.github.chenlongapps.modelatlas.data.model.ThemeColorSource
 import io.github.chenlongapps.modelatlas.data.model.ThemeMode
 import io.github.chenlongapps.modelatlas.data.model.ThemePreset
@@ -249,6 +250,8 @@ class AppearanceViewModelTest {
         // 替换订阅的上游可在首次成功后失败。
         val values = MutableStateFlow(false)
         val failing = object : SettingsRepository {
+            override suspend fun readCompareSelection() = error("Not used")
+            override suspend fun saveCompareSelection(selection: CompareModelSelection): Unit = error("Not used")
             override fun observeAppearance() = flow {
                 values.collect { fail ->
                     if (fail) throw IOException("read")
@@ -273,6 +276,8 @@ class AppearanceViewModelTest {
         var writeFailure = false
         var gate: CompletableDeferred<Unit>? = null
         var writes = 0
+        override suspend fun readCompareSelection() = error("Not used")
+        override suspend fun saveCompareSelection(selection: CompareModelSelection): Unit = error("Not used")
         override fun observeAppearance() = flow {
             if (readFailure) throw IOException("read")
             if (hangRead) awaitCancellation()

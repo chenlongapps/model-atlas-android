@@ -109,6 +109,8 @@ fun ModelDetailRecord.toModelDetail(): ModelDetail? {
                 reasoningEffort = s.reasoningEffort, toolsEnabled = s.toolsEnabled, sourceType = s.sourceType,
                 description = record.definition?.descriptionZhCn.nonBlank() ?: record.definition?.description.nonBlank(),
                 scoreText = s.scoreText, benchmarkId = s.benchmarkId,
+                benchmarkDefinitionVersion = record.definition
+                    ?.takeIf { it.version != "unspecified" && it.acceptsVersion(s.version) }?.version,
             )
         },
     )

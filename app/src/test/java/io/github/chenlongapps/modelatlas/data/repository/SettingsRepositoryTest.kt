@@ -1,21 +1,29 @@
 package io.github.chenlongapps.modelatlas.data.repository
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
+import io.github.chenlongapps.modelatlas.data.model.CompareModelSelection
 import io.github.chenlongapps.modelatlas.data.model.ThemeColorSource
 import io.github.chenlongapps.modelatlas.data.model.ThemeMode
 import io.github.chenlongapps.modelatlas.data.model.ThemePreset
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -74,6 +82,67 @@ class SettingsRepositoryTest {
         }
     }
 
+    @Test fun compareSelectionPersistsOrderedIdsAndRemovedSlotsAcrossStoreRecreation() = runTest {
+        val file = File(folder.root, SettingsFileName)
+        suspend fun withStore(block: suspend (SettingsRepository) -> Unit) {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            try {
+                block(repository(file, scope))
+            } finally {
+                scope.coroutineContext.job.cancelAndJoin()
+            }
+        }
+        withStore { repository ->
+            assertEquals(CompareModelSelection(), repository.readCompareSelection())
+            coroutineScope {
+                launch { repository.setThemeMode(ThemeMode.Dark) }
+                launch { repository.saveCompareSelection(CompareModelSelection("lab/b", "lab/a")) }
+            }
+        }
+        withStore { repository ->
+            assertEquals(CompareModelSelection("lab/b", "lab/a"), repository.readCompareSelection())
+            assertEquals(ThemeMode.Dark, repository.observeAppearance().first().mode)
+            repository.saveCompareSelection(CompareModelSelection(secondId = "lab/a"))
+        }
+        withStore { repository ->
+            assertEquals(CompareModelSelection(secondId = "lab/a"), repository.readCompareSelection())
+            repository.saveCompareSelection(CompareModelSelection("lab/a", "lab/a"))
+            assertEquals(CompareModelSelection("lab/a"), repository.readCompareSelection())
+            repository.saveCompareSelection(CompareModelSelection())
+        }
+        withStore { assertEquals(CompareModelSelection(), it.readCompareSelection()) }
+    }
+
+    @Test fun compareSelectionReadWaitsForPreviouslyQueuedWrites() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val file = File(folder.root, SettingsFileName)
+            val delegate = PreferenceDataStoreFactory.create(scope = scope, produceFile = { file })
+            val writeGate = CompletableDeferred<Unit>()
+            val dataAccessed = CompletableDeferred<Unit>()
+            val dataStore = object : DataStore<Preferences> {
+                override val data = flow {
+                    dataAccessed.complete(Unit)
+                    emitAll(delegate.data)
+                }
+                override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences {
+                    writeGate.await()
+                    return delegate.updateData(transform)
+                }
+            }
+            val repository = DataStoreSettingsRepository(dataStore)
+            val latest = CompareModelSelection(secondId = "lab/b")
+            launch(start = CoroutineStart.UNDISPATCHED) { repository.saveCompareSelection(CompareModelSelection("lab/a", "lab/b")) }
+            launch(start = CoroutineStart.UNDISPATCHED) { repository.saveCompareSelection(latest) }
+            val restored = async(start = CoroutineStart.UNDISPATCHED) { repository.readCompareSelection() }
+            assertFalse(dataAccessed.isCompleted)
+            writeGate.complete(Unit)
+            assertEquals(latest, restored.await())
+        } finally {
+            scope.coroutineContext.job.cancelAndJoin()
+        }
+    }
+
     @Test fun corruptFileIsReportedAndNeverAutomaticallyReplaced() = runTest {
         val file = File(folder.root, SettingsFileName).apply { writeBytes(byteArrayOf(0, 1, 2, 3, 4)) }
         val before = file.readBytes()
@@ -86,6 +155,14 @@ class SettingsRepositoryTest {
             } catch (_: IOException) { }
             try {
                 repository.setThemeMode(ThemeMode.Dark)
+                fail("Must not replace unreadable settings")
+            } catch (_: IOException) { }
+            try {
+                repository.readCompareSelection()
+                fail("Must not treat unreadable selection as empty")
+            } catch (_: IOException) { }
+            try {
+                repository.saveCompareSelection(CompareModelSelection("lab/a"))
                 fail("Must not replace unreadable settings")
             } catch (_: IOException) { }
             assertArrayEquals(before, file.readBytes())

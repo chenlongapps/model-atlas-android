@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.data.repository
 
 import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
+import io.github.chenlongapps.modelatlas.data.model.CompareModelSelection
 import io.github.chenlongapps.modelatlas.data.model.ThemeColorSource
 import io.github.chenlongapps.modelatlas.data.model.ThemeMode
 import io.github.chenlongapps.modelatlas.data.model.ThemePreset
@@ -9,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 /** 持久化状态，不包含 UI 拖动预览；读取或写入失败向调用方抛出，不以默认值掩盖失败。 */
 interface SettingsRepository {
     fun observeAppearance(): Flow<AppearanceSettings>
+
+    /** 等待先前已接收的选择写入，避免页面重新创建时读到中间状态。 */
+    suspend fun readCompareSelection(): CompareModelSelection
+
+    /** 按调用顺序原子提交两个槽位。 */
+    suspend fun saveCompareSelection(selection: CompareModelSelection)
 
     /** 原子读改写；transform 应无副作用。仅在持久化成功后返回最新状态。 */
     suspend fun updateAppearance(transform: (AppearanceSettings) -> AppearanceSettings): AppearanceSettings

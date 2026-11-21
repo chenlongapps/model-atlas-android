@@ -2,6 +2,8 @@ package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
+import io.github.chenlongapps.modelatlas.data.model.CompareModelSelection
 import io.github.chenlongapps.modelatlas.data.model.FavoriteIdentity
 import io.github.chenlongapps.modelatlas.data.model.FavoriteModel
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
@@ -9,12 +11,17 @@ import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
+import io.github.chenlongapps.modelatlas.data.repository.SettingsRepository
 import io.github.chenlongapps.modelatlas.testing.MainDispatcherRule
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -27,8 +34,10 @@ class ModelCompareViewModelTest {
     @get:Rule val dispatcher = MainDispatcherRule()
     private val repository = FakeRepository()
     private val favorites = FakeFavorites()
+    private val settings = FakeSettings()
     private val store = ViewModelStore()
-    private fun create(handle: SavedStateHandle = SavedStateHandle()) = ModelCompareViewModel(repository, handle, favorites).also { store.put("compare", it) }
+    private fun create(handle: SavedStateHandle = SavedStateHandle()) =
+        ModelCompareViewModel(repository, handle, favorites, settings).also { store.put("compare", it) }
     @After fun close() = store.clear()
 
     @Test fun offscreenDoesNotReadCatalogOrNetworkAndOnlySelectedModelsAreObserved() = runTest {
@@ -36,6 +45,7 @@ class ModelCompareViewModelTest {
         advanceUntilIdle()
         assertEquals(0, repository.catalogReads)
         assertEquals(0, favorites.reads)
+        assertEquals(0, settings.reads)
         vm.setActive(true)
         advanceUntilIdle()
         assertEquals(1, repository.catalogReads)
@@ -64,6 +74,7 @@ class ModelCompareViewModelTest {
         assertEquals("lab/a", vm.uiState.value.first.modelId)
         assertNull(vm.uiState.value.second.modelId)
         assertEquals(1, repository.activeDetails)
+        assertEquals(listOf(CompareModelSelection("lab/a")), settings.writes)
     }
 
     @Test fun replacementAndRemovalCancelOldSubscriptionAndSaveOnlyIds() = runTest {
@@ -84,6 +95,8 @@ class ModelCompareViewModelTest {
         assertEquals(0, repository.activeDetails)
         assertNull(handle.get<String>(ModelCompareViewModel.FIRST_KEY))
         assertNull(vm.uiState.value.first.detail)
+        assertEquals(listOf(CompareModelSelection("lab/a"), CompareModelSelection("lab/b"), CompareModelSelection()),
+            settings.writes)
     }
 
     @Test fun restoresTwoIdsWithoutSerializingCatalogAndSanitizesDuplicateIds() = runTest {
@@ -95,6 +108,118 @@ class ModelCompareViewModelTest {
         assertTrue(vm.uiState.value.isReady)
         val duplicate = create(SavedStateHandle(mapOf(ModelCompareViewModel.FIRST_KEY to "lab/a", ModelCompareViewModel.SECOND_KEY to "lab/a")))
         assertNull(duplicate.uiState.value.second.modelId)
+    }
+
+    @Test fun waitsForDiskRestoreBeforeEditingAndReadsNewestLocalDetailsInSlotOrder() = runTest {
+        settings.saved = CompareModelSelection("lab/b", "lab/a")
+        val gate = CompletableDeferred<Unit>().also { settings.readGate = it }
+        val handle = SavedStateHandle()
+        val vm = create(handle)
+        vm.setActive(true)
+        advanceUntilIdle()
+        assertEquals(CompareReadStatus.CONTENT, vm.uiState.value.catalogStatus)
+        assertEquals(CompareReadStatus.LOADING, vm.uiState.value.selectionStatus)
+        vm.select(0, "lab/a")
+        vm.remove(1)
+        assertTrue(settings.writes.isEmpty())
+        assertEquals(0, repository.activeDetails)
+        repository.details.getValue("lab/b").value = detail("lab/b").copy(name = "Updated locally")
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("Updated locally", vm.uiState.value.first.detail?.name)
+        assertEquals("lab/a", vm.uiState.value.second.detail?.id)
+        assertEquals("lab/b", handle.get<String>(ModelCompareViewModel.FIRST_KEY))
+        assertEquals("lab/a", handle.get<String>(ModelCompareViewModel.SECOND_KEY))
+        assertTrue(settings.writes.isEmpty())
+    }
+
+    @Test fun savedStateTakesPrecedenceOverDiskIncludingExplicitRemovalOfBothSlots() = runTest {
+        settings.saved = CompareModelSelection("lab/a", "lab/b")
+        val partial = create(SavedStateHandle(mapOf(ModelCompareViewModel.SECOND_KEY to "lab/a")))
+        partial.setActive(true)
+        advanceUntilIdle()
+        assertNull(partial.uiState.value.first.modelId)
+        assertEquals("lab/a", partial.uiState.value.second.detail?.id)
+        val removed = create(SavedStateHandle(mapOf(
+            ModelCompareViewModel.FIRST_KEY to null, ModelCompareViewModel.SECOND_KEY to null,
+        )))
+        removed.setActive(true)
+        advanceUntilIdle()
+        assertNull(removed.uiState.value.first.modelId)
+        assertNull(removed.uiState.value.second.modelId)
+        assertEquals(0, settings.reads)
+        assertTrue(settings.writes.isEmpty())
+    }
+
+    @Test fun failedReadDoesNotClearPersistedSelectionAndMissingModelCanReappearAfterRetry() = runTest {
+        settings.saved = CompareModelSelection("lab/a", "lab/b")
+        settings.failRead = true
+        repository.details.getValue("lab/a").value = null
+        val handle = SavedStateHandle()
+        val vm = create(handle)
+        vm.setActive(true)
+        advanceUntilIdle()
+        assertEquals(CompareReadStatus.ERROR, vm.uiState.value.selectionStatus)
+        assertFalse(handle.contains(ModelCompareViewModel.FIRST_KEY))
+        vm.select(0, "lab/b")
+        vm.remove(1)
+        settings.failRead = false
+        vm.retrySelectionLoad()
+        advanceUntilIdle()
+        assertEquals(CompareReadStatus.NOT_FOUND, vm.uiState.value.first.status)
+        assertEquals("lab/a", vm.uiState.value.first.modelId)
+        assertEquals("lab/b", vm.uiState.value.second.detail?.id)
+        assertTrue(settings.writes.isEmpty())
+        repository.details.getValue("lab/a").value = detail("lab/a")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.isReady)
+    }
+
+    @Test fun rapidEditsSaveInOrderEvenAfterLeavingAndRestoreIntoNewViewModel() = runTest {
+        val gate = CompletableDeferred<Unit>().also { settings.writeGate = it }
+        val vm = create()
+        vm.setActive(true)
+        advanceUntilIdle()
+        vm.select(1, "lab/b")
+        vm.select(0, "lab/a")
+        vm.remove(1)
+        vm.select(1, "lab/b")
+        vm.remove(0)
+        vm.setActive(false)
+        store.clear()
+        val reopened = create()
+        reopened.setActive(true)
+        advanceUntilIdle()
+        assertEquals(CompareReadStatus.LOADING, reopened.uiState.value.selectionStatus)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf(
+            CompareModelSelection(secondId = "lab/b"), CompareModelSelection("lab/a", "lab/b"),
+            CompareModelSelection("lab/a"), CompareModelSelection("lab/a", "lab/b"),
+            CompareModelSelection(secondId = "lab/b"),
+        ), settings.writes)
+        assertNull(reopened.uiState.value.first.modelId)
+        assertEquals("lab/b", reopened.uiState.value.second.detail?.id)
+    }
+
+    @Test fun failedWriteKeepsNewSelectionInMemoryAndRetrySavesIt() = runTest {
+        settings.saved = CompareModelSelection("lab/a")
+        settings.failWrite = true
+        val handle = SavedStateHandle()
+        val vm = create(handle)
+        vm.setActive(true)
+        advanceUntilIdle()
+        vm.select(0, "lab/b")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.selectionSaveFailed)
+        assertEquals("lab/b", vm.uiState.value.first.detail?.id)
+        assertEquals("lab/b", handle.get<String>(ModelCompareViewModel.FIRST_KEY))
+        assertEquals(CompareModelSelection("lab/a"), settings.saved)
+        settings.failWrite = false
+        vm.retrySelectionSave()
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.selectionSaveFailed)
+        assertEquals(CompareModelSelection("lab/b"), settings.saved)
     }
 
     @Test fun stopsAllSubscriptionsOffscreenAndReopensWithLatestLocalData() = runTest {
@@ -262,6 +387,32 @@ class ModelCompareViewModelTest {
     }
 
     private fun favorite(id: String) = FavoriteModel(FavoriteIdentity(id, id, "lab"), 10, null)
+
+    private class FakeSettings : SettingsRepository {
+        private val selectionLock = Mutex()
+        var saved = CompareModelSelection()
+        var reads = 0
+        val writes = mutableListOf<CompareModelSelection>()
+        var readGate: CompletableDeferred<Unit>? = null
+        var writeGate: CompletableDeferred<Unit>? = null
+        var failRead = false
+        var failWrite = false
+        override suspend fun readCompareSelection(): CompareModelSelection = selectionLock.withLock {
+            reads++
+            readGate?.await()
+            if (failRead) throw IOException("read")
+            saved
+        }
+        override suspend fun saveCompareSelection(selection: CompareModelSelection) = selectionLock.withLock {
+            writeGate?.await()
+            if (failWrite) throw IOException("write")
+            saved = selection
+            writes += selection
+        }
+        override fun observeAppearance(): Flow<AppearanceSettings> = error("Not used")
+        override suspend fun updateAppearance(transform: (AppearanceSettings) -> AppearanceSettings): AppearanceSettings =
+            error("Not used")
+    }
 
     private class FakeFavorites : FavoriteRepository {
         val items = MutableStateFlow<List<FavoriteModel>>(emptyList())

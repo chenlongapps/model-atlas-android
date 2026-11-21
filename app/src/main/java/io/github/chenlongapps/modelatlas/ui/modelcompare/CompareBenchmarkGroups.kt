@@ -1,73 +1,145 @@
 package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import io.github.chenlongapps.modelatlas.data.model.ModelBenchmark
+import java.net.URI
 
 internal data class CompareBenchmarkGroup(
     val key: CompareBenchmarkKey,
-    val name: String,
-    val first: List<ModelBenchmark>,
-    val second: List<ModelBenchmark>,
+    val first: ModelBenchmark,
+    val second: ModelBenchmark,
+    val referenceOnly: Boolean = false,
 ) {
-    val shared: Boolean get() = first.isNotEmpty() && second.isNotEmpty()
-    val configurations: List<CompareBenchmarkConfiguration> = compareConfigurations(key, first, second)
-    // 只能展示唯一的一对明确匹配；多对匹配时留给用户选择配置，不挑分数。
-    private val comparableConfigurations = configurations.filter { it.comparable }
-    val comparableCount: Int get() = comparableConfigurations.size
-    val representative: CompareBenchmarkConfiguration? = comparableConfigurations.singleOrNull()
+    val name: String get() = first.name
 }
-
-internal data class CompareBenchmarkConfiguration(
-    val key: String,
-    val first: ModelBenchmark?,
-    val second: ModelBenchmark?,
-    val comparable: Boolean = false,
-)
 
 internal data class CompareBenchmarkKey(
-    val id: String?,
-    val version: String?,
-    val metric: String?,
-    val unit: String?,
+    val id: String,
+    val version: String,
+    val metric: String,
+    val unit: String,
     val test: Boolean,
-    // 未关联定义的成绩只在各自模型侧展示，不用显示名称猜测共同评测。
-    val unmatchedSlot: Int?,
-    val unmatchedName: String?,
 ) {
-    val itemKey: String = listOf(id, version, metric, unit, test.toString(), unmatchedSlot?.toString(), unmatchedName)
-        .joinToString("|", prefix = "compare-benchmark:") { if (it == null) "-1:" else "${it.length}:$it" }
+    val itemKey: String = listOf(id, version, metric, unit, test.toString())
+        .joinToString("|", prefix = "compare-benchmark:") { "${it.length}:$it" }
 }
 
-/** 保持既有评测身份边界；缺分的记录也保留供展开追溯。 */
+private fun comparableBenchmarkGroups(
+    first: List<ModelBenchmark>?,
+    second: List<ModelBenchmark>?,
+): List<CompareBenchmarkGroup> {
+    val left = first.byIdentity()
+    val right = second.byIdentity()
+    return left.mapNotNull { (key, entries) ->
+        val others = right[key] ?: return@mapNotNull null
+        val firstByProtocol = entries.highestEffort().byProtocol()
+        val secondByProtocol = others.highestEffort().byProtocol()
+        // 可以按明确的运行条件消歧，但不能在多对匹配、同条件多条或低档成绩中任选。
+        val protocol = firstByProtocol.keys.intersect(secondByProtocol.keys).singleOrNull() ?: return@mapNotNull null
+        val a = firstByProtocol.getValue(protocol).singleOrNull() ?: return@mapNotNull null
+        val b = secondByProtocol.getValue(protocol).singleOrNull() ?: return@mapNotNull null
+        CompareBenchmarkGroup(key, a, b)
+    }.sortedWith(benchmarkOrder)
+}
+
 internal fun compareBenchmarkGroups(
     first: List<ModelBenchmark>?,
     second: List<ModelBenchmark>?,
 ): List<CompareBenchmarkGroup> {
-    fun byKey(slot: Int, entries: List<ModelBenchmark>?) = entries.orEmpty()
-        .groupBy { entry ->
-            val id = entry.benchmarkId?.takeIf(String::isNotBlank)
-            val matched = id != null && !id.startsWith("unmapped:")
-            CompareBenchmarkKey(
-                id, entry.version, entry.metric, entry.unit, entry.sourceType == "test",
-                unmatchedSlot = if (matched) null else slot,
-                unmatchedName = if (matched) null else entry.name,
-            )
-        }
-
-    val left = byKey(0, first)
-    val right = byKey(1, second)
-    return (left.keys + right.keys).map { key ->
-        val firstEntries = left[key].orEmpty()
-        val secondEntries = right[key].orEmpty()
-        val name = (firstEntries.firstOrNull() ?: secondEntries.first()).name
-        CompareBenchmarkGroup(key, name, firstEntries, secondEntries)
-    }.sortedWith(compareBy<CompareBenchmarkGroup, String>(String.CASE_INSENSITIVE_ORDER) { it.name }
-        .thenBy { it.key.version }.thenBy { it.key.metric }.thenBy { it.key.unit }.thenBy { it.key.itemKey })
+    val comparable = comparableBenchmarkGroups(first, second)
+    val shown = comparable.mapTo(hashSetOf()) { it.first.benchmarkKey(useDefinitionVersion = true) }
+    val left = first.byIdentity(useDefinitionVersion = true)
+    val right = second.byIdentity(useDefinitionVersion = true)
+    val references = left.mapNotNull { (key, entries) ->
+        if (key in shown) return@mapNotNull null
+        val others = right[key] ?: return@mapNotNull null
+        val (a, b) = sharedSourcePair(entries.highestEffort(), others.highestEffort()) ?: return@mapNotNull null
+        CompareBenchmarkGroup(key, a, b, referenceOnly = true)
+    }.sortedWith(benchmarkOrder)
+    return comparable + references
 }
 
-private data class ConfigurationIdentity(
+private val benchmarkOrder = compareBy<CompareBenchmarkGroup, String>(String.CASE_INSENSITIVE_ORDER) { it.name }
+    .thenBy { it.key.version }.thenBy { it.key.metric }.thenBy { it.key.unit }.thenBy { it.key.itemKey }
+
+private fun List<ModelBenchmark>?.byIdentity(useDefinitionVersion: Boolean = false) = orEmpty()
+    .mapNotNull { entry ->
+        if (entry.scoreText.isNullOrBlank() && entry.score?.isFinite() != true) return@mapNotNull null
+        entry.benchmarkKey(useDefinitionVersion)?.let { it to entry }
+    }.groupBy({ it.first }, { it.second })
+
+private fun ModelBenchmark.benchmarkKey(useDefinitionVersion: Boolean = false): CompareBenchmarkKey? {
+    val id = benchmarkId?.takeIf { it.isNotBlank() && !it.startsWith("unmapped:") } ?: return null
+    val version = version.specified() ?: return null
+    val metric = metric.specified() ?: return null
+    val unit = unit.specified() ?: return null
+    val groupedVersion = if (useDefinitionVersion) benchmarkDefinitionVersion.specified() ?: version else version
+    return CompareBenchmarkKey(id, groupedVersion, metric, unit, sourceType == "test")
+}
+
+private data class SourcedBenchmark(val record: ModelBenchmark, val url: String, val host: String)
+
+private fun ModelBenchmark.sourced(): SourcedBenchmark? {
+    val url = source.specified() ?: return null
+    val uri = runCatching { URI(url) }.getOrNull() ?: return null
+    val host = uri.host?.lowercase() ?: return null
+    if (uri.rawUserInfo != null || (!uri.scheme.equals("https", true) && !uri.scheme.equals("http", true))) return null
+    return SourcedBenchmark(this, url, host)
+}
+
+/** 来源只用来选出参考记录，不代表同一运行条件；有歧义时不按源顺序或分数任选。 */
+private fun sharedSourcePair(
+    first: List<ModelBenchmark>,
+    second: List<ModelBenchmark>,
+): Pair<ModelBenchmark, ModelBenchmark>? {
+    val left = first.mapNotNull { it.sourced() }
+    val right = second.mapNotNull { it.sourced() }
+    fun sharedBy(key: (SourcedBenchmark) -> String): List<Pair<List<SourcedBenchmark>, List<SourcedBenchmark>>> {
+        val a = left.groupBy(key)
+        val b = right.groupBy(key)
+        return a.keys.intersect(b.keys).map { a.getValue(it) to b.getValue(it) }
+    }
+    val (a, b) = sharedBy(SourcedBenchmark::url).ifEmpty { sharedBy(SourcedBenchmark::host) }.singleOrNull()
+        ?: return null
+    val leftRecord = a.singleOrNull()?.record ?: return null
+    val rightRecord = b.singleOrNull()?.record ?: return null
+    if (leftRecord.reasoningEffort.isNullOrBlank() != rightRecord.reasoningEffort.isNullOrBlank()) return null
+    return leftRecord to rightRecord
+}
+
+private enum class Effort { Off, Minimal, Low, Medium, High, ExtraHigh, Max }
+
+private val effortSeparators = Regex("""[\s_-]+""")
+private val unspecifiedValues = setOf("unspecified", "unknown", "n/a")
+
+private fun String?.effortLevel(): Effort? {
+    val value = this?.trim()?.lowercase()?.replace(effortSeparators, " ") ?: return null
+    if (value in setOf("non reasoning", "no reasoning", "no thinking")) return Effort.Off
+    val tier = value.removeSuffix(" reasoning effort").removeSuffix(" reasoning")
+        .removeSuffix(" thinking effort").removeSuffix(" thinking")
+    return when (tier) {
+        "off", "none", "disabled" -> Effort.Off
+        "minimal", "min" -> Effort.Minimal
+        "low" -> Effort.Low
+        "medium", "med", "mid" -> Effort.Medium
+        "high" -> Effort.High
+        "xhigh", "x high", "extrahigh", "extra high", "veryhigh", "very high" -> Effort.ExtraHigh
+        "max", "maximum" -> Effort.Max
+        else -> null
+    }
+}
+
+private fun List<ModelBenchmark>.highestEffort(): List<ModelBenchmark> {
+    val ranked = mapNotNull { record -> record.reasoningEffort.effortLevel()?.let { it to record } }
+    val highest = ranked.maxOfOrNull { it.first }
+    if (highest != null) return ranked.filter { it.first == highest }.map { it.second }
+    // 未报告的档位不参与排序；只有整侧未报告时才尝试按同一出处匹配。
+    return if (all { it.reasoningEffort.isNullOrBlank() }) this else emptyList()
+}
+
+private data class Protocol(
     val dataset: String,
     val harness: String,
-    val effort: String?,
+    val effortReported: Boolean,
     val toolsEnabled: Boolean?,
     val variant: String?,
     val source: String?,
@@ -76,57 +148,18 @@ private data class ConfigurationIdentity(
     val higherIsBetter: Boolean?,
 )
 
-private fun String?.isSpecified(): Boolean {
-    val value = this?.trim()
-    return !value.isNullOrEmpty() && !value.equals("unspecified", ignoreCase = true) &&
-        !value.equals("unknown", ignoreCase = true) && !value.equals("n/a", ignoreCase = true)
+private fun String?.specified(): String? = this?.takeIf {
+    it.isNotBlank() && it.trim().lowercase() !in unspecifiedValues
 }
 
-private fun ModelBenchmark.configurationIdentity(): ConfigurationIdentity? {
-    if (!dataset.isSpecified() || !harness.isSpecified()) return null
-    // 省略的工具／推理／变体不等于关闭或默认。只有同一份出处明确给出数据集和
-    // harness 时，才接受两侧同样省略的可选字段；各字段（含来源和日期）仍须精确相等。
-    if (!source.isSpecified() && (toolsEnabled == null || !reasoningEffort.isSpecified() || !variant.isSpecified())) return null
-    return ConfigurationIdentity(
-        requireNotNull(dataset), requireNotNull(harness), reasoningEffort, toolsEnabled,
-        variant, source, sourceType, date, higherIsBetter,
-    )
+private fun List<ModelBenchmark>.byProtocol() =
+    mapNotNull { entry -> entry.protocol()?.let { it to entry } }.groupBy({ it.first }, { it.second })
+
+private fun ModelBenchmark.protocol(): Protocol? {
+    val dataset = dataset.specified() ?: return null
+    val harness = harness.specified() ?: return null
+    val effortReported = !reasoningEffort.isNullOrBlank()
+    // 工具、变体或思考程度缺失时，只有同一明确出处可作为配对依据；不补造实际取值。
+    if (source.specified() == null && (toolsEnabled == null || variant.specified() == null || !effortReported)) return null
+    return Protocol(dataset, harness, effortReported, toolsEnabled, variant, source, sourceType, date, higherIsBetter)
 }
-
-private fun compareConfigurations(
-    group: CompareBenchmarkKey,
-    first: List<ModelBenchmark>,
-    second: List<ModelBenchmark>,
-): List<CompareBenchmarkConfiguration> {
-    fun unpaired(slot: Int, index: Int, record: ModelBenchmark) =
-        CompareBenchmarkConfiguration("$slot:$index", record.takeIf { slot == 0 }, record.takeIf { slot == 1 })
-
-    if (first.isEmpty() || second.isEmpty() || group.unmatchedSlot != null ||
-        !group.version.isSpecified() || !group.metric.isSpecified() || !group.unit.isSpecified()
-    ) return first.mapIndexed { index, record -> unpaired(0, index, record) } +
-        second.mapIndexed { index, record -> unpaired(1, index, record) }
-
-    val leftKeys = first.map(ModelBenchmark::configurationIdentity)
-    val rightByKey = second.indices.groupBy { second[it].configurationIdentity() }
-    val leftCounts = leftKeys.groupingBy { it }.eachCount()
-    val paired = mutableSetOf<Int>()
-    return buildList {
-        first.forEachIndexed { index, record ->
-            val key = leftKeys[index]
-            val counterpart = key?.takeIf { leftCounts[it] == 1 }?.let { rightByKey[it]?.singleOrNull() }
-            if (counterpart == null) {
-                add(unpaired(0, index, record))
-            } else {
-                val other = second[counterpart]
-                paired += counterpart
-                add(CompareBenchmarkConfiguration("0:$index/1:$counterpart", record, other,
-                    comparable = record.hasScore() && other.hasScore()))
-            }
-        }
-        second.forEachIndexed { index, record ->
-            if (index !in paired) add(unpaired(1, index, record))
-        }
-    }
-}
-
-private fun ModelBenchmark.hasScore(): Boolean = !scoreText.isNullOrBlank() || score?.isFinite() == true

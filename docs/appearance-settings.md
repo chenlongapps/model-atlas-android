@@ -18,4 +18,4 @@
 
 首次读取最多等待 1.5 秒，不阻塞主线程。超时或失败使用默认主题，禁用编辑并提供重试；不把损坏文件当作首次安装。保存失败回滚到上次成功值，并丢弃未保存预览。
 
-`files/datastore/appearance.preferences_pb` 保存明暗、颜色来源、预设 ID、自定义历史色相及 `navigation_auto_hide`，不保存整套色板。旧式备份、云备份和设备迁移均排除此文件；Debug／Release 沙盒独立，与 [AI 配置](chat.md#配置存储)不共用存储。
+`files/datastore/appearance.preferences_pb` 保存明暗、颜色来源、预设 ID、自定义历史色相及 `navigation_auto_hide`，不保存整套色板。同一文件还保存对比的 `compare_first_model_id`／`compare_second_model_id`，不缓存详情、评测或价格；恢复见[双模型对比](architecture.md#双模型对比的数据与状态)。旧式备份、云备份和设备迁移均排除此文件；Debug／Release 沙盒独立，与 [AI 配置](chat.md#配置存储)不共用存储。

@@ -4,17 +4,23 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.chenlongapps.modelatlas.data.model.CompareModelSelection
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.repository.FavoriteRepository
 import io.github.chenlongapps.modelatlas.data.repository.ModelRepository
+import io.github.chenlongapps.modelatlas.data.repository.SettingsRepository
+import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class CompareReadStatus { LOADING, CONTENT, NOT_FOUND, ERROR }
 
@@ -30,9 +36,11 @@ data class ModelCompareUiState(
     val first: CompareModelState = CompareModelState(),
     val second: CompareModelState = CompareModelState(),
     val favoriteIds: Set<String> = emptySet(),
+    val selectionStatus: CompareReadStatus = CompareReadStatus.CONTENT,
+    val selectionSaveFailed: Boolean = false,
 ) {
     fun slot(index: Int): CompareModelState = if (index == 0) first else second
-    // 目录默认报价也必须就绪；否则详情先到时，短的无档位表格会夹回恢复的滚动位置。
+    // 目录默认报价也必须就绪；否则详情先到时，较短的正文会夹回恢复的滚动位置。
     val isReady: Boolean get() = catalogStatus == CompareReadStatus.CONTENT && first.detail != null && second.detail != null
 }
 
@@ -42,22 +50,24 @@ class ModelCompareViewModel @Inject constructor(
     private val repository: ModelRepository,
     private val savedStateHandle: SavedStateHandle,
     private val favoriteRepository: FavoriteRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
-    private val firstId = savedStateHandle.get<String>(FIRST_KEY)?.takeIf(String::isNotBlank)
-    private val secondId = savedStateHandle.get<String>(SECOND_KEY)?.takeIf { it.isNotBlank() && it != firstId }
+    // 保存的双空槽也是明确恢复结果，不能用 DataStore 重新填入旧 ID。
+    private val restoredSelection = if (savedStateHandle.contains(FIRST_KEY) || savedStateHandle.contains(SECOND_KEY)) {
+        CompareModelSelection(savedStateHandle[FIRST_KEY], savedStateHandle[SECOND_KEY]).normalized()
+    } else null
     private val _uiState = MutableStateFlow(ModelCompareUiState(
-        first = CompareModelState(firstId), second = CompareModelState(secondId),
+        first = CompareModelState(restoredSelection?.firstId),
+        second = CompareModelState(restoredSelection?.secondId),
+        selectionStatus = if (restoredSelection == null) CompareReadStatus.LOADING else CompareReadStatus.CONTENT,
     ))
     val uiState = _uiState.asStateFlow()
     private var active = false
     private var catalogJob: Job? = null
     private var favoritesJob: Job? = null
     private val detailJobs = arrayOfNulls<Job>(2)
-
-    init {
-        savedStateHandle[FIRST_KEY] = firstId
-        savedStateHandle[SECOND_KEY] = secondId
-    }
+    private var selectionLoadJob: Job? = null
+    private var latestWrite: CompareModelSelection? = null
 
     fun setActive(value: Boolean) {
         if (active == value) return
@@ -65,7 +75,11 @@ class ModelCompareViewModel @Inject constructor(
         if (value) {
             observeCatalog()
             observeFavorites()
-            repeat(2) { index -> _uiState.value.slot(index).modelId?.let { observeDetail(index, it) } }
+            when (_uiState.value.selectionStatus) {
+                CompareReadStatus.LOADING -> retrySelectionLoad()
+                CompareReadStatus.CONTENT -> observeSelectedDetails()
+                else -> Unit
+            }
         } else {
             catalogJob?.cancel()
             favoritesJob?.cancel()
@@ -74,20 +88,72 @@ class ModelCompareViewModel @Inject constructor(
     }
 
     fun select(index: Int, modelId: String) {
-        if (index !in 0..1 || modelId == _uiState.value.slot(1 - index).modelId) return
+        if (index !in 0..1 || _uiState.value.selectionStatus != CompareReadStatus.CONTENT ||
+            modelId == _uiState.value.slot(1 - index).modelId) return
         if (_uiState.value.catalogStatus != CompareReadStatus.CONTENT || _uiState.value.models.none { it.id == modelId }) return
         if (_uiState.value.slot(index).modelId == modelId) return
         detailJobs[index]?.cancel()
-        savedStateHandle[if (index == 0) FIRST_KEY else SECOND_KEY] = modelId
         updateSlot(index, CompareModelState(modelId))
+        saveSelection()
         if (active) observeDetail(index, modelId)
     }
 
     fun remove(index: Int) {
-        if (index !in 0..1) return
+        if (index !in 0..1 || _uiState.value.selectionStatus != CompareReadStatus.CONTENT ||
+            _uiState.value.slot(index).modelId == null) return
         detailJobs[index]?.cancel()
-        savedStateHandle[if (index == 0) FIRST_KEY else SECOND_KEY] = null
         updateSlot(index, CompareModelState())
+        saveSelection()
+    }
+
+    fun retrySelectionLoad() {
+        if (!active || selectionLoadJob?.isActive == true || _uiState.value.selectionStatus == CompareReadStatus.CONTENT) return
+        _uiState.update { it.copy(selectionStatus = CompareReadStatus.LOADING) }
+        selectionLoadJob = viewModelScope.launch {
+            try {
+                val selection = settingsRepository.readCompareSelection().normalized()
+                saveToHandle(selection)
+                _uiState.update {
+                    it.copy(first = CompareModelState(selection.firstId), second = CompareModelState(selection.secondId),
+                        selectionStatus = CompareReadStatus.CONTENT)
+                }
+                if (active) observeSelectedDetails()
+            } catch (_: IOException) {
+                // 不把读取失败当成空选择，也不写回空 ID；等待重试。
+                _uiState.update { it.copy(selectionStatus = CompareReadStatus.ERROR) }
+            }
+        }
+    }
+
+    fun retrySelectionSave() {
+        if (_uiState.value.selectionSaveFailed) saveSelection()
+    }
+
+    private fun observeSelectedDetails() {
+        repeat(2) { index -> _uiState.value.slot(index).modelId?.let { observeDetail(index, it) } }
+    }
+
+    private fun saveSelection() {
+        val state = _uiState.value
+        val selection = CompareModelSelection(state.first.modelId, state.second.modelId)
+        saveToHandle(selection)
+        latestWrite = selection
+        _uiState.update { it.copy(selectionSaveFailed = false) }
+        // 立即排入仓库，已接收的写入不随切页或 ViewModel 清除取消。
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                try {
+                    settingsRepository.saveCompareSelection(selection)
+                } catch (_: IOException) {
+                    if (latestWrite === selection) _uiState.update { it.copy(selectionSaveFailed = true) }
+                }
+            }
+        }
+    }
+
+    private fun saveToHandle(selection: CompareModelSelection) {
+        savedStateHandle[FIRST_KEY] = selection.firstId
+        savedStateHandle[SECOND_KEY] = selection.secondId
     }
 
     fun retryCatalog() {

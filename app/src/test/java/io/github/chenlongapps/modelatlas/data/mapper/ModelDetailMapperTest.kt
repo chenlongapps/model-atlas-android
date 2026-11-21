@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.data.mapper
 import io.github.chenlongapps.modelatlas.data.local.ModelDetailOfferingRecord
 import io.github.chenlongapps.modelatlas.data.local.ModelDetailRecord
 import io.github.chenlongapps.modelatlas.data.local.ModelBenchmarkRecord
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelEntity
 import io.github.chenlongapps.modelatlas.data.local.entity.ModelOfferingEntity
@@ -177,6 +178,23 @@ class ModelDetailMapperTest {
         assertEquals(score.variant, benchmark.variant)
         assertEquals(score.unit, benchmark.unit)
         assertEquals(score.higherIsBetter, benchmark.higherIsBetter)
+    }
+
+    @Test fun projectsOnlyExplicitDefinitionVersionsWithoutChangingActualVersion() {
+        val definition = BenchmarkDefinitionEntity(id = "terminal-bench-v4", name = "Terminal-Bench",
+            version = "4.0.0", metric = "task resolution rate", compatibleVersions = listOf("4.0"))
+        val score = BenchmarkScoreEntity("s", model.id, definition.id, 64.1, metric = definition.metric,
+            name = definition.name, version = "4.0")
+        fun detail(actualVersion: String?, definitionVersion: BenchmarkDefinitionEntity?) =
+            ModelDetailRecord(model, emptyList(), listOf(ModelBenchmarkRecord(score.copy(version = actualVersion), definitionVersion)))
+                .toModelDetail()!!.benchmarks!!.single()
+        val alias = detail("4.0", definition)
+        assertEquals("4.0", alias.version)
+        assertEquals("4.0.0", alias.benchmarkDefinitionVersion)
+        assertNull(detail("4.1", definition).benchmarkDefinitionVersion)
+        assertNull(detail(null, definition).benchmarkDefinitionVersion)
+        assertNull(detail("4.0", null).benchmarkDefinitionVersion)
+        assertNull(detail("4.0", definition.copy(version = "unspecified")).benchmarkDefinitionVersion)
     }
 
     private fun service(provider: String, id: String) = ModelDetailOfferingRecord(

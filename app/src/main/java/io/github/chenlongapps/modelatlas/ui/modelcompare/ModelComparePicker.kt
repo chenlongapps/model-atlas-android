@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -34,6 +36,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -45,7 +48,13 @@ import io.github.chenlongapps.modelatlas.ui.modellist.labDisplayName
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ModelComparePicker(
-    state: ModelCompareUiState, excludedId: String?, onSelect: (String) -> Unit, onDismiss: () -> Unit, onRetry: () -> Unit,
+    state: ModelCompareUiState,
+    excludedId: String?,
+    selectedName: String?,
+    onSelect: (String) -> Unit,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     var search by rememberSaveable { mutableStateOf("") }
     val results = remember(state.models, state.favoriteIds, search) { filterCompareModels(state.models, state.favoriteIds, search) }
@@ -108,6 +117,13 @@ internal fun ModelComparePicker(
                             }
                         }
                     }
+                }
+            }
+            if (selectedName != null) {
+                val removeDescription = stringResource(R.string.compare_remove, selectedName)
+                TextButton(onClick = onRemove, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("compare-remove").semantics { contentDescription = removeDescription }) {
+                    Text(stringResource(R.string.compare_remove_button), color = MaterialTheme.colorScheme.error)
                 }
             }
         }

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso.pressBack
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
+import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.ui.debug.DebugDeviceInfo
 import io.github.chenlongapps.modelatlas.ui.debug.DebugScreen
@@ -179,7 +180,7 @@ class NavigationScrollTest {
     @Test fun pickerScrollingDoesNotHideUnderlyingNavigation() {
         show()
         compose.onNodeWithTag("nav-compare").performClick()
-        compose.onNodeWithTag("compare-change-0", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("compare-slot-0").performClick()
         scroll("compare-picker-list", forward = true)
         pressBack()
         assertShown()
@@ -278,7 +279,15 @@ class NavigationScrollTest {
                             navigationAutoHideEnabled = autoHide.value,
                             onNavigationAutoHideChange = { autoHide.value = it },
                             compareContent = { padding, visible ->
-                                val details = models.take(2).map { ModelDetail(it.id, it.name, fetchedAtEpochMillis = 0) }
+                                // 保证对比正文产生真实滚动，避免大视口中只有空态、无法触发底栏隐藏。
+                                val details = models.take(2).map {
+                                    ModelDetail(it.id, it.name, metadata = ModelDetailMetadata(
+                                        contextLimitTokens = 128_000, inputLimitTokens = 96_000, outputLimitTokens = 32_000,
+                                        inputModalities = listOf("text", "image"), outputModalities = listOf("text"),
+                                        openWeights = true, family = "Test", releaseDate = "2026-10",
+                                        reasoning = true, toolCall = true, attachment = true,
+                                    ), license = "MIT", fetchedAtEpochMillis = 0)
+                                }
                                 ModelCompareScreen(ModelCompareUiState(models, CompareReadStatus.CONTENT,
                                     CompareModelState(details[0].id, CompareReadStatus.CONTENT, details[0]),
                                     CompareModelState(details[1].id, CompareReadStatus.CONTENT, details[1])),

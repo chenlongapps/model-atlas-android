@@ -113,9 +113,9 @@ class ModelParametersScreenTest {
         val component = real("mistral/pixtral-12b")
         compose.runOnIdle { state.value = ready(dense, component) }
         compareDescription("${dense.name}，总参数量：8.2 B")
-        compareDescription("${dense.name}，激活量：暂无数据")
         compareDescription("${component.name}，总参数量：暂无数据")
-        compareDescription("${component.name}，激活量：暂无数据")
+        // 两侧都未报告激活量时省略整行；只有一侧报告时才显示另一侧的「暂无数据」。
+        compose.onNodeWithText("激活量").assertDoesNotExist()
         assertParameterExtrasAbsent(component)
     }
 
