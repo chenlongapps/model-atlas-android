@@ -5,6 +5,10 @@ import io.github.chenlongapps.modelatlas.data.model.toModalityCategories
 
 internal enum class SpecDifference { MISSING, SAME, DIFFERENT }
 
+/** 非规格分组的文本／布尔行沿用规格行的显示规则。 */
+internal fun isCompareRowVisible(first: Any?, second: Any?, onlyDifferences: Boolean): Boolean =
+    (first != null || second != null) && (!onlyDifferences || first != second)
+
 internal data class CompareSpec<T : Any>(val first: T?, val second: T?) {
     val difference: SpecDifference get() = when {
         first == null || second == null -> SpecDifference.MISSING

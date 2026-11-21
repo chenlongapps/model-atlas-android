@@ -22,9 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -134,7 +132,6 @@ private fun CompareReadySlot(
     modifier: Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    val logoBackground = if (colors.surfaceContainerHigh.luminance() >= 0.6f) colors.surfaceContainerHigh else Color.White
     val replace = stringResource(R.string.compare_replace_button)
     val action = stringResource(R.string.compare_replace_action)
     fun auxiliaryAlpha() = (1f - 3f * fraction()).coerceAtLeast(0f)
@@ -144,7 +141,7 @@ private fun CompareReadySlot(
         content = {
             // 外层尺寸随滚动变化；Logo 素材与底座沿用目录的同一组件。
             Box(Modifier.testTag("compare-logo-$index"), contentAlignment = Alignment.Center) {
-                LabLogo(slot.lab, lightContainerColor = logoBackground)
+                LabLogo(slot.lab)
             }
             Text(slot.title, Modifier.testTag("compare-name-$index"), style = MaterialTheme.typography.titleMedium,
                 color = colors.onSurface)

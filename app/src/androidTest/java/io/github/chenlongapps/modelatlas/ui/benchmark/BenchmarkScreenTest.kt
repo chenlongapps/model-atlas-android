@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -36,6 +37,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -48,8 +50,11 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelCard
 import io.github.chenlongapps.modelatlas.ui.modellist.LabLogoTag
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
+import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingModel
 import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingRecord
+import io.github.chenlongapps.modelatlas.data.local.BenchmarkRankingScoreRecord
 import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkDefinitionEntity
+import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.mapper.toBenchmarkBoards
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.testing.saveRegressionScreenshot
@@ -212,14 +217,46 @@ class BenchmarkScreenTest {
         }
     }
 
-    @Test fun sameNamedVersionsUseCompactTitleSuffixWhileUniqueNamesStayPlain() {
-        val other = board.copy(id = "other-version", version = "4.0")
+    @Test fun distinctSameNamedBenchmarksUseCompactTitleSuffixWhileUniqueNamesStayPlain() {
+        val other = board.copy(id = "terminal-bench-v5", benchmarkId = "terminal-bench-v5", version = "5.0")
         compose.setContent { ModelAtlasTheme(dynamicColor = false) {
             BenchmarkScreen(ready.copy(boards = listOf(board, other)), {})
         } }
         compose.onNodeWithText("Terminal-Bench · 4.0.0").assertIsDisplayed()
-        compose.onNodeWithText("Terminal-Bench · 4.0").assertIsDisplayed()
+        compose.onNodeWithText("Terminal-Bench · 5.0").assertIsDisplayed()
         compose.onNodeWithText("Terminal-Bench").assertDoesNotExist()
+    }
+
+    @Test fun compatibleTerminalBenchVersionsRenderOneCardAndOpenTheSameMergedLeaderboard() {
+        val definition = BenchmarkDefinitionEntity("terminal-bench-v4", "Terminal-Bench", "4.0.0",
+            "task resolution rate", compatibleVersions = listOf("4.0"), category = "coding",
+            unit = "percent", higherIsBetter = true)
+        fun score(id: String, model: String, value: Double, version: String) = BenchmarkRankingScoreRecord(
+            BenchmarkScoreEntity(id, model, definition.id, value, metric = definition.metric,
+                unit = definition.unit, higherIsBetter = true, version = version),
+            BenchmarkRankingModel(model, model, "llm", null, null),
+        )
+        val boards = listOf(BenchmarkRankingRecord(definition, listOf(
+            score("old", "deepseek/a", 66.0, "4.0"), score("new", "google/b", 72.4, "4.0.0"),
+        ))).toBenchmarkBoards()
+        assertEquals(1, boards.size)
+        assertEquals("4.0.0", boards.single().version)
+        val selected = mutableStateOf<String?>(null)
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) {
+            val id = selected.value
+            if (id == null) BenchmarkScreen(BenchmarkUiState(isLoading = false, boards = boards), { selected.value = it })
+            else BenchmarkLeaderboardScreen(BenchmarkUiState(isLoading = false, boards = boards), id,
+                { selected.value = null })
+        } }
+        compose.onAllNodesWithText("Terminal-Bench", useUnmergedTree = true).assertCountEquals(1)
+        compose.onNodeWithText("Terminal-Bench · 4.0", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("benchmark-result:old", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("benchmark-result:new", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("benchmark-card:${boards.single().id}").performClick()
+        compose.runOnIdle { assertEquals(boards.single().id, selected.value) }
+        compose.onNodeWithText("版本：4.0.0").assertIsDisplayed()
+        compose.onNodeWithTag("benchmark-result:old").assertIsDisplayed()
+        compose.onNodeWithTag("benchmark-result:new").assertIsDisplayed()
     }
 
     @Test fun noNumericScoresKeepTheWholeCardClickableWithoutInventingBars() {

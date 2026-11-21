@@ -248,8 +248,8 @@ internal fun ModelCompareScreen(
                     item("prices", contentType = "section") {
                         ComparePrices(prices, modelNames, layout) { openInfo = CompareInfo.Prices }
                     }
+                    compareModelInfoItems(models, modelNames, layout, onlyDifferences)
                     compareBenchmarkItems(benchmarks, modelNames, models.map(ModelDetail::lab)) { openInfo = CompareInfo.Benchmarks }
-                    compareModelInfoItems(models, modelNames, layout)
                 }
             }
         }

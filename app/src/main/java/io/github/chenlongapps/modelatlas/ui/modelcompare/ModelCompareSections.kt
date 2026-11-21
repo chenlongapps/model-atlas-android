@@ -102,40 +102,44 @@ internal fun ComparePrices(
 }
 
 internal fun LazyListScope.compareModelInfoItems(
-    models: List<ModelDetail>, names: List<String>, layout: CompareLayout,
+    models: List<ModelDetail>, names: List<String>, layout: CompareLayout, onlyDifferences: Boolean,
 ) {
     val metadata = models.map(ModelDetail::metadata)
-    val hasBasic = metadata.any { !it.releaseDate.isNullOrBlank() || !it.family.isNullOrBlank() || !it.knowledgeCutoff.isNullOrBlank() }
-    val hasParameters = models.any { it.parameters?.let { p -> p.totalBillion != null || p.activeBillion != null } == true }
-    val hasCapabilities = metadata.any {
-        it.attachment != null || it.toolCall != null || it.reasoning != null ||
-            it.structuredOutput != null || it.temperature != null
-    }
-    val hasLicense = models.any { !it.license.isNullOrBlank() }
-    if (hasBasic || hasParameters) item("basic", contentType = "section") {
+    val releaseDates = metadata.map { it.releaseDate }
+    val knowledgeCutoffs = metadata.map { it.knowledgeCutoff }
+    val totalParameters = models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }
+    val activeParameters = models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }
+    val licenses = models.map { it.license }
+    fun visible(first: Any?, second: Any?) = isCompareRowVisible(first, second, onlyDifferences)
+    val hasBasic = visible(releaseDates[0], releaseDates[1]) || visible(knowledgeCutoffs[0], knowledgeCutoffs[1]) ||
+        visible(totalParameters[0], totalParameters[1]) || visible(activeParameters[0], activeParameters[1])
+    val hasCapabilities = listOf(
+        metadata.map { it.attachment }, metadata.map { it.toolCall }, metadata.map { it.reasoning },
+        metadata.map { it.structuredOutput }, metadata.map { it.temperature },
+    ).any { visible(it[0], it[1]) }
+    if (hasBasic) item("basic", contentType = "section") {
         CompareSection {
             CompareHeading(R.string.compare_basic)
-            TextRow(R.string.model_list_release_date_label, metadata.map { it.releaseDate }, names, layout)
-            TextRow(R.string.detail_family, metadata.map { it.family }, names, layout)
-            TextRow(R.string.detail_knowledge_cutoff, metadata.map { it.knowledgeCutoff }, names, layout)
-            TextRow(R.string.parameter_total, models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }, names, layout)
-            TextRow(R.string.parameter_active, models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }, names, layout)
+            TextRow(R.string.model_list_release_date_label, releaseDates, names, layout, onlyDifferences)
+            TextRow(R.string.detail_knowledge_cutoff, knowledgeCutoffs, names, layout, onlyDifferences)
+            TextRow(R.string.parameter_total, totalParameters, names, layout, onlyDifferences)
+            TextRow(R.string.parameter_active, activeParameters, names, layout, onlyDifferences)
         }
     }
     if (hasCapabilities) item("capabilities", contentType = "section") {
         CompareSection {
             CompareHeading(R.string.compare_capabilities)
-            BooleanRow(R.string.detail_attachment, metadata.map { it.attachment }, names, layout)
-            BooleanRow(R.string.detail_tool_call, metadata.map { it.toolCall }, names, layout)
-            BooleanRow(R.string.detail_reasoning, metadata.map { it.reasoning }, names, layout)
-            BooleanRow(R.string.detail_structured_output, metadata.map { it.structuredOutput }, names, layout)
-            BooleanRow(R.string.detail_temperature, metadata.map { it.temperature }, names, layout)
+            BooleanRow(R.string.detail_attachment, metadata.map { it.attachment }, names, layout, onlyDifferences)
+            BooleanRow(R.string.detail_tool_call, metadata.map { it.toolCall }, names, layout, onlyDifferences)
+            BooleanRow(R.string.detail_reasoning, metadata.map { it.reasoning }, names, layout, onlyDifferences)
+            BooleanRow(R.string.detail_structured_output, metadata.map { it.structuredOutput }, names, layout, onlyDifferences)
+            BooleanRow(R.string.detail_temperature, metadata.map { it.temperature }, names, layout, onlyDifferences)
         }
     }
-    if (hasLicense) item("weights", contentType = "section") {
+    if (visible(licenses[0], licenses[1])) item("weights", contentType = "section") {
         CompareSection {
             CompareHeading(R.string.detail_weights)
-            TextRow(R.string.detail_license, models.map { it.license }, names, layout)
+            TextRow(R.string.detail_license, licenses, names, layout, onlyDifferences)
         }
     }
 }
@@ -195,17 +199,20 @@ private fun ModalityValue(modalities: Set<String>): CompareValue =
         else modalities.map { formatModality(it) }.joinToString("、"))
 
 @Composable
-private fun TextRow(label: Int, values: List<String?>, names: List<String>, layout: CompareLayout) {
-    if (values.all { it.isNullOrBlank() }) return
-    val cells = values.map { it?.takeIf(String::isNotBlank)?.let { text -> CompareValue(text) } ?: MissingCompareValue() }
+private fun TextRow(label: Int, values: List<String?>, names: List<String>, layout: CompareLayout,
+    onlyDifferences: Boolean = false) {
+    val present = values.map { it?.takeIf(String::isNotBlank) }
+    if (!isCompareRowVisible(present[0], present[1], onlyDifferences)) return
+    val cells = present.map { it?.let { text -> CompareValue(text) } ?: MissingCompareValue() }
     CompareRow(stringResource(label), cells[0], cells[1], names, layout)
 }
 
 @Composable
-private fun BooleanRow(label: Int, values: List<Boolean?>, names: List<String>, layout: CompareLayout) =
+private fun BooleanRow(label: Int, values: List<Boolean?>, names: List<String>, layout: CompareLayout,
+    onlyDifferences: Boolean = false) =
     TextRow(label, values.map {
         it?.let { supported -> stringResource(if (supported) R.string.detail_supported else R.string.detail_unsupported) }
-    }, names, layout)
+    }, names, layout, onlyDifferences)
 
 @Composable
 private fun PriceRow(label: Int, values: List<Double?>, names: List<String>, layout: CompareLayout, prominent: Boolean = false) {

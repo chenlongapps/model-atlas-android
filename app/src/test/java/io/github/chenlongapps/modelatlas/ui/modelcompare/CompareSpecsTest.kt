@@ -30,6 +30,15 @@ class CompareSpecsTest {
         assertFalse(specs.output.isVisible(true))
     }
 
+    @Test fun modelInfoRowsReuseTheSpecVisibilityRules() {
+        assertFalse(isCompareRowVisible(null, null, false))
+        assertFalse(isCompareRowVisible(null, null, true))
+        assertTrue(isCompareRowVisible(null, "MIT", true))
+        assertTrue(isCompareRowVisible(true, false, true))
+        assertTrue(isCompareRowVisible(true, true, false))
+        assertFalse(isCompareRowVisible(true, true, true))
+    }
+
     @Test fun exactTokenValuesAndExplicitEmptyModalitiesCompareBeforeFormatting() {
         val specs = CompareSpecs(
             ModelDetailMetadata(contextLimitTokens = 131_070, outputModalities = emptyList(), openWeights = false),

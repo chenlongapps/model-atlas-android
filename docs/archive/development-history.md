@@ -5,6 +5,13 @@
 
 ## 整理后追加记录
 
+### 2026-11-22 兼容版本合并为单个评测榜单
+
+- 范围：`BenchmarkBoardMapper` 不再按成绩原始 `version` 拆榜；定义声明的 `compatible_versions` 统一并入 `definition.version` 一个榜单，`unspecified` 仍归单榜。原始成绩版本、来源、档位与测试条件不改写；指标、单位、方向、LLM、有限数值过滤及每模型最高分规则不变。
+- 单元：`BenchmarkBoardMapperTest` 12、`AtlasCatalogMapperTest` 11、`ModelDetailMapperTest` 13，共 36 项通过，0 失败／错误／跳过。覆盖 4.0／4.0.0 合并、同模型取优并保留获选条件、不兼容／缺失版本与不同指标／单位／方向排除、同名不同定义独立及 `unspecified` 原有行为。
+- 设备：API 37／`emulator-5554` 覆盖安装匹配 APK，`BenchmarkScreenTest` 实际 `numtests=23`、`OK (23 tests)`；覆盖单张 Terminal-Bench 卡片、两版本模型同卡展示、点击进入同一合并榜单及同名不同定义仍附版本后缀。
+- 边界：未执行全量回归、Release 构建／Lint、真机或真实 TalkBack；未清数据、卸载或重建模拟器。未修改数据库 Schema 或历史缓存；若旧库仍保存已被新发布替换的旧定义记录，以目录发布事务为准。
+
 ### 2026-11-12 底部导航栏自动隐藏开关
 
 - 范围：设置首页在外观入口后新增 Material 3 整行 Switch，复用现有轻量圆角表面与主题语义色，不改变全局主题或底栏玻璃样式。默认关闭，旧偏好缺字段同样关闭；开启后整组导航胶囊／AI 按钮复用既有滚动显隐，触摸探索优先保持显示。关闭时恢复显示、重置累计位移，不改变列表阅读位置／底部留白、子页隐藏或聊天输入栏。

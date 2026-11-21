@@ -74,14 +74,13 @@ internal fun LabLogo(
     lab: String?,
     modifier: Modifier = Modifier,
     size: Dp = LabLogoChipSize,
-    lightContainerColor: Color = LabLogoBackground,
 ) {
     val hasLabLogo = labLogoResOrNull(lab) != null
     Box(
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(25))
-            .background(lightContainerColor),
+            .background(LabLogoBackground),
         contentAlignment = Alignment.Center,
     ) {
         Image(

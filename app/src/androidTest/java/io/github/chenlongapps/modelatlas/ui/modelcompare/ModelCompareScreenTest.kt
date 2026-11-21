@@ -105,9 +105,14 @@ class ModelCompareScreenTest {
         compose.waitForIdle()
         saveRegressionScreenshot("compare-overview")
         val list = compose.onNodeWithTag("compare-list")
-        val index = list.fetchSemanticsNode().config[SemanticsProperties.IndexForKey]
-        val indices = listOf("selection", "specs", "prices", "benchmark-heading", "basic", "capabilities", "weights").map(index)
-        assertTrue(indices.first() >= 0 && indices.zipWithNext().all { (before, after) -> before < after })
+        fun indexOf(key: Any) = list.fetchSemanticsNode().config[SemanticsProperties.IndexForKey](key)
+        // 评测分数在末尾，逐段滚动取绝对索引，避免未组合的分区取不到。
+        val sectionIndices = listOf("specs" to "关键规格", "prices" to "API 价格", "basic" to "基本信息",
+            "capabilities" to "能力特性", "weights" to "权重与许可", "benchmark-heading" to "评测分数").map { (key, heading) ->
+            list.performScrollToNode(hasText(heading))
+            indexOf(key).also { assertTrue("$key 应出现在列表中", it >= 0) }
+        }
+        assertTrue(sectionIndices.zipWithNext().all { (before, after) -> before < after })
         val firstScore = "Model A，Example Benchmark，分数：78.4 %"
         val secondScore = "$longName，Example Benchmark，分数：74.5 ± 1.3 %"
         scrollToDescription(firstScore)
@@ -121,7 +126,7 @@ class ModelCompareScreenTest {
         compose.onNodeWithText("98.0 %", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("Single Benchmark").assertDoesNotExist()
         val key = compareBenchmarkGroups(first.benchmarks, second.benchmarks).single().key
-        assertEquals(-1, index(key.copy(id = "solo").itemKey))
+        assertEquals(-1, indexOf(key.copy(id = "solo").itemKey))
         compose.onNode(hasClickAction() and (hasTestTag(key.itemKey) or hasAnyAncestor(hasTestTag(key.itemKey))))
             .assertDoesNotExist()
     }
@@ -405,6 +410,36 @@ class ModelCompareScreenTest {
         compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-differences"))
         filter.assertIsOn().performClick().assertIsOff()
         scrollToDescription("Model A，最大输入：1,000 tokens")
+    }
+
+    @Test fun differencesToggleAlsoFiltersModelInfoSections() {
+        val first = details[0].copy(metadata = details[0].metadata.copy(
+            releaseDate = "2026-10", knowledgeCutoff = "2025-06", attachment = true, toolCall = true,
+            structuredOutput = false, temperature = true,
+        ), license = "MIT")
+        val second = details[1].copy(metadata = details[1].metadata.copy(
+            releaseDate = "2026-09", knowledgeCutoff = "2025-06", attachment = true, toolCall = false,
+            structuredOutput = false, temperature = true,
+        ), license = "MIT")
+        showAtWidth(400.dp, ready.copy(first = ready.first.copy(detail = first), second = ready.second.copy(detail = second)))
+        scrollToDescription("Model A，文件附件：支持")
+        scrollToDescription("Model A，知识截止时间：2025-06")
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasTestTag("compare-differences"))
+        compose.onNodeWithTag("compare-differences").performClick().assertIsOn()
+
+        scrollToText("基本信息")
+        compose.onNodeWithText("知识截止时间").assertDoesNotExist()
+        scrollToDescription("Model A，发布时间：2026-10")
+        assertValuePair("Model A，发布时间：2026-10", "Model B，发布时间：2026-09")
+
+        scrollToText("能力特性")
+        listOf("文件附件", "结构化输出", "温度调节").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        scrollToDescription("Model A，工具调用：支持")
+        scrollToDescription("Model B，工具调用：不支持")
+        scrollToDescription("Model B，推理：暂无数据")
+        compose.onNodeWithTag("compare-list").performScrollToNode(hasText("评测分数"))
+        assertEquals(-1, compose.onNodeWithTag("compare-list").fetchSemanticsNode()
+            .config[SemanticsProperties.IndexForKey]("weights"))
     }
 
     @Test fun matchingSpecsHaveAnEmptyDifferencesState() {
