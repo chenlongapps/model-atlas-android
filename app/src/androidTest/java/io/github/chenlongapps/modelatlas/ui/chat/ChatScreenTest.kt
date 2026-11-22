@@ -2,6 +2,7 @@ package io.github.chenlongapps.modelatlas.ui.chat
 
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.content.ClipboardManager
 import android.content.ClipDescription
 import android.content.Context
@@ -22,9 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertAll
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -32,7 +39,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -40,12 +46,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -60,14 +70,17 @@ import io.github.chenlongapps.modelatlas.ai.LlmChunk
 import io.github.chenlongapps.modelatlas.ai.LlmClient
 import io.github.chenlongapps.modelatlas.ai.LlmConfig
 import io.github.chenlongapps.modelatlas.ai.LlmException
+import io.github.chenlongapps.modelatlas.ai.LlmMessage
 import io.github.chenlongapps.modelatlas.ai.LlmRequest
 import io.github.chenlongapps.modelatlas.ai.LlmResponse
+import io.github.chenlongapps.modelatlas.ai.LlmRole
 import io.github.chenlongapps.modelatlas.ai.config.LlmConfigRepository
 import io.github.chenlongapps.modelatlas.ai.config.ConfigStorageException
 import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.flow
 import org.junit.After
@@ -87,17 +100,36 @@ class ChatScreenTest {
 
     @After fun close() { InstrumentationRegistry.getInstrumentation().runOnMainSync { store.clear() } }
 
-    @Test fun missingConfigAndWhitespaceCannotSendAndSuggestionsOnlyFillInput() {
+    @Test fun missingConfigDisablesSuggestionsAndSavingDoesNotSend() {
         show(configured = false)
         compose.onNodeWithText("请先配置 API 和模型").assertIsDisplayed()
-        compose.onNodeWithText("消息将发送至你配置的 API。助手无法查看本地目录或实时价格。").assertIsDisplayed()
+        compose.onNodeWithText("消息将发送至你配置的 API。", substring = true).assertDoesNotExist()
+        val suggestions = compose.onAllNodesWithTag("chat-suggestion")
+        suggestions.assertCountEquals(3).assertAll(SemanticsMatcher.keyIsDefined(SemanticsProperties.Disabled))
         compose.onNodeWithTag("chat-send").assertIsNotEnabled()
-        compose.onNodeWithText("上下文长度和最大输出有什么区别？").performClick()
-        compose.onNodeWithTag("chat-input").assert(hasText("上下文长度和最大输出有什么区别？"))
-        compose.onNodeWithTag("chat-send").assertIsNotEnabled()
-        assertEquals(0, fake.calls.get())
         compose.runOnIdle { configure(); vm.setInput(" \n ") }
         compose.onNodeWithTag("chat-send").assertIsNotEnabled()
+        assertEquals(0, fake.calls.get())
+    }
+
+    @Test fun suggestionsStayStableAndTapSendsOnlyThatQuestionWithoutChangingDraft() {
+        show()
+        val suggestions = compose.onAllNodesWithTag("chat-suggestion")
+        fun questions() = suggestions.fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].single().text }
+
+        val shown = questions()
+        assertEquals(3, shown.size)
+        assertEquals(3, shown.toSet().size)
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        compose.onNodeWithContentDescription("关闭").performClick()
+        compose.runOnIdle { vm.setInput("手写草稿") }
+        assertEquals(shown, questions())
+        suggestions[0].performClick()
+        compose.waitUntil { fake.calls.get() == 1 }
+        compose.onNode(hasText(shown.first()) and hasAnyAncestor(hasTestTag("chat-user-1"))).assertIsDisplayed()
+        compose.onNodeWithTag("chat-input").assert(hasText("手写草稿"))
+        suggestions.assertCountEquals(0)
+        assertEquals(listOf(LlmMessage(LlmRole.USER, shown.first())), fake.lastRequest.messages)
     }
 
     @Test fun streamingAppendsOneMessageAndStopRetainsItThenRetryDoesNotDuplicateUser() {
@@ -130,7 +162,7 @@ class ChatScreenTest {
         assertEquals(1, fake.calls.get())
     }
 
-    @Test fun configurationDialogValidatesAndAppliesWithoutNetwork() {
+    @Test fun configurationSheetValidatesAndAppliesWithoutNetwork() {
         show(configured = false)
         compose.onNodeWithContentDescription("会话配置").performClick()
         compose.onNodeWithTag("chat-config-apply").performClick()
@@ -143,21 +175,117 @@ class ChatScreenTest {
         assertEquals(0, fake.calls.get())
     }
 
-    @Test fun clearConfigurationRequiresConfirmationAndRestoredViewModelHasNoCredentials() {
+    @Test fun configurationHelpAndKeyVisibilityAreOnDemandInASecureWindow() {
         show()
         compose.onNodeWithContentDescription("会话配置").performClick()
-        compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
+        compose.onNodeWithText("配置仅保存在本机", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("连接助手使用的模型服务。").assertDoesNotExist()
+        compose.onNodeWithText("清除已保存配置").assertDoesNotExist()
+        compose.onNodeWithText("重新配置").assertDoesNotExist()
+        val sheet = sheetView()
+        compose.runOnIdle {
+            val window = (sheet.parent as DialogWindowProvider).window
+            assertTrue(window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
+        }
+        val hint = compose.onNodeWithText("填写完整的 HTTPS API 根路径", substring = true)
+        hint.assertDoesNotExist()
+        compose.onNodeWithContentDescription("显示 API Base URL 填写说明").performClick()
+        hint.performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("隐藏 API Base URL 填写说明").performClick()
+        hint.assertDoesNotExist()
+
+        val key = compose.onNodeWithTag("chat-api-key")
+        val masked = SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)
+        val obfuscated = SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("•".repeat(8)))
+        key.assert(masked and obfuscated)
+        compose.onNodeWithContentDescription("显示 API Key").performClick()
+        key.assert(masked and SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("test-key")))
+        compose.onNodeWithContentDescription("隐藏 API Key").performClick()
+        key.assert(masked and obfuscated)
+        compose.onNodeWithContentDescription("显示 API Key").performClick()
+        compose.onNodeWithContentDescription("关闭").performClick()
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        key.assert(masked and obfuscated)
+    }
+
+    @Test fun keyboardLeavesApplyVisibleAndSystemBackDismissesKeyboardBeforeSheet() {
+        show()
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        val sheet = sheetView()
+        compose.onNodeWithTag("chat-model-id").performScrollTo().performClick()
+        compose.waitUntil(5_000) { ViewCompat.getRootWindowInsets(sheet)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+        val apply = compose.onNodeWithTag("chat-config-apply").assertIsDisplayed().fetchSemanticsNode().boundsInWindow
+        val imeTop = sheet.rootView.height - ViewCompat.getRootWindowInsets(sheet)!!.getInsets(WindowInsetsCompat.Type.ime()).bottom
+        assertTrue("应用按钮应完整位于键盘上方", apply.bottom <= imeTop + 1f)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitUntil(5_000) { ViewCompat.getRootWindowInsets(sheet)?.isVisible(WindowInsetsCompat.Type.ime()) != true }
+        compose.onNodeWithTag("chat-config-apply").assertIsDisplayed()
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitUntil(5_000) { vm.uiState.value.configDraft == null }
+        compose.onNodeWithTag("chat-config-apply").assertDoesNotExist()
+        compose.onNodeWithTag("chat-screen").assertIsDisplayed()
+    }
+
+    @Test fun longModelIdEllipsizesAndUserBubblesKeepCopyOutside() {
+        val model = "provider/" + "long-model-id-".repeat(10)
+        val short = ChatTurn(1, "你好")
+        val long = ChatTurn(2, "长消息会自然换行。".repeat(5))
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                Box(Modifier.size(320.dp, 480.dp)) {
+                    ChatScreen(ChatUiState(modelId = model, turns = listOf(short, long)), onBack = {})
+                }
+            }
+        }
+        val modelLayout = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(model).assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(modelLayout) }
+        assertEquals(1, modelLayout.single().lineCount)
+        assertTrue(modelLayout.single().isLineEllipsized(0))
+        compose.onNodeWithTag("chat-back").assertIsDisplayed()
+        compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()
+
+        val turn = compose.onNodeWithTag("chat-turn-2").fetchSemanticsNode().boundsInRoot
+        val shortBubble = compose.onNodeWithTag("chat-user-1").fetchSemanticsNode().boundsInRoot
+        val longBubble = compose.onNodeWithTag("chat-user-2").fetchSemanticsNode().boundsInRoot
+        val copy = compose.onNodeWithTag("chat-copy-user-2").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(shortBubble.width < longBubble.width)
+        assertTrue(longBubble.width <= turn.width * 0.85f + 1f)
+        assertEquals(turn.right, longBubble.right, 1f)
+        assertTrue(copy.right <= longBubble.left)
+    }
+
+    @Test fun unreadableConfigRequiresConfirmationBeforeOpeningAnEditableForm() {
+        configs.config = LlmConfig("https://example.test/api", "test-key", "unreadable")
+        configs.loadError = ConfigStorageException(ConfigFailure.KEY_UNAVAILABLE)
+        show(configured = false)
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        compose.onNodeWithText("重新配置").performScrollTo().performClick()
         compose.onNodeWithText("取消").performClick()
-        compose.runOnIdle { assertEquals("model", vm.uiState.value.modelId) }
-        compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
-        compose.onNodeWithText("将删除本机 API 配置和当前对话，无法撤销。").assertIsDisplayed()
-        compose.onNodeWithTag("chat-config-clear-confirm").performClick()
-        compose.onNodeWithText("请先配置 API 和模型").assertIsDisplayed()
-        compose.onNodeWithTag("chat-send").assertIsNotEnabled()
+        compose.runOnIdle { assertNotNull(configs.config) }
+        compose.onNodeWithText("重新配置").performScrollTo().performClick()
+        compose.onNodeWithText("删除并继续").performClick()
+        compose.onNodeWithTag("chat-config-sheet").assertIsDisplayed()
+        compose.onNodeWithTag("chat-base-url").assertIsEnabled()
+        compose.onNodeWithText("重新配置").assertDoesNotExist()
         compose.runOnIdle { assertNull(configs.config); assertEquals(0, fake.calls.get()) }
     }
 
-    @Test fun loadFailureOffersRetryAndResetButCannotOverwriteCredentials() {
+    @Test fun configurationButtonShowsNewConversationOnlyForChangedConfigWithTurns() {
+        show(); send()
+        fake.channel.close()
+        compose.waitUntil { !vm.uiState.value.isGenerating }
+        compose.onNodeWithContentDescription("会话配置").performClick()
+        val apply = compose.onNodeWithTag("chat-config-apply")
+        apply.assert(hasText("应用"))
+        compose.onNodeWithText("更改配置会清空当前对话。").assertDoesNotExist()
+        compose.onNodeWithTag("chat-model-id").performTextInput("-new")
+        apply.assert(hasText("应用并开始新对话")).performClick()
+        compose.onNodeWithText("想了解模型的哪些方面？").assertIsDisplayed()
+        assertEquals(1, fake.calls.get())
+    }
+
+    @Test fun loadFailureCanRetryButCannotOverwriteCredentials() {
         configs.loadError = ConfigStorageException(ConfigFailure.KEY_UNAVAILABLE)
         show(configured = false)
         compose.onNodeWithText("无法加密或解密 API Key。", substring = true).assertIsDisplayed()
@@ -168,7 +296,7 @@ class ChatScreenTest {
         configs.config = LlmConfig("https://example.test/api", "test-key", "recovered")
         compose.onNodeWithText("重试读取").performScrollTo().performClick()
         compose.onNodeWithTag("chat-model-id").assert(hasText("recovered"))
-        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithContentDescription("关闭").performClick()
         compose.onNodeWithText("recovered").assertIsDisplayed()
         assertEquals(0, fake.calls.get())
     }
@@ -176,9 +304,16 @@ class ChatScreenTest {
     @Test fun savingFailureRetainsDraftAndOldConfigUntilExplicitRetry() {
         show()
         configs.saveError = ConfigStorageException(ConfigFailure.STORAGE)
+        val saveGate = CompletableDeferred<Unit>()
+        configs.saveGate = saveGate
         compose.onNodeWithContentDescription("会话配置").performClick()
         compose.onNodeWithTag("chat-model-id").performTextInput("-new")
         compose.onNodeWithTag("chat-config-apply").performClick()
+        compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("关闭").assertIsNotEnabled()
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.onNodeWithTag("chat-config-apply").assertIsDisplayed()
+        saveGate.complete(Unit)
         compose.onNodeWithText("配置读取或保存失败。", substring = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals("model", vm.uiState.value.modelId); assertNotNull(vm.uiState.value.configDraft) }
         configs.saveError = null
@@ -219,8 +354,8 @@ class ChatScreenTest {
         compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
         compose.onNodeWithText("无法加密或解密 API Key。", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("重试读取").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("chat-config-clear").performScrollTo().performClick()
-        compose.onNodeWithTag("chat-config-clear-confirm").assertIsDisplayed()
+        compose.onNodeWithText("重新配置").performScrollTo().performClick()
+        compose.onNodeWithText("删除并继续").assertIsDisplayed()
         // 弹窗窗口持有焦点且前序用例可能仍显示 IME；直接注入系统返回，避免 Espresso 等待基础窗口焦点。
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.onNodeWithTag("chat-config-apply").assertIsNotEnabled()
@@ -353,13 +488,17 @@ class ChatScreenTest {
         compose.runOnIdle { assertEquals(before, list.firstVisibleItemScrollOffset) }
     }
 
-    @Test fun copyActionCopiesTheRawMarkdownAndCodeCopiesOnlyTheBody() {
+    @Test fun copyActionsCopyTheUserTextRawMarkdownAndCodeBody() {
         show(); send()
         val code = "  fun compass() = \"**代码）**🧭后文\""
         val text = "**完整回答）**后续\n包含换行和 Unicode 🧭\n\n```kotlin\n$code\n```"
         fake.channel.trySend(LlmChunk(text)); fake.channel.close()
         awaitReply(1, code)
-        for ((button, expected) in listOf(compose.onNodeWithText("复制代码") to code, compose.onAllNodesWithText("复制消息")[1] to text)) {
+        for ((button, expected) in listOf(
+            compose.onNodeWithTag("chat-copy-user-1") to "问题\n第二行",
+            compose.onNodeWithContentDescription("复制代码") to code,
+            compose.onNodeWithTag("chat-copy-reply-1") to text,
+        )) {
             button.performScrollTo().performClick()
             compose.runOnIdle {
                 val clipboard = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -397,7 +536,7 @@ class ChatScreenTest {
         compose.onNodeWithTag("chat-input").assertIsDisplayed()
         awaitReply(1, "模型完整回答", substring = true)
         compose.onNodeWithTag("chat-messages").performScrollToNode(hasText("模型完整回答", substring = true))
-        compose.onAllNodesWithText("复制消息").fetchSemanticsNodes().also { assertTrue(it.isNotEmpty()) }
+        compose.onNodeWithTag("chat-copy-reply-1").assertExists()
         compose.runOnIdle { landscape = true }
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         compose.onNodeWithTag("chat-input").assertIsDisplayed()
@@ -502,22 +641,27 @@ class ChatScreenTest {
         return compose.onNode(matcher)
     }
     private fun imeVisible() = ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+    private fun sheetView(): View =
+        (compose.onNodeWithTag("chat-config-sheet").fetchSemanticsNode().root as ViewRootForTest).view
 
     private class MemoryConfigs : LlmConfigRepository {
         var config: LlmConfig? = null
         var loadError: Exception? = null
         var saveError: Exception? = null
+        var saveGate: CompletableDeferred<Unit>? = null
         override suspend fun load(): LlmConfig? { loadError?.let { throw it }; return config }
-        override suspend fun save(config: LlmConfig) { saveError?.let { throw it }; this.config = config }
+        override suspend fun save(config: LlmConfig) { saveGate?.await(); saveError?.let { throw it }; this.config = config }
         override suspend fun clear() { config = null }
     }
 
     private class FakeClient : LlmClient {
         val calls = AtomicInteger()
         val active = AtomicInteger()
+        lateinit var lastRequest: LlmRequest
         lateinit var channel: Channel<LlmChunk>
         override suspend fun complete(config: LlmConfig, request: LlmRequest): LlmResponse = error("stream only")
         override fun stream(config: LlmConfig, request: LlmRequest) = flow {
+            lastRequest = request
             val input = Channel<LlmChunk>(Channel.UNLIMITED)
             channel = input
             calls.incrementAndGet(); active.incrementAndGet()

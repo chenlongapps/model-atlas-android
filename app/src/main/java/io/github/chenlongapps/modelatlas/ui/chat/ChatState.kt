@@ -29,6 +29,7 @@ internal class ChatConfigDraft(
     val apiKey: String = "",
     val modelId: String = "",
     val invalid: Boolean = false,
+    val changed: Boolean = false,
 ) {
     override fun toString() = "ChatConfigDraft([redacted])"
 }
@@ -46,5 +47,7 @@ internal data class ChatUiState(
     val confirmClearConfig: Boolean = false,
 ) {
     val configurationReady: Boolean get() = modelId != null && !configLoading && !configSaving && !configLoadFailed
-    val canSend: Boolean get() = configurationReady && input.isNotBlank() && !isGenerating
+    val canStartRequest: Boolean get() = configurationReady && !isGenerating && configDraft == null
+    val canSend: Boolean get() = canStartRequest && input.isNotBlank()
+    val canSendSuggestion: Boolean get() = canStartRequest && turns.isEmpty()
 }

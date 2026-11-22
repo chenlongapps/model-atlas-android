@@ -23,7 +23,7 @@ internal fun ChatRoute(
         bottomOverlayPadding = bottomOverlayPadding,
         isVisible = isVisible,
         onBack = onBack,
-        onInput = viewModel::setInput,
+        onSendSuggestion = viewModel::sendSuggestion,
         onRetry = viewModel::retry,
         onOpenConfig = viewModel::openConfig,
         onEditConfig = viewModel::editConfig,

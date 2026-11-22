@@ -7,12 +7,12 @@ import android.os.PersistableBundle
 import android.view.WindowInsets as PlatformWindowInsets
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -82,6 +83,21 @@ import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import kotlinx.coroutines.launch
 
+private val chatSuggestions = listOf(
+    R.string.chat_suggestion_context,
+    R.string.chat_suggestion_price,
+    R.string.chat_suggestion_weights,
+    R.string.chat_suggestion_moe,
+    R.string.chat_suggestion_cache,
+    R.string.chat_suggestion_multimodal,
+    R.string.chat_suggestion_benchmarks,
+    R.string.chat_suggestion_latency,
+    R.string.chat_suggestion_quantization,
+    R.string.chat_suggestion_reasoning,
+    R.string.chat_suggestion_tools,
+    R.string.chat_suggestion_structured_output,
+)
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 internal fun ChatScreen(
@@ -90,7 +106,7 @@ internal fun ChatScreen(
     bottomOverlayPadding: Dp = 0.dp,
     isVisible: Boolean = true,
     onBack: (() -> Unit)? = null,
-    onInput: (String) -> Unit = {},
+    onSendSuggestion: (String) -> Unit = {},
     onRetry: () -> Unit = {},
     onOpenConfig: () -> Unit = {},
     onEditConfig: (String, String, String) -> Unit = { _, _, _ -> },
@@ -104,6 +120,8 @@ internal fun ChatScreen(
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
+    // 在列表项外抽样，避免滚动、配置面板开合或输入引发的重组换题。
+    val suggestions = remember { chatSuggestions.shuffled().take(3) }
     var followLatest by rememberSaveable { mutableStateOf(true) }
     val scrollConnection = remember(listState) {
         object : NestedScrollConnection {
@@ -155,8 +173,7 @@ internal fun ChatScreen(
         // 一次性消费系统栏、刘海及 IME；共享输入栏位于页面之外，不在此叠加 imePadding。
         contentWindowInsets = WindowInsets.safeDrawing.union(WindowInsets.ime),
     ) { padding ->
-        BoxWithConstraints(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-            val compact = maxHeight < 400.dp
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             val openConfig = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }
             val navigateBack: (() -> Unit)? = onBack?.let { back ->
                 {
@@ -168,30 +185,18 @@ internal fun ChatScreen(
                 }
             }
             // 共享输入栏由外壳绘制在页面之上，消息区始终为它保留高度；IME 由 Scaffold 一次消费。
-            Column(Modifier.fillMaxSize().padding(bottom = bottomOverlayPadding)) {
-                if (compact) {
-                    // 短窗口把返回与配置入口固定在顶部，标题仍随消息滚动。
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        navigateBack?.let { back -> ChatBackButton(isVisible, back) }
-                        Spacer(Modifier.weight(1f))
-                        ChatConfigButton(uiState, isVisible, openConfig)
-                    }
-                } else {
-                    ChatHeader(uiState, isVisible, openConfig, onBack = navigateBack)
-                }
+            Column(
+                Modifier.fillMaxSize().padding(bottom = bottomOverlayPadding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ChatHeader(uiState, isVisible, openConfig, onBack = navigateBack)
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(scrollConnection).testTag("chat-messages"),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.weight(1f).widthIn(max = 720.dp).fillMaxWidth()
+                        .nestedScroll(scrollConnection).testTag("chat-messages"),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    // 短窗口标题参与滚动；消息仍按稳定轮次 key 保留阅读锚点。
-                    if (compact) item(key = "header", contentType = "header") {
-                        ChatHeader(uiState, isVisible, openConfig, showConfig = false)
-                    }
                     if (uiState.modelId == null || (uiState.configLoadFailed && uiState.configDraft == null)) item(key = "configuration", contentType = "configuration") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (uiState.configLoadFailed && uiState.configDraft == null) {
@@ -210,32 +215,39 @@ internal fun ChatScreen(
                     items(uiState.turns, key = { it.id }, contentType = { "turn" }) { turn ->
                         ChatTurnContent(turn, canRetry = turn === uiState.turns.lastOrNull() && !uiState.isGenerating && uiState.configurationReady, onRetry)
                     }
-                    if (uiState.turns.isEmpty()) item(key = "welcome") { ChatWelcome(isVisible, onInput) }
+                    if (uiState.turns.isEmpty()) item(key = "welcome") {
+                        ChatWelcome(suggestions, isVisible && uiState.canSendSuggestion) { text ->
+                            focus.clearFocus()
+                            keyboard?.hide()
+                            onSendSuggestion(text)
+                        }
+                    }
                 }
             }
         }
     }
     uiState.configDraft?.takeIf { isVisible }?.let { draft ->
-        ChatConfigDialog(draft, onEditConfig, onApplyConfig, onDismissConfig,
+        ChatConfigSheet(draft, onEditConfig, onApplyConfig, onDismissConfig,
             loading = uiState.configLoading, saving = uiState.configSaving, loadFailed = uiState.configLoadFailed,
             failure = uiState.configFailure, confirmClear = uiState.confirmClearConfig,
+            startsNewConversation = draft.changed && uiState.turns.isNotEmpty(),
             onReload = onReloadConfig, onRequestClear = onRequestClearConfig,
             onCancelClear = onCancelClearConfig, onClear = onClearConfig)
     }
 }
 
 @Composable
-private fun ChatWelcome(enabled: Boolean, onInput: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun ChatWelcome(suggestions: List<Int>, enabled: Boolean, onSend: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.chat_welcome), style = MaterialTheme.typography.titleLarge)
-        Text(stringResource(R.string.chat_notice), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        for (suggestion in listOf(R.string.chat_suggestion_context, R.string.chat_suggestion_price, R.string.chat_suggestion_weights)) {
+        for (suggestion in suggestions) {
             val text = stringResource(suggestion)
             Surface(
-                onClick = { onInput(text) }, enabled = enabled,
+                onClick = { onSend(text) }, enabled = enabled,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
+                contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                 shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("chat-suggestion"),
             ) {
                 Row(
                     Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -251,24 +263,25 @@ private fun ChatWelcome(enabled: Boolean, onInput: (String) -> Unit) {
 }
 
 @Composable
-private fun ChatHeader(uiState: ChatUiState, isVisible: Boolean, onOpenConfig: () -> Unit, showConfig: Boolean = true, onBack: (() -> Unit)? = null) {
+private fun ChatHeader(uiState: ChatUiState, isVisible: Boolean, onOpenConfig: () -> Unit, onBack: (() -> Unit)?) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 20.dp, bottom = 12.dp),
+        Modifier.fillMaxWidth().padding(start = if (onBack == null) 16.dp else 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
+            .testTag("chat-header"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         onBack?.let { ChatBackButton(isVisible, it) }
         Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+            Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             Text(
                 if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (showConfig) ChatConfigButton(uiState, isVisible, onOpenConfig)
+        ChatConfigButton(uiState, isVisible, onOpenConfig)
     }
 }
 
@@ -289,20 +302,11 @@ private fun ChatConfigButton(uiState: ChatUiState, enabled: Boolean, onClick: ()
 @Composable
 private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Unit) {
     val reply by turn.reply.collectAsStateWithLifecycle()
-    val userLabel = stringResource(R.string.chat_user)
-    Column(Modifier.fillMaxWidth().testTag("chat-turn-${turn.id}"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Surface(
-            modifier = Modifier.align(Alignment.End).semantics { contentDescription = userLabel },
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                SelectionContainer { Text(turn.user, style = MaterialTheme.typography.bodyLarge) }
-                CopyMessageButton(turn.user)
-            }
-        }
+    val showRetry = canRetry && (reply.status == ChatReplyStatus.FAILED || reply.status == ChatReplyStatus.STOPPED)
+    Column(Modifier.fillMaxWidth().testTag("chat-turn-${turn.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        UserMessage(turn)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (reply.status == ChatReplyStatus.WAITING) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -311,7 +315,6 @@ private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Un
             }
             if (reply.text.isNotEmpty()) {
                 AssistantMarkdown(reply, modifier = Modifier.testTag("chat-reply-${turn.id}"))
-                CopyMessageButton(reply.text)
             }
             when (reply.status) {
                 ChatReplyStatus.FAILED -> {
@@ -329,9 +332,42 @@ private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Un
                 ChatReplyStatus.COMPLETE -> if (reply.text.isEmpty()) Text(stringResource(R.string.chat_empty_response), style = MaterialTheme.typography.bodyMedium)
                 else -> Unit
             }
-            if (canRetry && reply.status in setOf(ChatReplyStatus.FAILED, ChatReplyStatus.STOPPED)) {
+            if (showRetry) {
                 Text(stringResource(R.string.chat_retry_notice), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = onRetry, modifier = Modifier.testTag("chat-retry")) { Text(stringResource(R.string.chat_retry)) }
+            }
+            if (reply.text.isNotEmpty() || showRetry) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (reply.text.isNotEmpty()) {
+                        CopyMessageButton(reply.text, modifier = Modifier.testTag("chat-copy-reply-${turn.id}"))
+                    }
+                    if (showRetry) {
+                        TextButton(onClick = onRetry, modifier = Modifier.testTag("chat-retry")) {
+                            Text(stringResource(R.string.chat_retry))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserMessage(turn: ChatTurn) {
+    val userLabel = stringResource(R.string.chat_user)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val bubbleMaxWidth = maxWidth * 0.85f
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.Bottom) {
+            CopyMessageButton(turn.user, modifier = Modifier.testTag("chat-copy-user-${turn.id}"))
+            // 权重不填满，让短消息贴合文字；复制入口留在气泡外，也不抢选择手势。
+            Surface(
+                modifier = Modifier.weight(1f, fill = false).widthIn(max = bubbleMaxWidth)
+                    .testTag("chat-user-${turn.id}").semantics { contentDescription = userLabel },
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                SelectionContainer(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(turn.user, style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
     }
@@ -367,16 +403,22 @@ private suspend fun LazyListState.scrollToChatBottom() {
 }
 
 @Composable
-internal fun CopyMessageButton(text: String, @StringRes label: Int = R.string.chat_copy) {
+internal fun CopyMessageButton(text: String, modifier: Modifier = Modifier, @StringRes label: Int = R.string.chat_copy) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    TextButton(onClick = {
+    IconButton(modifier = modifier.size(48.dp), onClick = {
         scope.launch {
             val clip = ClipData.newPlainText("", text)
             clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
             clipboard.setClipEntry(ClipEntry(clip))
         }
-    }) { Text(stringResource(label)) }
+    }) {
+        Icon(
+            painterResource(R.drawable.ic_content_copy), stringResource(label),
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Preview(name = "Chat · Light", showBackground = true)

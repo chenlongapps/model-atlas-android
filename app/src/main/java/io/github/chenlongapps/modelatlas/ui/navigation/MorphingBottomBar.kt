@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -91,6 +92,9 @@ internal fun MorphingBottomBar(
     val isRtl = layoutDirection == LayoutDirection.Rtl
     val modelsDoubleClick by rememberUpdatedState(onModelsDoubleClick)
     val colors = MaterialTheme.colorScheme
+    val chatOpen = mode == BottomBarMode.Chat
+    val capsuleSurface = if (chatOpen) colors.surfaceContainerHigh else colors.surfaceContainer
+    val capsuleTint = if (chatOpen) capsuleSurface.copy(alpha = 0.86f) else colors.background.copy(alpha = 0.5f)
     val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
     val density = LocalDensity.current
     // 记住导航内容的实测高度，让输入胶囊在默认字号下与导航胶囊完全同高。
@@ -115,7 +119,7 @@ internal fun MorphingBottomBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, colors.background.copy(alpha = 0.5f))
+                    .navigationGlassSurface(backdrop, glassEnabled, capsuleSurface, capsuleTint)
                     .testTag("glass-navigation-capsule"),
             ) {
                 AnimatedContent(
@@ -153,7 +157,7 @@ internal fun MorphingBottomBar(
                 }
             }
             AssistantActionButton(
-                chatOpen = mode == BottomBarMode.Chat,
+                chatOpen = chatOpen,
                 chatState = chatState,
                 size = aiSize,
                 backdrop = backdrop,
@@ -215,6 +219,7 @@ private fun ChatComposerContent(
                             placeholder,
                             style = textStyle.copy(color = colors.onSurfaceVariant),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     innerTextField()
@@ -261,6 +266,13 @@ private fun AssistantActionButton(
         AssistantAction.Send -> canSend
         AssistantAction.Stop -> true
     }
+    val emphasized = chatOpen && clickable
+    val actionSurface = when {
+        emphasized -> colors.primaryContainer
+        chatOpen -> colors.surfaceContainerHigh
+        else -> colors.surfaceContainer
+    }
+    val actionTint = if (chatOpen) actionSurface.copy(alpha = 0.9f) else colors.background.copy(alpha = 0.5f)
     val tag = when (action) {
         AssistantAction.Ai -> "nav-chat"
         AssistantAction.Send -> "chat-send"
@@ -269,7 +281,7 @@ private fun AssistantActionButton(
     Box(
         modifier = modifier
             .size(size)
-            .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, colors.background.copy(alpha = 0.5f))
+            .navigationGlassSurface(backdrop, glassEnabled, actionSurface, actionTint)
             .testTag(tag)
             .semantics { contentDescription = label }
             .clickable(
@@ -305,13 +317,13 @@ private fun AssistantActionButton(
                 AssistantAction.Send -> Icon(
                     painterResource(R.drawable.ic_send),
                     contentDescription = null,
-                    tint = if (canSend) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.38f),
+                    tint = if (emphasized) colors.onPrimaryContainer else colors.onSurface.copy(alpha = 0.38f),
                     modifier = Modifier.size(24.dp),
                 )
                 AssistantAction.Stop -> Icon(
                     painterResource(R.drawable.ic_stop),
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = if (emphasized) colors.onPrimaryContainer else colors.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )
             }

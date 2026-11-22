@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.compose.MarkdownElement
 import com.mikepenz.markdown.compose.components.markdownComponents
@@ -88,6 +89,7 @@ internal fun AssistantMarkdown(reply: ChatReply, modifier: Modifier = Modifier) 
     var measuredHeight by rememberSaveable { mutableIntStateOf(0) }
     val scheme = MaterialTheme.colorScheme
     val type = MaterialTheme.typography
+    val body = type.bodyLarge
     val uriHandler = LocalUriHandler.current
     val safeUriHandler = remember(uriHandler) { assistantUriHandler(uriHandler) }
     val highlightCode = reply.status != ChatReplyStatus.STREAMING
@@ -130,18 +132,25 @@ internal fun AssistantMarkdown(reply: ChatReply, modifier: Modifier = Modifier) 
                 typography = markdownTypography(
                     h1 = type.titleLarge,
                     h2 = type.titleMedium,
-                    h3 = type.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    h4 = type.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    h5 = type.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    h3 = body.copy(fontWeight = FontWeight.SemiBold),
+                    h4 = type.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    h5 = type.bodyMedium.copy(fontWeight = FontWeight.Medium),
                     h6 = type.bodyMedium.copy(fontWeight = FontWeight.Medium, color = scheme.onSurfaceVariant),
+                    text = body,
+                    paragraph = body,
+                    ordered = body,
+                    bullet = body,
+                    list = body,
+                    quote = body.copy(color = scheme.outline),
                     table = type.bodyMedium,
                     textLink = TextLinkStyles(
                         style = SpanStyle(color = scheme.primary, textDecoration = TextDecoration.Underline),
                     ),
                 ),
                 padding = markdownPadding(
-                    listItemTop = 1.dp, listItemBottom = 1.dp,
-                    blockQuote = PaddingValues(horizontal = 8.dp),
+                    list = 0.dp, listItemTop = 1.dp, listItemBottom = 1.dp,
+                    blockQuote = PaddingValues(horizontal = 12.dp),
+                    blockQuoteText = PaddingValues(vertical = 2.dp),
                 ),
                 dimens = markdownDimens(tableCellWidth = 132.dp, tableCellPadding = 8.dp),
                 components = components,
@@ -152,8 +161,15 @@ internal fun AssistantMarkdown(reply: ChatReply, modifier: Modifier = Modifier) 
                     Spacer(it.height(with(LocalDensity.current) { measuredHeight.toDp() }))
                 },
                 success = { state, elements, layout ->
-                    Column(layout.onSizeChanged { measuredHeight = it.height }) {
+                    Column(
+                        layout.onSizeChanged { measuredHeight = it.height },
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         state.node.children.forEach { block ->
+                            // 空行和已解析的链接定义不占布局；段落之间使用统一间距。
+                            if (block.type == MarkdownTokenTypes.EOL || block.type == MarkdownElementTypes.LINK_DEFINITION) {
+                                return@forEach
+                            }
                             // 尾部块成为稳定块、或交接给最终 AST 时，保留同位置组件的交互状态。
                             key(block.startOffset, block.type) {
                                 // 稳定块复用短原文和局部偏移，不为它保留旧整篇文本或重新排版。
@@ -161,12 +177,12 @@ internal fun AssistantMarkdown(reply: ChatReply, modifier: Modifier = Modifier) 
                                     LocalMarkdownNode(block, block.startOffset) to
                                         state.content.substring(block.startOffset, block.endOffset)
                                 }
-                                MarkdownElement(node, elements, source)
+                                MarkdownElement(node, elements, source, includeSpacer = false)
                             }
                         }
                     }
                 },
-                error = { Text(reply.text, modifier = it.onSizeChanged { size -> measuredHeight = size.height }, style = type.bodyLarge) },
+                error = { Text(reply.text, modifier = it.onSizeChanged { size -> measuredHeight = size.height }, style = body) },
             )
         }
     }
@@ -324,18 +340,20 @@ private fun AssistantCodeBlock(node: ASTNode, source: String, style: TextStyle, 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = scheme.surfaceContainerLow,
     ) {
         Column {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (language != null) Text(
                     language, Modifier.weight(1f),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 CopyMessageButton(code, label = R.string.chat_copy_code)
             }

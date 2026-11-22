@@ -425,7 +425,7 @@ class ChatNavigationTest {
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         assertFullScreen()
         assertControlsInsideScreen()
-        compose.onNodeWithTag("chat-messages").performScrollToNode(hasText("AI 助手"))
+        compose.onNode(hasText("AI 助手") and hasAnyAncestor(hasTestTag("chat-header"))).assertIsDisplayed()
         compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()
         compose.onNodeWithTag("chat-back").assertIsDisplayed()
         saveRegressionScreenshot("chat-route-short-large-rtl")
@@ -529,7 +529,7 @@ class ChatNavigationTest {
                 onChatClosed = { onVisibility(false) },
                 chatContent = { padding, visible, onBack ->
                     LaunchedEffect(visible) { onVisibility(visible) }
-                    ChatScreen(chat, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, onInput = setInput)
+                    ChatScreen(chat, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
                 },
             ) { padding, list, onClick ->
                 ModelListScreen(ModelListUiState(models = List(30) { ModelSummary("lab/$it", "模型 $it") }, isLoading = false), bottomOverlayPadding = padding, listState = list, onModelClick = onClick)

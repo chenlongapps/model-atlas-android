@@ -36,7 +36,8 @@ internal class ChatViewModel @Inject constructor(
     init { restoreConfig() }
 
     fun retryLoadConfig() {
-        if (state.value.configLoading || state.value.configSaving || !state.value.configLoadFailed) return
+        val current = state.value
+        if (current.configLoading || current.configSaving || !current.configLoadFailed || current.confirmClearConfig) return
         restoreConfig()
     }
 
@@ -69,7 +70,8 @@ internal class ChatViewModel @Inject constructor(
 
     fun editConfig(baseUrl: String, apiKey: String, modelId: String) {
         if (state.value.configDraft == null || state.value.configSaving || state.value.configLoading || state.value.configLoadFailed) return
-        state.update { it.copy(configDraft = ChatConfigDraft(baseUrl, apiKey, modelId), configFailure = null) }
+        val changed = config?.let { it.baseUrl != baseUrl.trim() || it.apiKey != apiKey || it.modelId != modelId.trim() } ?: true
+        state.update { it.copy(configDraft = ChatConfigDraft(baseUrl, apiKey, modelId, changed = changed), configFailure = null) }
     }
 
     fun dismissConfig() {
@@ -83,16 +85,15 @@ internal class ChatViewModel @Inject constructor(
         val candidate = try {
             LlmConfig(draft.baseUrl.trim(), draft.apiKey, draft.modelId.trim()).also { it.validate() }
         } catch (_: IllegalArgumentException) {
-            state.update { it.copy(configDraft = ChatConfigDraft(draft.baseUrl, draft.apiKey, draft.modelId, invalid = true)) }
+            state.update { it.copy(configDraft = ChatConfigDraft(draft.baseUrl, draft.apiKey, draft.modelId, invalid = true, changed = draft.changed)) }
             return
         }
-        val changed = config?.let { it.baseUrl != candidate.baseUrl || it.apiKey != candidate.apiKey || it.modelId != candidate.modelId } ?: true
         state.update { it.copy(configSaving = true, configFailure = null) }
         viewModelScope.launch {
             try {
                 configs.save(candidate)
                 config = candidate
-                state.update { it.copy(modelId = candidate.modelId, configDraft = null, configSaving = false, turns = if (changed) emptyList() else it.turns) }
+                state.update { it.copy(modelId = candidate.modelId, configDraft = null, configSaving = false, turns = if (draft.changed) emptyList() else it.turns) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -102,7 +103,8 @@ internal class ChatViewModel @Inject constructor(
     }
 
     fun requestClearConfig() {
-        if (state.value.isGenerating || state.value.configSaving || state.value.configLoading || state.value.configDraft == null) return
+        val current = state.value
+        if (!current.configLoadFailed || current.isGenerating || current.configSaving || current.configLoading || current.configDraft == null) return
         state.update { it.copy(confirmClearConfig = true) }
     }
 
@@ -111,13 +113,14 @@ internal class ChatViewModel @Inject constructor(
     }
 
     fun clearConfig() {
-        if (!state.value.confirmClearConfig || state.value.configSaving || state.value.configLoading || state.value.isGenerating) return
+        val current = state.value
+        if (!current.configLoadFailed || !current.confirmClearConfig || current.configSaving || current.configLoading || current.isGenerating) return
         state.update { it.copy(configSaving = true, configFailure = null) }
         viewModelScope.launch {
             try {
                 configs.clear()
                 config = null
-                state.update { it.copy(modelId = null, turns = emptyList(), input = "", configDraft = null,
+                state.update { it.copy(modelId = null, turns = emptyList(), input = "", configDraft = ChatConfigDraft(),
                     configSaving = false, configLoadFailed = false, confirmClearConfig = false) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -132,16 +135,23 @@ internal class ChatViewModel @Inject constructor(
 
     private fun failure(error: Exception) = (error as? ConfigStorageException)?.failure ?: ConfigFailure.STORAGE
 
-    fun send() {
-        if (!state.value.canSend || state.value.configDraft != null) return
-        val turn = ChatTurn(++nextId, state.value.input.trim())
-        state.update { it.copy(turns = it.turns + turn, input = "") }
+    fun send() = sendMessage(state.value.input, clearInput = true)
+
+    fun sendSuggestion(text: String) {
+        if (state.value.canSendSuggestion) sendMessage(text, clearInput = false)
+    }
+
+    private fun sendMessage(text: String, clearInput: Boolean) {
+        val message = text.trim()
+        if (!state.value.canStartRequest || message.isEmpty()) return
+        val turn = ChatTurn(++nextId, message)
+        state.update { it.copy(turns = it.turns + turn, input = if (clearInput) "" else it.input) }
         generate(turn)
     }
 
     /** 仅末轮可重试；替换该轮失败内容，不再添加 user、不自动续接部分结果。 */
     fun retry() {
-        if (state.value.isGenerating || state.value.configDraft != null || !state.value.configurationReady) return
+        if (!state.value.canStartRequest) return
         val turn = state.value.turns.lastOrNull() ?: return
         if (turn.reply.value.status !in setOf(ChatReplyStatus.FAILED, ChatReplyStatus.STOPPED)) return
         generate(turn)

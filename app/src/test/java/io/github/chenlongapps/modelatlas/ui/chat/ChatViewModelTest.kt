@@ -161,6 +161,30 @@ class ChatViewModelTest {
         assertTrue(vm.uiState.value.turns.isEmpty())
     }
 
+    @Test fun suggestionSendsOnceFromEmptyConversationAndPreservesManualDraft() = runTest {
+        val vm = create(false)
+        vm.setInput("handwritten")
+        vm.sendSuggestion("not configured")
+        configure(vm)
+        vm.openConfig()
+        vm.sendSuggestion("config panel is open")
+        vm.dismissConfig()
+        vm.sendSuggestion(" \n ")
+        assertTrue(vm.uiState.value.turns.isEmpty())
+        assertTrue(client.requests.isEmpty())
+
+        vm.sendSuggestion(" 示例问题 ")
+        vm.sendSuggestion("second tap")
+        runCurrent()
+        assertEquals(listOf(LlmMessage(LlmRole.USER, "示例问题")), client.requests.single().messages)
+        assertEquals("示例问题", vm.uiState.value.turns.single().user)
+        assertEquals("handwritten", vm.uiState.value.input)
+        client.finish(); advanceUntilIdle()
+        vm.sendSuggestion("stale click")
+        runCurrent()
+        assertEquals(1, client.requests.size)
+    }
+
     @Test fun invalidConfigurationIsRejectedBeforeAnyRequestWithSameClientRules() = runTest {
         val vm = create(false)
         val invalid = listOf(
@@ -184,11 +208,15 @@ class ChatViewModelTest {
     @Test fun onlyAppliedConfigurationIsPersistedAndChangingItStartsNewConversation() = runTest {
         val vm = create(); send(vm); client.finish(); advanceUntilIdle()
         val turns = vm.uiState.value.turns
-        vm.openConfig(); vm.applyConfig(); runCurrent()
+        vm.openConfig(); vm.editConfig(" https://example.test/custom/root ", "test-key", " model ")
+        assertFalse(vm.uiState.value.configDraft!!.changed)
+        vm.applyConfig(); runCurrent()
         assertSame(turns, vm.uiState.value.turns)
         vm.openConfig(); vm.editConfig("https://other.example/api", "new-secret", "new-model"); vm.dismissConfig()
         assertEquals("model", vm.uiState.value.modelId)
-        vm.openConfig(); vm.editConfig("https://other.example/api", "new-secret", "new-model"); vm.applyConfig(); runCurrent()
+        vm.openConfig(); vm.editConfig("https://other.example/api", "new-secret", "new-model")
+        assertTrue(vm.uiState.value.configDraft!!.changed)
+        vm.applyConfig(); runCurrent()
         assertTrue(vm.uiState.value.turns.isEmpty())
         assertEquals("new-model", vm.uiState.value.modelId)
         assertEquals(1, client.requests.size)
@@ -247,7 +275,7 @@ class ChatViewModelTest {
         configs.saved = LlmConfig("https://example.test/api", "restored-key", "restored-model")
         configs.loadGate = CompletableDeferred()
         val vm = create(false)
-        vm.setInput("hello"); vm.send(); vm.openConfig()
+        vm.setInput("hello"); vm.send(); vm.sendSuggestion("example"); vm.openConfig()
         assertTrue(vm.uiState.value.configLoading)
         assertFalse(vm.uiState.value.canSend)
         assertNull(vm.uiState.value.configDraft)
@@ -300,8 +328,18 @@ class ChatViewModelTest {
         assertTrue(client.requests.isEmpty())
     }
 
-    @Test fun clearRequiresConfirmationAndRemovesPersistedAndMemoryStateWithoutNetwork() = runTest {
-        val vm = create(); send(vm); client.finish(); advanceUntilIdle()
+    @Test fun readableConfigurationCannotBeCleared() = runTest {
+        val vm = create()
+        vm.openConfig(); vm.requestClearConfig(); vm.clearConfig(); runCurrent()
+        assertFalse(vm.uiState.value.confirmClearConfig)
+        assertEquals(0, configs.clears)
+        assertNotNull(configs.saved)
+    }
+
+    @Test fun unreadableConfigRequiresConfirmationAndOpensFreshDraftWithoutNetwork() = runTest {
+        configs.saved = LlmConfig("https://example.test", "old-key", "unreadable")
+        configs.loadError = ConfigStorageException(ConfigFailure.KEY_UNAVAILABLE)
+        val vm = create(false)
         vm.setInput("draft")
         vm.clearConfig(); runCurrent()
         assertNotNull(configs.saved)
@@ -313,12 +351,18 @@ class ChatViewModelTest {
         assertNull(vm.uiState.value.modelId)
         assertTrue(vm.uiState.value.turns.isEmpty())
         assertEquals("", vm.uiState.value.input)
+        assertNotNull(vm.uiState.value.configDraft)
+        assertFalse(vm.uiState.value.configLoadFailed)
+        assertEquals("", vm.uiState.value.configDraft!!.apiKey)
+        configs.loadError = null
         assertNull(create(false).uiState.value.modelId)
-        assertEquals(1, client.requests.size)
+        assertTrue(client.requests.isEmpty())
     }
 
     @Test fun failedClearDisablesOldCredentialsAndCanBeRetriedWithoutLeakingError() = runTest {
-        val vm = create()
+        configs.saved = LlmConfig("https://example.test", "old-key", "unreadable")
+        configs.loadError = ConfigStorageException(ConfigFailure.KEY_UNAVAILABLE)
+        val vm = create(false)
         configs.clearError = IllegalStateException("sensitive-secret")
         vm.openConfig(); vm.requestClearConfig(); vm.clearConfig(); runCurrent()
         assertNull(vm.uiState.value.modelId)

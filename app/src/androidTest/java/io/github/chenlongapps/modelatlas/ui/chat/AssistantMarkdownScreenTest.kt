@@ -21,6 +21,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performFirstLinkClick
@@ -96,7 +97,7 @@ class AssistantMarkdownScreenTest {
             }
         }
         awaitText("fun first() = 1")
-        compose.onNodeWithText("复制代码").assertIsDisplayed()
+        compose.onNodeWithContentDescription("复制代码").assertIsDisplayed()
         val closed = reply.text + "\nfun second() = 2\n```\n\n- 列表尾项\n\n| 标题 |"
         compose.runOnIdle { reply = reply.copy(text = closed) }
         awaitText("fun first() = 1\nfun second() = 2")
