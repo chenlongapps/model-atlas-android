@@ -187,7 +187,7 @@ private val AssistantAnnotator = markdownAnnotator(markdownAnnotatorConfig(eolAs
 private fun rememberAssistantMarkdown(reply: ChatReply): androidx.compose.runtime.State<State> {
     val latest by rememberUpdatedState(reply)
     var reset by remember { mutableIntStateOf(0) }
-    val streaming = key(reset) { rememberStreamingMarkdownState() }
+    val streaming = key(reset) { rememberStreamingMarkdownState(flavour = AssistantMarkdownFlavour) }
     val result = remember { mutableStateOf<State>(State.Loading()) }
     LaunchedEffect(streaming) {
         var appended = ""
@@ -203,7 +203,7 @@ private fun rememberAssistantMarkdown(reply: ChatReply): androidx.compose.runtim
             if (current == rendered) return@collect
             val text = current.text
             if (current.status != ChatReplyStatus.STREAMING) {
-                val final = withContext(Dispatchers.Default) { parseMarkdown(text) }
+                val final = withContext(Dispatchers.Default) { parseMarkdown(text, flavour = AssistantMarkdownFlavour) }
                 if (latest == current) result.value = final
             } else if (rendered?.status?.let { it != ChatReplyStatus.STREAMING } == true) {
                 result.value = State.Loading()

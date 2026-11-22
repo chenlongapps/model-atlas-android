@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -24,6 +25,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
@@ -106,6 +111,34 @@ class AssistantMarkdownScreenTest {
         compose.onNodeWithText("新回复").assertIsDisplayed()
     }
 
+    @Test fun cjkEmphasisSurvivesSplitMarkersAndCompletionWithoutVisibleSpaces() {
+        val closed = "**内容）**"
+        val literal = "**代码）**后文"
+        var reply by mutableStateOf(ChatReply(closed.dropLast(1), ChatReplyStatus.STREAMING))
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                Column(Modifier.width(280.dp).verticalScroll(rememberScrollState())) {
+                    AssistantMarkdown(reply)
+                }
+            }
+        }
+        awaitText("内容）", substring = true)
+        compose.runOnIdle { reply = reply.copy(text = closed) }
+        assertEmphasis("内容）", 0, 3, bold = true)
+        compose.runOnIdle { reply = reply.copy(text = "${closed}后续") }
+        assertEmphasis("内容）后续", 0, 3, bold = true)
+
+        val streamed = "${closed}后续\n\n正文*「日本語」*かな\n\n```md\n$literal"
+        compose.runOnIdle { reply = reply.copy(text = streamed) }
+        assertEmphasis("正文「日本語」かな", 2, 7, bold = false)
+        awaitText(literal)
+        compose.runOnIdle { reply = ChatReply("$streamed\n```\n\n已完成", ChatReplyStatus.COMPLETE) }
+        awaitText("已完成")
+        assertEmphasis("内容）后续", 0, 3, bold = true)
+        assertEmphasis("正文「日本語」かな", 2, 7, bold = false)
+        compose.onNodeWithText(literal).performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun wideContentStaysInsideTheReplyAndUsesIndependentHorizontalScroll() {
         val longLink = "https://example.test/" + "a".repeat(510)
         val table = List(10) { "列$it" }.joinToString(" | ", "| ", " |") + "\n" +
@@ -150,7 +183,18 @@ class AssistantMarkdownScreenTest {
         compose.runOnIdle { assertEquals(listOf(safe), urls) }
     }
 
-    private fun awaitText(text: String) {
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText(text)).fetchSemanticsNodes().size == 1 }
+    private fun awaitText(text: String, substring: Boolean = false) {
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().size == 1 }
+    }
+
+    private fun assertEmphasis(text: String, start: Int, end: Int, bold: Boolean) {
+        awaitText(text)
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(text).performScrollTo().assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val styles = layouts.single().layoutInput.text.spanStyles.filter {
+            if (bold) it.item.fontWeight == FontWeight.Bold else it.item.fontStyle == FontStyle.Italic
+        }
+        assertEquals(listOf(start to end), styles.map { it.start to it.end })
     }
 }

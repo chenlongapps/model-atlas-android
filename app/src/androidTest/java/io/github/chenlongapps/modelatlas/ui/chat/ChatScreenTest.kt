@@ -355,8 +355,8 @@ class ChatScreenTest {
 
     @Test fun copyActionCopiesTheRawMarkdownAndCodeCopiesOnlyTheBody() {
         show(); send()
-        val code = "  fun compass() = \"🧭\""
-        val text = "**完整回答**\n包含换行和 Unicode 🧭\n\n```kotlin\n$code\n```"
+        val code = "  fun compass() = \"**代码）**🧭后文\""
+        val text = "**完整回答）**后续\n包含换行和 Unicode 🧭\n\n```kotlin\n$code\n```"
         fake.channel.trySend(LlmChunk(text)); fake.channel.close()
         awaitReply(1, code)
         for ((button, expected) in listOf(compose.onNodeWithText("复制代码") to code, compose.onAllNodesWithText("复制消息")[1] to text)) {
