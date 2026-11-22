@@ -1,8 +1,6 @@
 # ModelAtlas Android TODO
 
-## AI
-
-- [ ] UI 的优化  
+- [ ] 封装一个统一的 Liquid Glass 的组件，可以在不同的页面中复用，减少重复代码。
     
 ## 后续
 

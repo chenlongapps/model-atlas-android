@@ -122,6 +122,43 @@ class ChatNavigationTest {
         assertEquals(navCapsule.bottom, restoredCapsule.bottom, 1f)
     }
 
+    @Test fun messagesScrollBehindFloatingActionsAndKeepBothEndsClear() {
+        lateinit var list: LazyListState
+        val turns = List(12) { i -> ChatTurn(i.toLong(), "问题 $i").also {
+            it.update(ChatReply("回答 $i", ChatReplyStatus.COMPLETE))
+        } }
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ModelAtlasScaffold(chatContent = { padding, visible, onBack ->
+                    list = rememberLazyListState()
+                    ChatScreen(ChatUiState(modelId = "example-model", turns = turns),
+                        bottomOverlayPadding = padding, isVisible = visible, onBack = onBack, listState = list)
+                }) { _, _, _ -> }
+            }
+        }
+        open()
+        compose.waitUntil(5_000) { !list.canScrollForward }
+        val back = compose.onNodeWithTag("chat-back").fetchSemanticsNode().boundsInRoot
+        val config = compose.onNodeWithTag("chat-config").fetchSemanticsNode().boundsInRoot
+        val composer = compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
+        val viewport = compose.onNodeWithTag("chat-messages").fetchSemanticsNode().boundsInRoot
+        val lastTurn = compose.onNodeWithTag("chat-turn-11").fetchSemanticsNode().boundsInRoot
+        assertTrue(back.right < config.left)
+        assertTrue(viewport.top < back.top && viewport.bottom > composer.bottom)
+        assertTrue(lastTurn.bottom < composer.top)
+
+        val status = compose.onNodeWithTag("chat-session-status")
+        compose.runOnIdle { list.requestScrollToItem(0) }
+        val initialStatus = status.fetchSemanticsNode().boundsInRoot
+        assertTrue(initialStatus.top > back.bottom)
+        compose.runOnIdle { list.requestScrollToItem(0, (initialStatus.top - back.center.y).toInt()) }
+        assertTrue(status.fetchSemanticsNode().boundsInRoot.top < back.bottom)
+        assertEquals(back, compose.onNodeWithTag("chat-back").fetchSemanticsNode().boundsInRoot)
+        assertEquals(config, compose.onNodeWithTag("chat-config").fetchSemanticsNode().boundsInRoot)
+        assertEquals(composer, compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot)
+        saveRegressionScreenshot("chat-route-floating")
+    }
+
     @Test fun assistantIsIndependentAndSettingsHasNoDuplicateEntry() {
         compose.setContent { Content() }
         compose.onNodeWithTag("nav-models").assertIsSelected()
@@ -425,7 +462,7 @@ class ChatNavigationTest {
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         assertFullScreen()
         assertControlsInsideScreen()
-        compose.onNode(hasText("AI 助手") and hasAnyAncestor(hasTestTag("chat-header"))).assertIsDisplayed()
+        compose.onNodeWithTag("chat-session-status").assertIsDisplayed()
         compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()
         compose.onNodeWithTag("chat-back").assertIsDisplayed()
         saveRegressionScreenshot("chat-route-short-large-rtl")

@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.ui.chat
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.res.Configuration
+import android.os.Build
 import android.os.PersistableBundle
 import android.view.WindowInsets as PlatformWindowInsets
 import androidx.annotation.StringRes
@@ -14,17 +15,20 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -34,7 +38,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,7 +56,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -67,7 +74,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -79,7 +86,11 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventState
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.ui.navigation.navigationGlassSurface
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import kotlinx.coroutines.launch
 
@@ -97,6 +108,9 @@ private val chatSuggestions = listOf(
     R.string.chat_suggestion_tools,
     R.string.chat_suggestion_structured_output,
 )
+private val chatTopActionSize = 48.dp
+private val chatTopActionGap = 8.dp
+private val chatTopFadeTail = 24.dp
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -167,36 +181,52 @@ internal fun ChatScreen(
             )
         }
     }
-    Scaffold(
-        modifier = modifier.testTag("chat-screen"),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        // 一次性消费系统栏、刘海及 IME；共享输入栏位于页面之外，不在此叠加 imePadding。
-        contentWindowInsets = WindowInsets.safeDrawing.union(WindowInsets.ime),
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-            val openConfig = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }
-            val navigateBack: (() -> Unit)? = onBack?.let { back ->
-                {
-                    // 点击可能早于 IME inset 引起的重组，按此时的窗口状态决定是否退页。
-                    if (view.rootWindowInsets?.isVisible(PlatformWindowInsets.Type.ime()) ?: imeVisible) {
-                        focus.clearFocus()
-                        keyboard?.hide()
-                    } else back()
-                }
-            }
-            // 共享输入栏由外壳绘制在页面之上，消息区始终为它保留高度；IME 由 Scaffold 一次消费。
-            Column(
-                Modifier.fillMaxSize().padding(bottom = bottomOverlayPadding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                ChatHeader(uiState, isVisible, openConfig, onBack = navigateBack)
+    val title = stringResource(R.string.chat_title)
+    val background = MaterialTheme.colorScheme.surfaceContainerLowest
+    val openConfig = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }
+    val navigateBack: (() -> Unit)? = onBack?.let { back ->
+        {
+            // 点击可能早于 IME inset 引起的重组，按此时的窗口状态决定是否退页。
+            if (view.rootWindowInsets?.isVisible(PlatformWindowInsets.Type.ime()) ?: imeVisible) {
+                focus.clearFocus()
+                keyboard?.hide()
+            } else back()
+        }
+    }
+    val imeBottom = WindowInsets.ime.only(WindowInsetsSides.Bottom)
+    val safeDrawing = WindowInsets.safeDrawing
+    val safeHorizontal = safeDrawing.only(WindowInsetsSides.Horizontal)
+    val safeTop = safeDrawing.asPaddingValues().calculateTopPadding()
+    val topFadeHeight = safeTop + chatTopActionGap + chatTopActionSize + chatTopFadeTail
+    val bottomFadeHeight = safeDrawing.exclude(imeBottom).asPaddingValues().calculateBottomPadding() + bottomOverlayPadding
+    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
+    val backdrop = rememberLayerBackdrop {
+        drawRect(background)
+        drawContent()
+    }
+    Surface(
+        modifier = modifier.fillMaxSize()
+            .semantics { paneTitle = title }
+            .testTag("chat-screen"),
+        color = background,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        // 只有键盘收缩视口。系统栏和浮层的避让放进列表首尾，让消息滚到渐变后面。
+        Box(Modifier.fillMaxSize().windowInsetsPadding(imeBottom)) {
+            val backdropModifier = if (glassEnabled) Modifier.layerBackdrop(backdrop) else Modifier
+            Box(Modifier.matchParentSize().then(backdropModifier).chatEdgeFades(background, topFadeHeight, bottomFadeHeight)) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.weight(1f).widthIn(max = 720.dp).fillMaxWidth()
+                    modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(safeHorizontal)
+                        .widthIn(max = 720.dp).fillMaxSize()
                         .nestedScroll(scrollConnection).testTag("chat-messages"),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp,
+                        top = topFadeHeight + 8.dp, bottom = bottomFadeHeight + 8.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    item(key = "session-status", contentType = "session-status") { ChatConversationStatus(uiState) }
                     if (uiState.modelId == null || (uiState.configLoadFailed && uiState.configDraft == null)) item(key = "configuration", contentType = "configuration") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (uiState.configLoadFailed && uiState.configDraft == null) {
@@ -224,6 +254,11 @@ internal fun ChatScreen(
                     }
                 }
             }
+            ChatFloatingActions(
+                uiState, isVisible, openConfig, navigateBack, backdrop, glassEnabled,
+                modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(safeHorizontal)
+                    .padding(start = 16.dp, end = 16.dp, top = safeTop + chatTopActionGap),
+            )
         }
     }
     uiState.configDraft?.takeIf { isVisible }?.let { draft ->
@@ -233,6 +268,35 @@ internal fun ChatScreen(
             startsNewConversation = draft.changed && uiState.turns.isNotEmpty(),
             onReload = onReloadConfig, onRequestClear = onRequestClearConfig,
             onCancelClear = onCancelClearConfig, onClear = onClearConfig)
+    }
+}
+
+private fun Modifier.chatEdgeFades(color: Color, topHeight: Dp, bottomHeight: Dp) = drawWithCache {
+    val preferredTop = topHeight.toPx()
+    val preferredBottom = bottomHeight.toPx()
+    // 横屏或键盘打开时也留一段未遮罩的正文，不让两端渐变叠加。
+    val scale = ((size.height - 48.dp.toPx()).coerceAtLeast(0f) / (preferredTop + preferredBottom)).coerceAtMost(1f)
+    val top = preferredTop * scale
+    val bottom = preferredBottom * scale
+    val topFade = if (top > 0f) Brush.verticalGradient(
+        0f to color.copy(alpha = 0.96f),
+        0.54f to color.copy(alpha = 0.74f),
+        1f to color.copy(alpha = 0f),
+        endY = top,
+    ) else null
+    val bottomFade = if (bottom > 0f) Brush.verticalGradient(
+        0f to color.copy(alpha = 0f),
+        0.46f to color.copy(alpha = 0.74f),
+        1f to color.copy(alpha = 0.96f),
+        startY = size.height - bottom,
+        endY = size.height,
+    ) else null
+    onDrawWithContent {
+        drawContent()
+        topFade?.let { drawRect(it, size = Size(size.width, top)) }
+        bottomFade?.let {
+            drawRect(it, topLeft = Offset(0f, size.height - bottom), size = Size(size.width, bottom))
+        }
     }
 }
 
@@ -263,39 +327,50 @@ private fun ChatWelcome(suggestions: List<Int>, enabled: Boolean, onSend: (Strin
 }
 
 @Composable
-private fun ChatHeader(uiState: ChatUiState, isVisible: Boolean, onOpenConfig: () -> Unit, onBack: (() -> Unit)?) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = if (onBack == null) 16.dp else 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
-            .testTag("chat-header"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        onBack?.let { ChatBackButton(isVisible, it) }
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-            Text(
-                if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+private fun ChatConversationStatus(uiState: ChatUiState) {
+    Text(
+        if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
+        modifier = Modifier.testTag("chat-session-status"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun ChatFloatingActions(
+    uiState: ChatUiState,
+    enabled: Boolean,
+    onOpenConfig: () -> Unit,
+    onBack: (() -> Unit)?,
+    backdrop: Backdrop,
+    glassEnabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
+    val tint = surface.copy(alpha = 0.72f)
+    Box(modifier.fillMaxWidth()) {
+        if (onBack != null) {
+            IconButton(
+                onClick = onBack,
+                enabled = enabled,
+                modifier = Modifier.align(Alignment.CenterStart).size(chatTopActionSize)
+                    .navigationGlassSurface(backdrop, glassEnabled, surface, tint)
+                    .testTag("chat-back"),
+            ) {
+                Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.navigate_back))
+            }
         }
-        ChatConfigButton(uiState, isVisible, onOpenConfig)
-    }
-}
-
-@Composable
-private fun ChatBackButton(enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp).testTag("chat-back")) {
-        Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.navigate_back))
-    }
-}
-
-@Composable
-private fun ChatConfigButton(uiState: ChatUiState, enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled && !uiState.isGenerating && !uiState.configLoading && !uiState.configSaving, modifier = Modifier.size(48.dp)) {
-        Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.chat_config_title))
+        IconButton(
+            onClick = onOpenConfig,
+            enabled = enabled && !uiState.isGenerating && !uiState.configLoading && !uiState.configSaving,
+            modifier = Modifier.align(Alignment.CenterEnd).size(width = 64.dp, height = chatTopActionSize)
+                .navigationGlassSurface(backdrop, glassEnabled, surface, tint)
+                .testTag("chat-config"),
+        ) {
+            Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.chat_config_title))
+        }
     }
 }
 
@@ -380,11 +455,12 @@ private fun ChatFollowLatest(turn: ChatTurn?, listState: LazyListState, follow: 
     val shouldFollow by rememberUpdatedState(follow)
     LaunchedEffect(listState, turn) {
         if (turn == null) return@LaunchedEffect
-        var lastViewport = listState.layoutInfo.viewportSize
+        var lastViewport = listState.layoutInfo.viewportSize to listState.layoutInfo.afterContentPadding
         if (shouldFollow) listState.scrollToChatBottom()
         snapshotFlow {
             val layout = listState.layoutInfo
-            layout.viewportSize to layout.visibleItemsInfo.lastOrNull { it.key == turn.id }?.size
+            val viewport = layout.viewportSize to layout.afterContentPadding
+            viewport to layout.visibleItemsInfo.lastOrNull { it.key == turn.id }?.size
         }.collect { (viewport, height) ->
             val resized = viewport != lastViewport
             lastViewport = viewport
@@ -427,5 +503,5 @@ internal fun CopyMessageButton(text: String, modifier: Modifier = Modifier, @Str
 @Preview(name = "Chat · Landscape", widthDp = 740, heightDp = 360)
 @Composable
 private fun ChatPreview() {
-    ModelAtlasTheme(dynamicColor = false) { ChatScreen(ChatUiState(), bottomOverlayPadding = 96.dp) }
+    ModelAtlasTheme(dynamicColor = false) { ChatScreen(ChatUiState(), bottomOverlayPadding = 96.dp, onBack = {}) }
 }
