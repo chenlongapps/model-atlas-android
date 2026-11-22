@@ -28,15 +28,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -48,7 +52,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -56,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.chat.ChatUiState
+import kotlin.math.roundToInt
 
 /** 底栏由当前导航路由决定形态，不维护独立的开关状态。 */
 internal enum class BottomBarMode { Navigation, Chat }
@@ -79,6 +83,7 @@ internal fun MorphingBottomBar(
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    onNavigationAnchor: ((AssistantRevealAnchor) -> Unit)? = null,
 ) {
     require(items.isNotEmpty())
     val spacing = if (items.size >= 5) 2.dp else 4.dp
@@ -89,7 +94,7 @@ internal fun MorphingBottomBar(
     val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
     val density = LocalDensity.current
     // 记住导航内容的实测高度，让输入胶囊在默认字号下与导航胶囊完全同高。
-    var navigationContentHeight by remember { mutableStateOf(0.dp) }
+    var navigationContentHeight by rememberSaveable { mutableFloatStateOf(0f) }
 
     BoxWithConstraints(modifier.testTag("glass-navigation")) {
         val gap = 8.dp
@@ -135,13 +140,13 @@ internal fun MorphingBottomBar(
                             enabled = interactive,
                             modifier = Modifier
                                 .interactionGate(interactive)
-                                .onSizeChanged { navigationContentHeight = with(density) { it.height.toDp() } },
+                                .onSizeChanged { navigationContentHeight = with(density) { it.height.toDp().value } },
                         )
                         BottomBarMode.Chat -> ChatComposerContent(
                             chatState = chatState,
                             enabled = interactive,
                             onInput = onChatInput,
-                            minHeight = (navigationContentHeight - 24.dp).coerceAtLeast(44.dp),
+                            minHeight = (navigationContentHeight.dp - 24.dp).coerceAtLeast(44.dp),
                             modifier = Modifier.interactionGate(interactive),
                         )
                     }
@@ -157,6 +162,15 @@ internal fun MorphingBottomBar(
                 onOpenChat = onOpenChat,
                 onSend = onSend,
                 onStop = onStop,
+                modifier = if (onNavigationAnchor == null) Modifier else Modifier.onGloballyPositioned { coordinates ->
+                    val diameter = coordinates.size.width
+                    val radius = diameter / 2f
+                    val rowHeight = maxOf(diameter, with(density) { navigationContentHeight.dp.roundToPx() })
+                    // 发送键随草稿／IME 移动；圆心的 Y 记录为导航形态相对底边的距离。
+                    val centerFromBottom = rowHeight - ((rowHeight - diameter) / 2f).roundToInt() - radius
+                    val x = coordinates.localToRoot(Offset(radius, radius)).x
+                    onNavigationAnchor(AssistantRevealAnchor(Offset(x, -centerFromBottom), radius))
+                },
             )
         }
     }
@@ -223,6 +237,7 @@ private fun AssistantActionButton(
     onOpenChat: () -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // 只在可用性与生成状态真正变化时重组，避免每个字符重建玻璃背景。
     val canSend by remember(chatState) { derivedStateOf { chatState.value.canSend } }
@@ -252,7 +267,7 @@ private fun AssistantActionButton(
         AssistantAction.Stop -> "chat-stop"
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .navigationGlassSurface(backdrop, glassEnabled, colors.surfaceContainer, colors.background.copy(alpha = 0.5f))
             .testTag(tag)

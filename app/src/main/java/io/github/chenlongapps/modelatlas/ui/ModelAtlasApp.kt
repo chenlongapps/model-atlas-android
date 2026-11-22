@@ -45,9 +45,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,6 +72,7 @@ import io.github.chenlongapps.modelatlas.ui.modellist.ModelListScreen
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListUiState
 import io.github.chenlongapps.modelatlas.ui.modellist.ModelListViewModel
 import io.github.chenlongapps.modelatlas.ui.navigation.AssistantNavigation
+import io.github.chenlongapps.modelatlas.ui.navigation.AssistantRevealAnchor
 import io.github.chenlongapps.modelatlas.ui.navigation.BottomBarMode
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.navigation.NavigationScrollConnection
@@ -215,9 +218,12 @@ internal fun ModelAtlasScaffold(
     var navigationHeight by rememberSaveable { mutableStateOf(64f) }
     var chatBarHeight by rememberSaveable { mutableStateOf(64f) }
     var navigationHiddenByMain by remember { mutableStateOf(false) }
+    var navigationAnchor by remember { mutableStateOf<AssistantRevealAnchor?>(null) }
+    var navigationBottom by remember { mutableStateOf(0f) }
     AssistantNavigation(
         modifier = modifier.fillMaxSize(),
         onChatClosed = onChatClosed,
+        revealAnchor = { navigationAnchor?.let { it.copy(center = it.center + Offset(0f, navigationBottom)) } },
         chatContent = { visible, onBack -> chatContent(chatBarHeight.dp + 32.dp, visible, onBack) },
         mainContent = { isActive ->
             MainAtlasScaffold(
@@ -244,7 +250,7 @@ internal fun ModelAtlasScaffold(
                 modelContent = modelContent,
             )
         },
-        bottomBar = { isChatOpen, onOpenChat, backdrop ->
+        bottomBar = { isChatOpen, interactive, onOpenChat, backdrop ->
             val mode = if (isChatOpen) BottomBarMode.Chat else BottomBarMode.Navigation
             val hidden = mode == BottomBarMode.Navigation && navigationHiddenByMain
             val hideProgress by animateFloatAsState(
@@ -252,10 +258,6 @@ internal fun ModelAtlasScaffold(
             )
             val baseInsets = WindowInsets.navigationBars.union(WindowInsets.displayCutout)
                 .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-            // 聊天输入栏跟随 IME；主导航仍贴系统手势区，不改变既有页面行为。
-            val barInsets = if (mode == BottomBarMode.Chat) {
-                baseInsets.union(WindowInsets.ime).only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-            } else baseInsets
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -263,36 +265,51 @@ internal fun ModelAtlasScaffold(
                     .graphicsLayer { translationY = size.height * hideProgress }
                     .testTag("glass-navigation-motion")
                     .then(if (hidden) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
-                    .windowInsetsPadding(barInsets)
-                    .padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
-                    .widthIn(max = 400.dp)
-                    .fillMaxWidth(),
+                    .windowInsetsPadding(baseInsets),
             ) {
-                MorphingBottomBar(
-                    mode = mode,
-                    pagerState = pagerState,
-                    items = navigationItems,
-                    backdrop = backdrop,
-                    chatState = chatUiState,
-                    onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
-                    onModelsDoubleClick = {
-                        scope.launch {
-                            // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
-                            launch { pagerState.animateScrollToPage(0) }
-                            modelListState.animateScrollToItem(0, 0)
-                        }
-                    },
-                    onOpenChat = onOpenChat,
-                    onChatInput = onChatInput,
-                    onSend = onChatSend,
-                    onStop = onChatStop,
-                    enabled = !hidden,
-                    // 测量整个分体底栏，包含圆形入口与可随字号增高的胶囊。
-                    modifier = Modifier.fillMaxWidth().onSizeChanged {
-                        val height = with(density) { it.height.toDp().value }
-                        if (mode == BottomBarMode.Navigation) navigationHeight = height else chatBarHeight = height
-                    },
-                )
+                Box(Modifier.onGloballyPositioned {
+                    // 参考底边固定在系统安全区，不随 IME 或输入栏高度移动。
+                    navigationBottom = it.localToRoot(Offset(0f, it.size.height.toFloat())).y -
+                        with(density) { 16.dp.roundToPx() }
+                }) {
+                    // 安全区已消费，聊天输入栏只追加未消费的 IME inset。
+                    Box(
+                        Modifier.then(
+                            if (isChatOpen) Modifier.windowInsetsPadding(
+                                WindowInsets.ime.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+                            ) else Modifier,
+                        ).padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
+                            .widthIn(max = 400.dp)
+                            .fillMaxWidth(),
+                    ) {
+                        MorphingBottomBar(
+                            mode = mode,
+                            pagerState = pagerState,
+                            items = navigationItems,
+                            backdrop = backdrop,
+                            chatState = chatUiState,
+                            onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+                            onModelsDoubleClick = {
+                                scope.launch {
+                                    // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
+                                    launch { pagerState.animateScrollToPage(0) }
+                                    modelListState.animateScrollToItem(0, 0)
+                                }
+                            },
+                            onOpenChat = onOpenChat,
+                            onChatInput = onChatInput,
+                            onSend = onChatSend,
+                            onStop = onChatStop,
+                            enabled = !hidden && interactive,
+                            onNavigationAnchor = { navigationAnchor = it },
+                            // 测量整个分体底栏，包含圆形入口与可随字号增高的胶囊。
+                            modifier = Modifier.fillMaxWidth().onSizeChanged {
+                                val height = with(density) { it.height.toDp().value }
+                                if (mode == BottomBarMode.Navigation) navigationHeight = height else chatBarHeight = height
+                            },
+                        )
+                    }
+                }
             }
         },
     )

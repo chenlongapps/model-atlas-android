@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.res.Configuration
 import android.os.PersistableBundle
+import android.view.WindowInsets as PlatformWindowInsets
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -60,6 +61,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -130,6 +132,7 @@ internal fun ChatScreen(
     }
     // IME 可见性不能由 bottom > 0 推断：浮动键盘或已处理 inset 的宿主可能高度为零。
     val imeVisible = WindowInsets.isImeVisible
+    val view = LocalView.current
     LaunchedEffect(isVisible) {
         if (!isVisible) {
             focus.clearFocus()
@@ -156,7 +159,13 @@ internal fun ChatScreen(
             val compact = maxHeight < 400.dp
             val openConfig = { focus.clearFocus(); keyboard?.hide(); onOpenConfig() }
             val navigateBack: (() -> Unit)? = onBack?.let { back ->
-                { if (imeVisible) { focus.clearFocus(); keyboard?.hide() } else back() }
+                {
+                    // 点击可能早于 IME inset 引起的重组，按此时的窗口状态决定是否退页。
+                    if (view.rootWindowInsets?.isVisible(PlatformWindowInsets.Type.ime()) ?: imeVisible) {
+                        focus.clearFocus()
+                        keyboard?.hide()
+                    } else back()
+                }
             }
             // 共享输入栏由外壳绘制在页面之上，消息区始终为它保留高度；IME 由 Scaffold 一次消费。
             Column(Modifier.fillMaxSize().padding(bottom = bottomOverlayPadding)) {

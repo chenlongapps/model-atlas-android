@@ -37,7 +37,7 @@
 | 改动 | 优先检查 |
 | --- | --- |
 | 请求 | `OpenAiCompatibleClientTest`、`LlmLiveTestConfigTest`：协议、SSE、取消、关闭与脱敏 |
-| 聊天 | `ChatViewModelTest`、`ChatScreenTest`、`ChatNavigationTest`：Fake 请求、真实 IME 两阶段返回、重建／预测性取消不重复发送、退出后旧操作不可用 |
+| 聊天 | `ChatViewModelTest`、`ChatScreenTest`、`ChatNavigationTest`：Fake 请求、真实 IME 两阶段返回、重建／预测性取消不重复发送、退出后旧操作不可用；`AssistantRevealTest`、`AssistantRevealNavigationTest`、`AssistantRevealReducedMotionTest`：圆心／半径、双向中间帧、来源保留和零动画 |
 | 回复排版 | `AssistantMarkdownTest`、`AssistantMarkdownScreenTest`，另选 `ChatScreenTest` 的流式、停止／重试、复制及阅读锚点用例 |
 | 配置存储 | `LlmConfigRepositoryTest`、`KeystoreConfigTest`、`AppearanceBackupRulesTest`：失败不覆盖、确认清除、真实 Keystore 与备份排除；只用测试别名和文件 |
 
