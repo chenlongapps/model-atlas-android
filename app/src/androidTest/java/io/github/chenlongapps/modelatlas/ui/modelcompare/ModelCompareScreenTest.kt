@@ -39,6 +39,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -310,6 +311,75 @@ class ModelCompareScreenTest {
         compose.onNodeWithText("选择模型 1").assertIsDisplayed()
         compose.onNodeWithTag("compare-slot-0").performClick()
         compose.onNodeWithTag("compare-option:openai/b").assertIsNotEnabled()
+    }
+
+    @Test fun emptyPartialAndReadySelectionsKeepTheirExpandedPositionsForEitherSlot() {
+        val empty = ready.copy(first = CompareModelState(), second = CompareModelState())
+        val state = mutableStateOf(empty)
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) { ModelCompareScreen(state.value) } }
+
+        fun bounds(tag: String, index: Int) = compose.onNodeWithTag("compare-$tag-$index", useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val slots = List(2) { bounds("slot", it) }
+        val marks = List(2) { bounds("add", it) }
+        assertEquals(slots[0].top, slots[1].top, 1f)
+        assertEquals(slots[0].height, slots[1].height, 1f)
+        assertEquals(slots[0].width, slots[1].width, 1f)
+        saveRegressionScreenshot("compare-selection-empty")
+
+        repeat(2) { selected ->
+            val other = 1 - selected
+            val partial = if (selected == 0) empty.copy(first = ready.first) else empty.copy(second = ready.second)
+            compose.runOnIdle { state.value = partial }
+            assertEquals(marks[other], bounds("add", other))
+            assertEquals(marks[selected], bounds("logo", selected))
+            val selectedName = bounds("name", selected)
+            val selectedLab = bounds("lab", selected)
+            assertEquals(slots, List(2) { bounds("slot", it) })
+            compose.onNodeWithText("关键规格").assertDoesNotExist()
+            if (selected == 0) saveRegressionScreenshot("compare-selection-partial")
+
+            val pending = CompareModelState(ready.slot(other).modelId)
+            compose.runOnIdle {
+                state.value = if (other == 0) partial.copy(first = pending) else partial.copy(second = pending)
+            }
+            compose.onNodeWithText("正在读取本地模型数据…").assertIsDisplayed()
+            compose.onNodeWithText("关键规格").assertDoesNotExist()
+            assertEquals(slots, List(2) { bounds("slot", it) })
+            assertEquals(selectedName, bounds("name", selected))
+            assertEquals(selectedLab, bounds("lab", selected))
+
+            compose.runOnIdle { state.value = ready }
+            compose.onNodeWithText("关键规格").assertIsDisplayed()
+            assertEquals(slots, List(2) { bounds("slot", it) })
+            assertEquals(selectedName, bounds("name", selected))
+            assertEquals(selectedLab, bounds("lab", selected))
+
+            compose.runOnIdle { state.value = partial }
+            assertEquals(marks[other], bounds("add", other))
+            assertEquals(selectedName, bounds("name", selected))
+            compose.onNodeWithText("关键规格").assertDoesNotExist()
+            compose.runOnIdle { state.value = empty }
+        }
+    }
+
+    @Test fun stackedPartialSelectionKeepsBothSlotsUsableWithLargeRtlText() {
+        val state = ready.copy(first = CompareModelState(ready.first.modelId, CompareReadStatus.ERROR), second = CompareModelState())
+        showAtWidth(320.dp, state, fontScale = 2f, direction = LayoutDirection.Rtl, darkTheme = true)
+        val first = compose.onNodeWithTag("compare-slot-0").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val second = compose.onNodeWithTag("compare-slot-1").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(first.bottom < second.top)
+        assertEquals(first.width, second.width, 1f)
+        selectionTextLayout("compare-name-1")
+        val error = "模型 1：无法读取本地模型详情，请重试。"
+        scrollToText(error)
+        val statusLayouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(error).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(statusLayouts) }
+        assertEquals(ResolvedTextDirection.Ltr, statusLayouts.single().getParagraphDirection(0))
+        compose.onNodeWithText("重试").assertIsDisplayed()
+        saveRegressionScreenshot("compare-selection-partial-narrow-dark-rtl")
+        compose.onNodeWithTag("compare-slot-1").performClick()
+        compose.onNodeWithTag("compare-search").assertIsDisplayed()
     }
 
     @Test fun cancellingPickerDoesNotChangeSelectionAndNoResultsCanBeCleared() {
@@ -635,7 +705,7 @@ class ModelCompareScreenTest {
         assertEquals(initial, first.fetchSemanticsNode().boundsInRoot)
     }
 
-    @Test fun pinnedSelectionCardsStillHandleReplaceAndRemove() {
+    @Test fun pinnedSelectionCardsStillHandleReplaceRemoveAndReselectWithoutJumpingBack() {
         var removed = -1
         var selected: Pair<Int, String>? = null
         val replacement = ModelSummary("other/c", "Model C")
@@ -643,8 +713,12 @@ class ModelCompareScreenTest {
         compose.setContent { ModelAtlasTheme(dynamicColor = false) {
             ModelCompareScreen(state.value, onSelect = { slot, id ->
                 selected = slot to id
-                state.value = state.value.copy(first = CompareModelState(id, CompareReadStatus.CONTENT,
-                    details[0].copy(id = id, name = replacement.name)))
+                state.value = if (slot == 0) {
+                    state.value.copy(first = CompareModelState(id, CompareReadStatus.CONTENT,
+                        details[0].copy(id = id, name = replacement.name)))
+                } else {
+                    state.value.copy(second = ready.second)
+                }
             }, onRemove = { slot ->
                 removed = slot
                 state.value = state.value.copy(second = CompareModelState())
@@ -664,6 +738,12 @@ class ModelCompareScreenTest {
         compose.runOnIdle { assertEquals(1, removed) }
         compose.onNodeWithText("选择模型 2").assertIsDisplayed()
         compose.onNodeWithText("权重与许可").assertDoesNotExist()
+        val expanded = first.fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("compare-slot-1").performClick()
+        compose.onNodeWithTag("compare-option:openai/b").performClick()
+        compose.onNodeWithText("模型对比").assertIsDisplayed()
+        compose.onNodeWithText("关键规格").assertIsDisplayed()
+        assertEquals(expanded, first.fetchSemanticsNode().boundsInRoot)
     }
 
     @Test fun selectionCardsScrollAwayInShortWindowsToLeaveRoomForContent() {

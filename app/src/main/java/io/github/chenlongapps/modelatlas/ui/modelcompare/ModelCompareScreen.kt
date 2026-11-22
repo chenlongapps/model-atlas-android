@@ -169,17 +169,19 @@ internal fun ModelCompareScreen(
             val cardWidth = with(density) {
                 (maxWidth.roundToPx() - start.roundToPx() - end.roundToPx()).coerceAtLeast(0).toDp()
             }
-            val readySelection = if (uiState.isReady) compareSelectionLayout(selectionSlots, cardWidth) else null
+            val selectionLayout = if (uiState.selectionStatus == CompareReadStatus.CONTENT)
+                compareSelectionLayout(selectionSlots, cardWidth) else null
             val layout = when {
-                readySelection?.stacked == true -> CompareLayout.Stacked
+                selectionLayout?.stacked == true -> CompareLayout.Stacked
                 cardWidth >= 600.dp * fontScale.coerceAtLeast(1f) -> CompareLayout.Table
                 else -> CompareLayout.Pair
             }
             // 用紧凑态的文字和布局尺寸判断，不让展开或过渡高度改变同一个列表项是否吸顶。
             val readableHeight = maxHeight - topInset - bottomPadding
             val pinHeightLimit = minOf(readableHeight / 2, readableHeight - 144.dp)
-            val pinSelection = readySelection != null && readySelection.slotCompactHeight < readySelection.slotExpandedHeight &&
-                with(density) { readySelection.compactHeight.toDp() } + PinnedBottomPadding <= pinHeightLimit
+            val pinSelection = uiState.isReady && selectionLayout != null &&
+                selectionLayout.slotCompactHeight < selectionLayout.slotExpandedHeight &&
+                with(density) { selectionLayout.compactHeight.toDp() } + PinnedBottomPadding <= pinHeightLimit
             // stickyHeader 贴到列表视口的顶边，不会避开 contentPadding 中的系统栏。
             val viewportTop = if (uiState.isReady) topInset else 0.dp
             LazyColumn(
@@ -198,7 +200,7 @@ internal fun ModelCompareScreen(
                     Text(stringResource(R.string.compare_title), style = MaterialTheme.typography.headlineMedium,
                         modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() })
                 }
-                if (uiState.selectionStatus != CompareReadStatus.CONTENT) {
+                if (selectionLayout == null) {
                     item("selection-restore", contentType = "message") {
                         if (uiState.selectionStatus == CompareReadStatus.ERROR) {
                             CompareMessage(stringResource(R.string.compare_selection_read_error), onRetrySelectionLoad)
@@ -213,13 +215,9 @@ internal fun ModelCompareScreen(
                         Modifier.fillMaxWidth().background(background)
                             .padding(bottom = if (pinSelection) PinnedBottomPadding else 0.dp),
                     ) {
-                        if (readySelection != null) {
-                            CompareReadySelection(selectionSlots, readySelection,
-                                fraction = { if (pinSelection) selectionCollapse.value else 0f },
-                                onChoose = { pickerSlot = it })
-                        } else {
-                            ComparePendingSelection(selectionSlots, cardWidth, onChoose = { pickerSlot = it }, onRetry)
-                        }
+                        CompareSelection(selectionSlots, selectionLayout,
+                            fraction = { if (pinSelection) selectionCollapse.value else 0f },
+                            onChoose = { pickerSlot = it }, onRetry = onRetry)
                     }
                 }
                 if (pinSelection) {
@@ -259,7 +257,16 @@ internal fun ModelCompareScreen(
         ModelComparePicker(
             uiState, excludedId = uiState.slot(1 - index).modelId,
             selectedName = slot.name,
-            onSelect = { onSelect(index, it); pickerSlot = null },
+            onSelect = {
+                if (slot.state.modelId == null && uiState.slot(1 - index).modelId != null) {
+                    // 主动补齐一组对比时沿用当前选模位置，不跳回上一组的正文。
+                    contentState.requestScrollToItem(
+                        placeholderState.firstVisibleItemIndex, placeholderState.firstVisibleItemScrollOffset,
+                    )
+                }
+                onSelect(index, it)
+                pickerSlot = null
+            },
             onRemove = { onRemove(index); pickerSlot = null },
             onDismiss = { pickerSlot = null }, onRetry = onRetryCatalog,
         )

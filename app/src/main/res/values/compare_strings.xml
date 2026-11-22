@@ -3,6 +3,7 @@
     <string name="compare_title">模型对比</string>
     <string name="compare_subtitle">对照两个模型的评测分数、关键规格与报价</string>
     <string name="compare_select">选择模型 %1$d</string>
+    <string name="compare_stacked_slot_status">模型 %1$d：%2$s</string>
     <string name="compare_unknown_model">模型 %1$d（名称暂无数据）</string>
     <string name="compare_choose_action">选择模型</string>
     <string name="compare_replace_action">替换模型</string>
