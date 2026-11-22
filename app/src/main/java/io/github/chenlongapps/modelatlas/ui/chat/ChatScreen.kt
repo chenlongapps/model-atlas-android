@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.res.Configuration
 import android.os.PersistableBundle
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -300,7 +301,7 @@ private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Un
                 }
             }
             if (reply.text.isNotEmpty()) {
-                SelectionContainer { Text(reply.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("chat-reply-${turn.id}")) }
+                AssistantMarkdown(reply, modifier = Modifier.testTag("chat-reply-${turn.id}"))
                 CopyMessageButton(reply.text)
             }
             when (reply.status) {
@@ -327,20 +328,22 @@ private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Un
     }
 }
 
-/** 独立收集当前回复，不使历史列表或输入区逐 token 重组；至多每帧跟随一次。
+/** 跟随列表实测高度，覆盖异步 Markdown 排版，且不使历史列表或输入区逐 token 重组。
  * 正向列表使阅读同一条长回复的中部也保持原文字锚点（反向整项布局会随增长移动文字）。 */
 @Composable
 private fun ChatFollowLatest(turn: ChatTurn?, listState: LazyListState, follow: Boolean) {
     val shouldFollow by rememberUpdatedState(follow)
-    LaunchedEffect(turn, listState) {
-        turn?.reply?.collect {
-            withFrameNanos { }
-            if (shouldFollow) listState.scrollToChatBottom()
-        }
-    }
     LaunchedEffect(listState, turn) {
-        snapshotFlow { listState.layoutInfo.viewportSize }.collect {
-            if (turn != null && shouldFollow) listState.scrollToChatBottom()
+        if (turn == null) return@LaunchedEffect
+        var lastViewport = listState.layoutInfo.viewportSize
+        if (shouldFollow) listState.scrollToChatBottom()
+        snapshotFlow {
+            val layout = listState.layoutInfo
+            layout.viewportSize to layout.visibleItemsInfo.lastOrNull { it.key == turn.id }?.size
+        }.collect { (viewport, height) ->
+            val resized = viewport != lastViewport
+            lastViewport = viewport
+            if ((resized || height != null) && shouldFollow) listState.scrollToChatBottom()
         }
     }
 }
@@ -355,7 +358,7 @@ private suspend fun LazyListState.scrollToChatBottom() {
 }
 
 @Composable
-private fun CopyMessageButton(text: String) {
+internal fun CopyMessageButton(text: String, @StringRes label: Int = R.string.chat_copy) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     TextButton(onClick = {
@@ -364,7 +367,7 @@ private fun CopyMessageButton(text: String) {
             clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
             clipboard.setClipEntry(ClipEntry(clip))
         }
-    }) { Text(stringResource(R.string.chat_copy)) }
+    }) { Text(stringResource(label)) }
 }
 
 @Preview(name = "Chat · Light", showBackground = true)

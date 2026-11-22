@@ -451,9 +451,13 @@ class ChatNavigationTest {
             compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()
             saveRegressionScreenshot("chat-theme-$variant-empty")
             val turn = ChatTurn(1, "上下文长度和最大输出有什么区别？").also {
-                it.update(ChatReply("上下文长度限制一次请求可处理的总量；最大输出限制单次回复的长度。具体限制请以服务商文档为准。", ChatReplyStatus.COMPLETE))
+                it.update(ChatReply(
+                    "## 两种长度\n\n- **上下文**：单次请求可处理的总量。\n- **最大输出**：单次回复的长度。\n\n```kotlin\nval maxOutput = 4096\n```",
+                    ChatReplyStatus.COMPLETE,
+                ))
             }
             compose.runOnIdle { chat = chat.copy(turns = listOf(turn)) }
+            compose.waitUntil(5_000) { compose.onAllNodes(hasText("val maxOutput = 4096")).fetchSemanticsNodes().size == 1 }
             compose.onNodeWithTag("chat-reply-1").assertIsDisplayed()
             compose.onNodeWithTag("chat-send").assertIsDisplayed()
             saveRegressionScreenshot("chat-theme-$variant-normal")

@@ -14,6 +14,7 @@
     <string name="chat_user">你</string>
     <string name="chat_waiting">正在等待回复…</string>
     <string name="chat_copy">复制消息</string>
+    <string name="chat_copy_code">复制代码</string>
     <string name="chat_stopped">已停止生成。</string>
     <string name="chat_error_network">网络连接失败，回复未完成。</string>
     <string name="chat_error_timeout">请求超时，回复未完成。</string>

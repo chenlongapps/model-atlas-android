@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.ui.chat
 import android.view.KeyEvent
 import android.view.View
 import android.content.ClipboardManager
+import android.content.ClipDescription
 import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -102,24 +105,25 @@ class ChatScreenTest {
         compose.onNodeWithText("正在等待回复…").assertIsDisplayed()
         fake.channel.trySend(LlmChunk("第一段\n"))
         fake.channel.trySend(LlmChunk("第二段"))
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("第一段\n第二段"))
+        awaitReply(1, "第一段\n第二段").assertIsDisplayed()
         compose.onAllNodesWithTag("chat-turn-1").assertCountEquals(1)
         compose.onNodeWithTag("chat-stop").performClick()
         compose.waitUntil { fake.active.get() == 0 }
         compose.onNodeWithText("已停止生成。").assertIsDisplayed()
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("第一段\n第二段"))
+        awaitReply(1, "第一段\n第二段").assertIsDisplayed()
         compose.onNodeWithTag("chat-retry").performClick()
         compose.waitUntil { fake.calls.get() == 2 }
         compose.runOnIdle { assertEquals(1, vm.uiState.value.turns.size) }
         fake.channel.trySend(LlmChunk("完整回答")); fake.channel.close()
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("完整回答"))
+        awaitReply(1, "完整回答").assertIsDisplayed()
+        compose.onNodeWithText("第一段\n第二段").assertDoesNotExist()
     }
 
     @Test fun failureKeepsPartialTextAndDisplaysExplicitPaidRetry() {
         show(); send()
         fake.channel.trySend(LlmChunk("部分文本"))
         fake.channel.close(LlmException.Protocol())
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("部分文本"))
+        awaitReply(1, "部分文本").assertIsDisplayed()
         compose.onNodeWithText("响应格式错误或传输中断，回复未完成。").assertIsDisplayed()
         compose.onNodeWithText("重新生成会替换本轮回复，可能再次计费。").assertIsDisplayed()
         compose.onNodeWithTag("chat-retry").assertIsDisplayed()
@@ -277,7 +281,7 @@ class ChatScreenTest {
         restoration.emulateSavedInstanceStateRestore()
         compose.runOnIdle { lifecycle.currentState = Lifecycle.State.CREATED }
         compose.runOnIdle { lifecycle.currentState = Lifecycle.State.RESUMED }
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("还在生成"))
+        awaitReply(1, "还在生成").assertIsDisplayed()
         assertEquals(1, fake.calls.get())
         assertEquals(1, fake.active.get())
         fake.channel.close()
@@ -294,14 +298,16 @@ class ChatScreenTest {
                 ChatScreen(ChatUiState(turns = turns, modelId = "model"), listState = list)
             }
         }
-        compose.runOnIdle { turns.last().update(ChatReply("追加\n".repeat(30), ChatReplyStatus.STREAMING)) }
-        compose.runOnIdle { assertFalse(list.canScrollForward) }
+        val first = "追加\n".repeat(30).trimEnd()
+        compose.runOnIdle { turns.last().update(ChatReply(first, ChatReplyStatus.STREAMING)) }
+        awaitReply(19, first)
+        compose.waitUntil(5_000) { !list.canScrollForward }
         compose.onNodeWithTag("chat-messages").performScrollToIndex(10)
         compose.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
         var index = 0
         var offset = 0
         compose.runOnIdle { index = list.firstVisibleItemIndex; offset = list.firstVisibleItemScrollOffset }
-        compose.runOnIdle { turns.last().update(ChatReply("追加更多\n".repeat(80), ChatReplyStatus.STREAMING)) }
+        compose.runOnIdle { turns.last().update(ChatReply(first + "\n" + "追加更多\n".repeat(80), ChatReplyStatus.STREAMING)) }
         compose.runOnIdle { assertEquals(index, list.firstVisibleItemIndex); assertEquals(offset, list.firstVisibleItemScrollOffset) }
     }
 
@@ -314,21 +320,53 @@ class ChatScreenTest {
                 ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model", isGenerating = true), listState = list)
             }
         }
+        awaitReply(1, "已有内容", substring = true)
+        compose.waitUntil(5_000) { !list.canScrollForward && list.firstVisibleItemScrollOffset > 0 }
         compose.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
         var before = 0
         compose.runOnIdle { before = list.firstVisibleItemScrollOffset; assertTrue(list.canScrollForward) }
         compose.runOnIdle { turn.update(ChatReply("已有内容\n".repeat(150) + "新增内容\n".repeat(100), ChatReplyStatus.STREAMING)) }
+        awaitReply(1, "新增内容", substring = true)
         compose.runOnIdle { assertEquals(before, list.firstVisibleItemScrollOffset) }
     }
 
-    @Test fun copyActionCopiesTheEntireMultilineResponse() {
+    @Test fun restoringInsideLongMarkdownDoesNotLoseTheReadingOffsetWhileParsing() {
+        val restoration = StateRestorationTester(compose)
+        val text = List(100) { "## 第 $it 节\n\n有用的 **Markdown** 内容" }.joinToString("\n\n")
+        val turn = ChatTurn(1, "问题").also { it.update(ChatReply(text, ChatReplyStatus.COMPLETE)) }
+        lateinit var list: LazyListState
+        restoration.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                list = rememberLazyListState()
+                ChatScreen(ChatUiState(turns = listOf(turn), modelId = "model"), listState = list)
+            }
+        }
+        awaitReply(1, "第 99 节")
+        compose.waitUntil(5_000) { !list.canScrollForward && list.firstVisibleItemScrollOffset > 0 }
+        compose.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
+        val before = compose.runOnIdle {
+            assertTrue(list.canScrollForward)
+            list.firstVisibleItemScrollOffset
+        }
+        restoration.emulateSavedInstanceStateRestore()
+        awaitReply(1, "第 99 节")
+        compose.runOnIdle { assertEquals(before, list.firstVisibleItemScrollOffset) }
+    }
+
+    @Test fun copyActionCopiesTheRawMarkdownAndCodeCopiesOnlyTheBody() {
         show(); send()
-        val text = "完整回答\n包含换行和 Unicode 🧭"
+        val code = "  fun compass() = \"🧭\""
+        val text = "**完整回答**\n包含换行和 Unicode 🧭\n\n```kotlin\n$code\n```"
         fake.channel.trySend(LlmChunk(text)); fake.channel.close()
-        compose.onAllNodesWithText("复制消息")[1].performClick()
-        compose.runOnIdle {
-            val clipboard = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            assertEquals(text, clipboard.primaryClip!!.getItemAt(0).text.toString())
+        awaitReply(1, code)
+        for ((button, expected) in listOf(compose.onNodeWithText("复制代码") to code, compose.onAllNodesWithText("复制消息")[1] to text)) {
+            button.performScrollTo().performClick()
+            compose.runOnIdle {
+                val clipboard = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = clipboard.primaryClip!!
+                assertEquals(expected, clip.getItemAt(0).text.toString())
+                assertTrue(clip.description.extras!!.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE))
+            }
         }
     }
 
@@ -357,7 +395,8 @@ class ChatScreenTest {
         compose.onNodeWithTag("nav-chat").performClick()
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         compose.onNodeWithTag("chat-input").assertIsDisplayed()
-        compose.onNodeWithTag("chat-messages").performScrollToNode(hasText("模型完整回答\n".repeat(100)))
+        awaitReply(1, "模型完整回答", substring = true)
+        compose.onNodeWithTag("chat-messages").performScrollToNode(hasText("模型完整回答", substring = true))
         compose.onAllNodesWithText("复制消息").fetchSemanticsNodes().also { assertTrue(it.isNotEmpty()) }
         compose.runOnIdle { landscape = true }
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
@@ -394,11 +433,11 @@ class ChatScreenTest {
         compose.runOnIdle { vm.setInput("问题\n第二行"); vm.send() }
         compose.waitUntil { fake.calls.get() == 1 }
         fake.channel.trySend(LlmChunk("保留部分回复"))
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("保留部分回复"))
+        awaitReply(1, "保留部分回复").assertIsDisplayed()
         compose.runOnIdle { visible = false }
         compose.waitUntil { fake.active.get() == 0 }
         compose.runOnIdle { assertEquals(ChatReplyStatus.STOPPED, vm.uiState.value.turns.single().reply.value.status); visible = true }
-        compose.onNodeWithTag("chat-reply-1").assert(hasText("保留部分回复"))
+        awaitReply(1, "保留部分回复").assertIsDisplayed()
         assertEquals(1, fake.calls.get())
     }
 
@@ -456,6 +495,11 @@ class ChatScreenTest {
         compose.onNodeWithTag("chat-input").performTextInput("问题\n第二行")
         compose.onNodeWithTag("chat-send").performClick()
         compose.waitUntil { fake.calls.get() == 1 }
+    }
+    private fun awaitReply(id: Long, text: String, substring: Boolean = false): androidx.compose.ui.test.SemanticsNodeInteraction {
+        val matcher = hasText(text, substring = substring) and hasAnyAncestor(hasTestTag("chat-reply-$id"))
+        compose.waitUntil(5_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().size == 1 }
+        return compose.onNode(matcher)
     }
     private fun imeVisible() = ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
 

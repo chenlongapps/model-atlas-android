@@ -86,4 +86,5 @@
 - 背景 `surfaceContainerLowest`、横向留白以 16dp 为主；标题 `headlineMedium`，正文 `bodyLarge`／`bodyMedium`，辅助 `bodySmall`／`onSurfaceVariant`。
 - 空态为欢迎语、能力边界和三个可换行问题入口；入口 `surfaceContainerLow`、16dp 圆角、高至少 48dp，点击仅填草稿，不请求。
 - 用户消息末侧对齐、`secondaryContainer`、16dp 圆角；助手起始侧正文，不额外套装饰卡。长文本不截断，复制／失败／停止／重试操作可访问。
+- 助手 Markdown 采用紧凑的主题标题、正文和段落间距；代码使用等宽字与 `surfaceContainerLow` 圆角表面，表格和长代码只在块内横向滚动。链接使用主题强调色。
 - 键盘、弹窗及离页时的请求行为见[聊天返回规则](chat.md#离页与返回)。
