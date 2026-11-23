@@ -8,6 +8,7 @@
 | `data/local/`、`data/repository/` | Room3、查询与事务；仓库协调同步和业务投影 |
 | `ui/` | Route 获取 ViewModel 并感知生命周期收集；`Screen(uiState, callbacks)` 不依赖注入 |
 | `ui/navigation/`、`ui/transition/` | 主路由与助手、共享底栏、模型／榜单共享转场 |
+| `ui/components/glass/` | Liquid Glass 表面、样式与背景采样 |
 | `ai/`、`ui/chat/` | [LLM 请求](llm-api.md)与[聊天和配置](chat.md)，不参与目录同步 |
 
 DTO、本地 Entity／JSON 和应用模型独立。Repository 不触发导航；UI 保存展开、阅读和弹层，ViewModel 保存查询与业务选择，整份目录不写入 SavedState。字段见[页面字段](page-information.md)，视觉见[设计规范](Design.md)。
@@ -30,6 +31,14 @@ DTO、本地 Entity／JSON 和应用模型独立。Repository 不触发导航；
 `AssistantNavigation` 用 Navigation 3 管 Main 与独立的助手路由。Main Pager 管模型／评测／对比／设置，Debug 追加调试；详情、全榜、外观、来源许可和 Debug 数据库仍是 Main 子页。局部改动不附带迁移路由。
 
 共享底栏在 `NavDisplay` 外，助手使用同一容器作输入栏。主路由自动隐藏只观察当前停稳页消耗的纵向用户滚动，不消费位移，不响应惯性、程序滚动或弹层。开关规则见[外观设置](appearance-settings.md#底栏偏好)。
+
+### 玻璃表面与采样
+
+- `Modifier.glassSurface` 与 `GlassSurface` 使用同一绘制逻辑。`Standard` 用于共享底栏；`Subtle` 用较实的着色维持聊天顶部按钮对比度；`Indicator` 用较弱折射和独立色相叠加。调用方按主题和交互状态传入着色与降级色。
+- 每个采样区域用 `rememberGlassBackdrop` 创建一个源，并用 `captureGlassBackdrop` 标记背景层。底栏共用 `NavDisplay` 源（含圆形揭示）；聊天顶部按钮只采样消息与两端渐隐，不采样自身。换主题只更新背景色；底栏由导航变为输入栏时，着色更新不重建采样源或光学效果。
+- Preview、未提供采样源、缺少 RenderEffect 或软件渲染宿主使用不透明主题底色，不采集背景。没有运行时着色器或形状不支持折射时保留模糊与着色；折射只用于圆角矩形类形状。
+
+### 路由与返回
 
 Main 和助手共享稳定的 Navigation 3 Scene。助手入栈后立即停用 Main 交互与读屏；Main 保留布局，助手全屏时跳过 Main 绘制。预测性返回只改变圆形裁剪，确认时先停用助手交互，收缩完成才弹栈；取消不会改变路由。配置重建按已保存的路由和退出意图恢复，不重放入场或手势。返回恢复来源页的阅读、展开和指示器，不触发目录刷新。
 

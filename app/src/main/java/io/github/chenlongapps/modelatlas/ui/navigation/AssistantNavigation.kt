@@ -54,8 +54,8 @@ import androidx.navigation3.scene.rememberSceneState
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigationevent.NavigationEventTransitionState
 import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.chenlongapps.modelatlas.ui.components.glass.captureGlassBackdrop
+import io.github.chenlongapps.modelatlas.ui.components.glass.rememberGlassBackdrop
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -78,13 +78,10 @@ internal fun AssistantNavigation(
     revealAnchor: () -> AssistantRevealAnchor?,
     mainContent: @Composable (isActive: Boolean) -> Unit,
     chatContent: @Composable (isVisible: Boolean, onBack: () -> Unit) -> Unit,
-    bottomBar: @Composable BoxScope.(isChatOpen: Boolean, interactive: Boolean, onOpenChat: () -> Unit, backdrop: Backdrop) -> Unit,
+    bottomBar: @Composable BoxScope.(isChatOpen: Boolean, interactive: Boolean, onOpenChat: () -> Unit, backdrop: Backdrop?) -> Unit,
 ) {
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
-    val backdrop = rememberLayerBackdrop {
-        drawRect(background)
-        drawContent()
-    }
+    val backdrop = rememberGlassBackdrop(background)
     if (LocalInspectionMode.current) {
         Box(modifier) {
             mainContent(true)
@@ -186,7 +183,7 @@ internal fun AssistantNavigation(
             sceneState = scene,
             // 不把手势交给 NavDisplay 的场景动画，否则会提前切走同 key 的助手内容。
             navigationEventState = rememberNavigationEventState(scene),
-            modifier = Modifier.fillMaxSize().layerBackdrop(backdrop),
+            modifier = Modifier.fillMaxSize().captureGlassBackdrop(backdrop),
             transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
             popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
         )

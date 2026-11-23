@@ -3,7 +3,6 @@ package io.github.chenlongapps.modelatlas.ui.chat
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.res.Configuration
-import android.os.Build
 import android.os.PersistableBundle
 import android.view.WindowInsets as PlatformWindowInsets
 import androidx.annotation.StringRes
@@ -33,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -87,10 +87,11 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import io.github.chenlongapps.modelatlas.R
-import io.github.chenlongapps.modelatlas.ui.navigation.navigationGlassSurface
+import io.github.chenlongapps.modelatlas.ui.components.glass.GlassStyle
+import io.github.chenlongapps.modelatlas.ui.components.glass.captureGlassBackdrop
+import io.github.chenlongapps.modelatlas.ui.components.glass.glassSurface
+import io.github.chenlongapps.modelatlas.ui.components.glass.rememberGlassBackdrop
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import kotlinx.coroutines.launch
 
@@ -199,11 +200,7 @@ internal fun ChatScreen(
     val safeTop = safeDrawing.asPaddingValues().calculateTopPadding()
     val topFadeHeight = safeTop + chatTopActionGap + chatTopActionSize + chatTopFadeTail
     val bottomFadeHeight = safeDrawing.exclude(imeBottom).asPaddingValues().calculateBottomPadding() + bottomOverlayPadding
-    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
-    val backdrop = rememberLayerBackdrop {
-        drawRect(background)
-        drawContent()
-    }
+    val backdrop = rememberGlassBackdrop(background)
     Surface(
         modifier = modifier.fillMaxSize()
             .semantics { paneTitle = title }
@@ -213,8 +210,7 @@ internal fun ChatScreen(
     ) {
         // 只有键盘收缩视口。系统栏和浮层的避让放进列表首尾，让消息滚到渐变后面。
         Box(Modifier.fillMaxSize().windowInsetsPadding(imeBottom)) {
-            val backdropModifier = if (glassEnabled) Modifier.layerBackdrop(backdrop) else Modifier
-            Box(Modifier.matchParentSize().then(backdropModifier).chatEdgeFades(background, topFadeHeight, bottomFadeHeight)) {
+            Box(Modifier.matchParentSize().captureGlassBackdrop(backdrop).chatEdgeFades(background, topFadeHeight, bottomFadeHeight)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(safeHorizontal)
@@ -255,7 +251,7 @@ internal fun ChatScreen(
                 }
             }
             ChatFloatingActions(
-                uiState, isVisible, openConfig, navigateBack, backdrop, glassEnabled,
+                uiState, isVisible, openConfig, navigateBack, backdrop,
                 modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(safeHorizontal)
                     .padding(start = 16.dp, end = 16.dp, top = safeTop + chatTopActionGap),
             )
@@ -344,19 +340,17 @@ private fun ChatFloatingActions(
     enabled: Boolean,
     onOpenConfig: () -> Unit,
     onBack: (() -> Unit)?,
-    backdrop: Backdrop,
-    glassEnabled: Boolean,
+    backdrop: Backdrop?,
     modifier: Modifier = Modifier,
 ) {
     val surface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val tint = surface.copy(alpha = 0.72f)
     Box(modifier.fillMaxWidth()) {
         if (onBack != null) {
             IconButton(
                 onClick = onBack,
                 enabled = enabled,
                 modifier = Modifier.align(Alignment.CenterStart).size(chatTopActionSize)
-                    .navigationGlassSurface(backdrop, glassEnabled, surface, tint)
+                    .glassSurface(backdrop, CircleShape, GlassStyle.Subtle, tint = surface, fallbackColor = surface)
                     .testTag("chat-back"),
             ) {
                 Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.navigate_back))
@@ -366,7 +360,7 @@ private fun ChatFloatingActions(
             onClick = onOpenConfig,
             enabled = enabled && !uiState.isGenerating && !uiState.configLoading && !uiState.configSaving,
             modifier = Modifier.align(Alignment.CenterEnd).size(width = 64.dp, height = chatTopActionSize)
-                .navigationGlassSurface(backdrop, glassEnabled, surface, tint)
+                .glassSurface(backdrop, CircleShape, GlassStyle.Subtle, tint = surface, fallbackColor = surface)
                 .testTag("chat-config"),
         ) {
             Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.chat_config_title))

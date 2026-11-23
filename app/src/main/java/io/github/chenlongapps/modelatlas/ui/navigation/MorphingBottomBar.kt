@@ -1,6 +1,5 @@
 package io.github.chenlongapps.modelatlas.ui.navigation
 
-import android.os.Build
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
@@ -43,7 +43,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -60,10 +59,15 @@ import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.chat.ChatUiState
+import io.github.chenlongapps.modelatlas.ui.components.glass.GlassStyle
+import io.github.chenlongapps.modelatlas.ui.components.glass.glassSurface
 import kotlin.math.roundToInt
 
 /** 底栏由当前导航路由决定形态，不维护独立的开关状态。 */
 internal enum class BottomBarMode { Navigation, Chat }
+
+private val composerGlassStyle = GlassStyle.Standard.copy(tintAlpha = 0.86f)
+private val actionGlassStyle = GlassStyle.Standard.copy(tintAlpha = 0.9f)
 
 /**
  * 主界面与助手共用的唯一底栏：胶囊玻璃表面保持不变，内部内容与末侧按钮随模式软化过渡。
@@ -74,7 +78,7 @@ internal fun MorphingBottomBar(
     mode: BottomBarMode,
     pagerState: PagerState,
     items: List<GlassNavigationItem>,
-    backdrop: Backdrop,
+    backdrop: Backdrop?,
     chatState: State<ChatUiState>,
     onNavigate: (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
@@ -94,8 +98,6 @@ internal fun MorphingBottomBar(
     val colors = MaterialTheme.colorScheme
     val chatOpen = mode == BottomBarMode.Chat
     val capsuleSurface = if (chatOpen) colors.surfaceContainerHigh else colors.surfaceContainer
-    val capsuleTint = if (chatOpen) capsuleSurface.copy(alpha = 0.86f) else colors.background.copy(alpha = 0.5f)
-    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
     val density = LocalDensity.current
     // 记住导航内容的实测高度，让输入胶囊在默认字号下与导航胶囊完全同高。
     var navigationContentHeight by rememberSaveable { mutableFloatStateOf(0f) }
@@ -119,7 +121,13 @@ internal fun MorphingBottomBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .navigationGlassSurface(backdrop, glassEnabled, capsuleSurface, capsuleTint)
+                    .glassSurface(
+                        backdrop = backdrop,
+                        shape = CircleShape,
+                        style = if (chatOpen) composerGlassStyle else GlassStyle.Standard,
+                        tint = if (chatOpen) capsuleSurface else colors.background,
+                        fallbackColor = capsuleSurface,
+                    )
                     .testTag("glass-navigation-capsule"),
             ) {
                 AnimatedContent(
@@ -161,7 +169,6 @@ internal fun MorphingBottomBar(
                 chatState = chatState,
                 size = aiSize,
                 backdrop = backdrop,
-                glassEnabled = glassEnabled,
                 enabled = enabled,
                 onOpenChat = onOpenChat,
                 onSend = onSend,
@@ -236,8 +243,7 @@ private fun AssistantActionButton(
     chatOpen: Boolean,
     chatState: State<ChatUiState>,
     size: Dp,
-    backdrop: Backdrop,
-    glassEnabled: Boolean,
+    backdrop: Backdrop?,
     enabled: Boolean,
     onOpenChat: () -> Unit,
     onSend: () -> Unit,
@@ -272,7 +278,6 @@ private fun AssistantActionButton(
         chatOpen -> colors.surfaceContainerHigh
         else -> colors.surfaceContainer
     }
-    val actionTint = if (chatOpen) actionSurface.copy(alpha = 0.9f) else colors.background.copy(alpha = 0.5f)
     val tag = when (action) {
         AssistantAction.Ai -> "nav-chat"
         AssistantAction.Send -> "chat-send"
@@ -281,7 +286,13 @@ private fun AssistantActionButton(
     Box(
         modifier = modifier
             .size(size)
-            .navigationGlassSurface(backdrop, glassEnabled, actionSurface, actionTint)
+            .glassSurface(
+                backdrop = backdrop,
+                shape = CircleShape,
+                style = if (chatOpen) actionGlassStyle else GlassStyle.Standard,
+                tint = if (chatOpen) actionSurface else colors.background,
+                fallbackColor = actionSurface,
+            )
             .testTag(tag)
             .semantics { contentDescription = label }
             .clickable(

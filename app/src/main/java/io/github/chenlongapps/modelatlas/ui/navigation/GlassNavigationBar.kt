@@ -1,11 +1,9 @@
 package io.github.chenlongapps.modelatlas.ui.navigation
 
-import android.os.Build
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -34,7 +32,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -44,7 +41,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -56,11 +52,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.ui.components.glass.GlassStyle
+import io.github.chenlongapps.modelatlas.ui.components.glass.GlassSurface
+import io.github.chenlongapps.modelatlas.ui.components.glass.glassEffectsAvailable
 
 internal data class GlassNavigationItem(
     @param:StringRes val label: Int,
@@ -81,14 +76,14 @@ internal data class GlassNavigationItem(
 @Composable
 internal fun NavigationCapsuleContent(
     pagerState: PagerState,
-    backdrop: Backdrop,
+    backdrop: Backdrop?,
     onNavigate: (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
     items: List<GlassNavigationItem>,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalInspectionMode.current
+    val glassEnabled = backdrop != null && glassEffectsAvailable()
     val colors = MaterialTheme.colorScheme
     val surface = colors.surface
     val indicatorTint = if (surface.luminance() < 0.5f) {
@@ -106,8 +101,10 @@ internal fun NavigationCapsuleContent(
     Box(modifier.padding(4.dp)) {
         BoxWithConstraints(Modifier.matchParentSize()) {
             val itemWidth = (maxWidth - spacing * (items.size - 1)) / items.size
-            Box(
-                Modifier
+            GlassSurface(
+                backdrop = backdrop,
+                shape = CircleShape,
+                modifier = Modifier
                     .fillMaxHeight()
                     .width(itemWidth)
                     .graphicsLayer {
@@ -115,27 +112,11 @@ internal fun NavigationCapsuleContent(
                         val offset = pagerState.currentPage + pagerState.currentPageOffsetFraction
                         translationX = offset * (itemWidth + spacing).toPx() * if (isRtl) -1f else 1f
                     }
-                    .testTag("nav-indicator")
-                    .clip(CircleShape)
-                    .then(
-                        if (glassEnabled) {
-                            Modifier.drawBackdrop(
-                                backdrop = backdrop,
-                                shape = { CircleShape },
-                                effects = {
-                                    blur(4.dp.toPx())
-                                    lens(10.dp.toPx(), 14.dp.toPx(), chromaticAberration = true)
-                                },
-                                onDrawSurface = {
-                                    drawRect(indicatorTint, blendMode = BlendMode.Hue)
-                                    drawRect(indicatorTint.copy(alpha = 0.75f))
-                                },
-                            )
-                        } else {
-                            Modifier.background(colors.secondaryContainer)
-                        },
-                    ),
-            )
+                    .testTag("nav-indicator"),
+                style = GlassStyle.Indicator,
+                tint = indicatorTint,
+                fallbackColor = colors.secondaryContainer,
+            ) {}
         }
         Row(
             modifier = Modifier.selectableGroup()
@@ -216,27 +197,6 @@ internal fun NavigationCapsuleContent(
         }
     }
 }
-
-/** 主界面与助手共用同一玻璃表面；两个模式切换时不需要重建背景。 */
-internal fun Modifier.navigationGlassSurface(
-    backdrop: Backdrop,
-    glassEnabled: Boolean,
-    fallback: Color,
-    tint: Color,
-): Modifier = clip(CircleShape).then(
-    if (glassEnabled) {
-        Modifier.drawBackdrop(
-            backdrop = backdrop,
-            shape = { CircleShape },
-            effects = {
-                vibrancy()
-                blur(4.dp.toPx())
-                lens(16.dp.toPx(), 32.dp.toPx(), chromaticAberration = true)
-            },
-            onDrawSurface = { drawRect(tint) },
-        )
-    } else Modifier.background(fallback),
-)
 
 /** 只观察触摸，不消费事件或等待双击后才执行单击，保留 selectable 与父级拖动的响应。 */
 internal suspend fun PointerInputScope.detectModelsDoubleClicks(
