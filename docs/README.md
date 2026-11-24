@@ -5,7 +5,8 @@
 | 任务 | 从这里开始 |
 | --- | --- |
 | 分层、状态、导航和转场 | [架构](architecture.md) |
-| UI 与外观 | [设计规范](Design.md) · [页面字段](page-information.md) · [外观设置](appearance-settings.md) |
+| UI 设计与交互 | [全局设计规范](Design.md)（视觉、复用与适配） · [页面设计约束](page-design.md)（布局与交互） |
+| 显示字段与外观偏好 | [页面字段](page-information.md) · [外观设置](appearance-settings.md) |
 | 模型、评测、报价与存储 | [Atlas 发布契约](atlas-data.md) · [Models.dev 与报价](data-source.md) · [本地数据](local-data.md) |
 | AI 助手 | [聊天与配置存储](chat.md) · [LLM 请求协议](llm-api.md) |
 | 构建、安装和验证 | [Debug / Release](debug-release-coexistence.md) · [分级测试](testing.md) |

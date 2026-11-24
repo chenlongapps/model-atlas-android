@@ -2,7 +2,7 @@
 
 ## 资源与来源
 
-素材来源记录在 `model-atlas/res/benchmark-logo/` 的 `README.md` 和 `sources.json`。用 Android SDK `Svg2Vector` 转为 `app/src/main/res/drawable/ic_benchmark_*.xml`，不在运行时下载；底座和留白见[设计规范](Design.md#评测榜单)。
+素材来源记录在 `model-atlas/res/benchmark-logo/` 的 `README.md` 和 `sources.json`。用 Android SDK `Svg2Vector` 转为 `app/src/main/res/drawable/ic_benchmark_*.xml`，不在运行时下载；底座和留白见[评测榜单设计](page-design.md#评测榜单)。
 
 | 评测定义 ID | 资源后缀（`ic_benchmark_`） | 官方素材来源 | 原 SVG SHA-256 |
 | --- | --- | --- | --- |
