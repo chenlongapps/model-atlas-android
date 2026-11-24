@@ -59,7 +59,9 @@ import io.github.chenlongapps.modelatlas.ai.LlmConfig
 import io.github.chenlongapps.modelatlas.ai.LlmRequest
 import io.github.chenlongapps.modelatlas.ai.LlmResponse
 import io.github.chenlongapps.modelatlas.ai.config.LlmConfigRepository
+import io.github.chenlongapps.modelatlas.data.model.AppearanceSettings
 import io.github.chenlongapps.modelatlas.data.model.ModelSummary
+import io.github.chenlongapps.modelatlas.data.model.ThemeColorSource
 import io.github.chenlongapps.modelatlas.testing.saveRegressionScreenshot
 import io.github.chenlongapps.modelatlas.ui.ModelAtlasScaffold
 import io.github.chenlongapps.modelatlas.ui.modeldetail.ModelBackTestInput
@@ -468,11 +470,15 @@ class ChatNavigationTest {
         saveRegressionScreenshot("chat-route-short-large-rtl")
     }
 
-    @Test fun emptyAndNormalStatesRemainUsableInLightDarkAndDynamicThemes() {
+    @Test fun emptyAndNormalStatesRemainUsableInLightDarkDynamicAndCustomThemes() {
         var theme by mutableStateOf(0)
         var chat by mutableStateOf(ChatUiState(modelId = "example-model"))
         compose.setContent {
-            ModelAtlasTheme(darkTheme = theme == 1, dynamicColor = theme == 2) {
+            ModelAtlasTheme(
+                darkTheme = theme == 1,
+                dynamicColor = theme == 2,
+                appearance = if (theme == 3) AppearanceSettings(colorSource = ThemeColorSource.Custom, customHue = 135f) else null,
+            ) {
                 ModelAtlasScaffold(
                     chatUiState = rememberUpdatedState(chat),
                     chatContent = { padding, visible, onBack ->
@@ -482,7 +488,7 @@ class ChatNavigationTest {
             }
         }
         open()
-        for (variant in 0..2) {
+        for (variant in 0..3) {
             compose.runOnIdle { theme = variant; chat = ChatUiState(modelId = "example-model") }
             compose.onNodeWithText("想了解模型的哪些方面？").assertIsDisplayed()
             compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()

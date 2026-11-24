@@ -8,8 +8,8 @@ class LlmConfig(
     val timeouts: LlmTimeouts = LlmTimeouts(),
 ) {
     init {
-        require(apiKey.isNotBlank() && apiKey.all { it.code in 0x21..0x7e }) { "Invalid API key" }
-        require(modelId.isNotBlank()) { "Model ID is required" }
+        require(apiKey.isValidLlmApiKey()) { "Invalid API key" }
+        require(modelId.isValidLlmModelId()) { "Model ID is required" }
     }
 
     // 不使用 data class，避免自动 toString/copy/componentN 意外暴露凭据。

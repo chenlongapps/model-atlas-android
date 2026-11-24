@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModelStore
 import io.github.chenlongapps.modelatlas.ai.LlmChunk
 import io.github.chenlongapps.modelatlas.ai.LlmClient
 import io.github.chenlongapps.modelatlas.ai.LlmConfig
+import io.github.chenlongapps.modelatlas.ai.LlmConfigField
+import io.github.chenlongapps.modelatlas.ai.LlmConfigField.API_KEY
+import io.github.chenlongapps.modelatlas.ai.LlmConfigField.BASE_URL
+import io.github.chenlongapps.modelatlas.ai.LlmConfigField.MODEL_ID
 import io.github.chenlongapps.modelatlas.ai.LlmException
 import io.github.chenlongapps.modelatlas.ai.LlmMessage
 import io.github.chenlongapps.modelatlas.ai.LlmRequest
@@ -187,22 +191,40 @@ class ChatViewModelTest {
 
     @Test fun invalidConfigurationIsRejectedBeforeAnyRequestWithSameClientRules() = runTest {
         val vm = create(false)
-        val invalid = listOf(
-            Triple("", "key", "model"), Triple("http://example.com/v1", "key", "model"),
-            Triple("https://user:pass@example.com/", "key", "model"),
-            Triple("https://example.com/?key=x", "key", "model"),
-            Triple("https://example.com/#x", "key", "model"),
-            Triple("https://example.com/", "key\nheader", "model"),
-            Triple("https://example.com/", " ", "model"), Triple("https://example.com/", "key", " "),
+        val invalid: List<Pair<Triple<String, String, String>, LlmConfigField>> = listOf(
+            Triple("", "key", "model") to BASE_URL,
+            Triple("http://example.com/v1", "key", "model") to BASE_URL,
+            Triple("https://user:pass@example.com/", "key", "model") to BASE_URL,
+            Triple("https://example.com/?key=x", "key", "model") to BASE_URL,
+            Triple("https://example.com/#x", "key", "model") to BASE_URL,
+            Triple("https://example.com/", "key\nheader", "model") to API_KEY,
+            Triple("https://example.com/", " ", "model") to API_KEY,
+            Triple("https://example.com/", "key", " ") to MODEL_ID,
         )
-        invalid.forEach { (url, key, model) ->
+        invalid.forEach { (input, field) ->
+            val (url, key, model) = input
             vm.openConfig(); vm.editConfig(url, key, model); vm.applyConfig()
-            assertTrue(vm.uiState.value.configDraft!!.invalid)
+            assertEquals(setOf(field), vm.uiState.value.configDraft!!.invalidFields)
             assertNull(vm.uiState.value.modelId)
             vm.setInput("hello"); vm.send(); runCurrent()
         }
         assertEquals(0, client.requests.size)
         assertFalse(ChatConfigDraft("url", "secret", "model").toString().contains("secret"))
+    }
+
+    @Test fun invalidFieldsClearIndividuallyWithoutSavingOrSending() = runTest {
+        val vm = create(false)
+        vm.openConfig()
+        vm.applyConfig()
+        assertEquals(setOf(BASE_URL, API_KEY, MODEL_ID), vm.uiState.value.configDraft!!.invalidFields)
+        vm.editConfig("https://example.test/api", "", "")
+        assertEquals(setOf(API_KEY, MODEL_ID), vm.uiState.value.configDraft!!.invalidFields)
+        vm.editConfig("https://example.test/api", "test-key", "")
+        assertEquals(setOf(MODEL_ID), vm.uiState.value.configDraft!!.invalidFields)
+        vm.editConfig("https://example.test/api", "test-key", "model")
+        assertTrue(vm.uiState.value.configDraft!!.invalidFields.isEmpty())
+        assertNull(vm.uiState.value.modelId)
+        assertEquals(0, client.requests.size)
     }
 
     @Test fun onlyAppliedConfigurationIsPersistedAndChangingItStartsNewConversation() = runTest {

@@ -1,8 +1,7 @@
 <resources>
     <string name="chat_title">AI 助手</string>
-    <string name="chat_not_configured">尚未配置模型</string>
     <string name="chat_config_title">会话配置</string>
-    <string name="chat_config_required">请先配置 API 和模型</string>
+    <string name="chat_config_setup">配置会话</string>
     <string name="chat_welcome">想了解模型的哪些方面？</string>
     <string name="chat_suggestion_context">上下文长度和最大输出有什么区别？</string>
     <string name="chat_suggestion_price">如何理解每百万 tokens 的输入和输出价格？</string>
@@ -19,6 +18,7 @@
     <string name="chat_input">输入消息</string>
     <string name="chat_send">发送</string>
     <string name="chat_stop">停止</string>
+    <string name="chat_return_to_latest">回到最新</string>
     <string name="chat_user">你</string>
     <string name="chat_waiting">正在等待回复…</string>
     <string name="chat_copy">复制消息</string>
@@ -41,7 +41,9 @@
     <string name="chat_api_key_show">显示 API Key</string>
     <string name="chat_api_key_hide">隐藏 API Key</string>
     <string name="chat_model_id">Model ID</string>
-    <string name="chat_config_invalid">配置无效：请检查完整 HTTPS 根路径、非空可打印 ASCII 密钥及 Model ID。URL 不得含用户名、密码、查询或片段；仅本机开发允许 HTTP。</string>
+    <string name="chat_base_url_invalid">请输入有效的 HTTPS API 根路径，不含账号、密码、查询参数或片段。</string>
+    <string name="chat_api_key_invalid">请输入 API Key，仅使用可见的 ASCII 字符，不含空格。</string>
+    <string name="chat_model_id_invalid">请输入 Model ID。</string>
     <string name="chat_config_apply">应用</string>
     <string name="chat_config_apply_new_conversation">应用并开始新对话</string>
     <string name="chat_config_cancel">取消</string>

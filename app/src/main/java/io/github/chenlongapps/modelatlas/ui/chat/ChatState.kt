@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.chat
 
+import io.github.chenlongapps.modelatlas.ai.LlmConfigField
 import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +29,7 @@ internal class ChatConfigDraft(
     val baseUrl: String = "",
     val apiKey: String = "",
     val modelId: String = "",
-    val invalid: Boolean = false,
+    val invalidFields: Set<LlmConfigField> = emptySet(),
     val changed: Boolean = false,
 ) {
     override fun toString() = "ChatConfigDraft([redacted])"

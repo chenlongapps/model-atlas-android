@@ -34,7 +34,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,8 +67,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -73,10 +78,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -201,6 +208,7 @@ internal fun ChatScreen(
     val topFadeHeight = safeTop + chatTopActionGap + chatTopActionSize + chatTopFadeTail
     val bottomFadeHeight = safeDrawing.exclude(imeBottom).asPaddingValues().calculateBottomPadding() + bottomOverlayPadding
     val backdrop = rememberGlassBackdrop(background)
+    val canScrollToLatest by remember(listState) { derivedStateOf { listState.canScrollForward } }
     Surface(
         modifier = modifier.fillMaxSize()
             .semantics { paneTitle = title }
@@ -209,8 +217,13 @@ internal fun ChatScreen(
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         // 只有键盘收缩视口。系统栏和浮层的避让放进列表首尾，让消息滚到渐变后面。
-        Box(Modifier.fillMaxSize().windowInsetsPadding(imeBottom)) {
-            Box(Modifier.matchParentSize().captureGlassBackdrop(backdrop).chatEdgeFades(background, topFadeHeight, bottomFadeHeight)) {
+        BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(imeBottom)) {
+            val showLatest = isVisible && uiState.configDraft == null && uiState.turns.isNotEmpty() &&
+                !followLatest && canScrollToLatest && maxHeight >= topFadeHeight + bottomFadeHeight + 112.dp
+            var latestActionHeight by remember { mutableIntStateOf(0) }
+            val latestPadding = if (showLatest) with(LocalDensity.current) { latestActionHeight.toDp() } + 8.dp else 0.dp
+            val bottomPadding = bottomFadeHeight + latestPadding
+            Box(Modifier.matchParentSize().captureGlassBackdrop(backdrop).chatEdgeFades(background, topFadeHeight, bottomPadding)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(safeHorizontal)
@@ -218,34 +231,53 @@ internal fun ChatScreen(
                         .nestedScroll(scrollConnection).testTag("chat-messages"),
                     contentPadding = PaddingValues(
                         start = 16.dp, end = 16.dp,
-                        top = topFadeHeight + 8.dp, bottom = bottomFadeHeight + 8.dp,
+                        top = topFadeHeight + 8.dp, bottom = bottomPadding + 8.dp,
                     ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    item(key = "session-status", contentType = "session-status") { ChatConversationStatus(uiState) }
-                    if (uiState.modelId == null || (uiState.configLoadFailed && uiState.configDraft == null)) item(key = "configuration", contentType = "configuration") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (uiState.configLoadFailed && uiState.configDraft == null) {
-                                uiState.configFailure?.let { ChatConfigFailure(it) }
-                                TextButton(onClick = onReloadConfig, enabled = isVisible && !uiState.configLoading) {
-                                    Text(stringResource(R.string.chat_config_reload))
-                                }
-                            }
-                            if (uiState.modelId == null) {
-                                TextButton(onClick = openConfig, enabled = isVisible && !uiState.configLoading && !uiState.configSaving) {
-                                    Text(stringResource(R.string.chat_config_required))
-                                }
-                            }
+                    if (uiState.configLoading || uiState.configLoadFailed || uiState.modelId != null) {
+                        item(key = "session-status", contentType = "session-status") {
+                            ChatConversationStatus(uiState, isVisible, onReloadConfig)
                         }
                     }
                     items(uiState.turns, key = { it.id }, contentType = { "turn" }) { turn ->
-                        ChatTurnContent(turn, canRetry = turn === uiState.turns.lastOrNull() && !uiState.isGenerating && uiState.configurationReady, onRetry)
+                        ChatTurnContent(turn, canRetry = isVisible && turn === uiState.turns.lastOrNull() && uiState.canStartRequest, onRetry)
                     }
                     if (uiState.turns.isEmpty()) item(key = "welcome") {
-                        ChatWelcome(suggestions, isVisible && uiState.canSendSuggestion) { text ->
+                        ChatWelcome(
+                            suggestions,
+                            suggestionsEnabled = isVisible && uiState.canSendSuggestion,
+                            showSetup = uiState.modelId == null && !uiState.configLoading && !uiState.configLoadFailed,
+                            setupEnabled = isVisible && uiState.configDraft == null && !uiState.configSaving,
+                            onSetup = openConfig,
+                        ) { text ->
                             focus.clearFocus()
                             keyboard?.hide()
                             onSendSuggestion(text)
+                        }
+                    }
+                }
+            }
+            if (isVisible) {
+                val latestScope = rememberCoroutineScope()
+                if (showLatest) {
+                    Box(
+                        Modifier.align(Alignment.BottomCenter).windowInsetsPadding(safeHorizontal)
+                            .widthIn(max = 720.dp).fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = bottomFadeHeight + 4.dp),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                latestScope.launch {
+                                    listState.scrollToChatBottom()
+                                    followLatest = true
+                                }
+                            },
+                            modifier = Modifier.heightIn(min = 48.dp)
+                                .onSizeChanged { latestActionHeight = it.height }.testTag("chat-return-to-latest"),
+                        ) {
+                            Text(stringResource(R.string.chat_return_to_latest))
                         }
                     }
                 }
@@ -297,41 +329,78 @@ private fun Modifier.chatEdgeFades(color: Color, topHeight: Dp, bottomHeight: Dp
 }
 
 @Composable
-private fun ChatWelcome(suggestions: List<Int>, enabled: Boolean, onSend: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.chat_welcome), style = MaterialTheme.typography.titleLarge)
-        for (suggestion in suggestions) {
-            val text = stringResource(suggestion)
-            Surface(
-                onClick = { onSend(text) }, enabled = enabled,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth().testTag("chat-suggestion"),
-            ) {
-                Row(
-                    Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(20.dp))
-                }
+private fun ChatWelcome(
+    suggestions: List<Int>,
+    suggestionsEnabled: Boolean,
+    showSetup: Boolean,
+    setupEnabled: Boolean,
+    onSetup: () -> Unit,
+    onSend: (String) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            stringResource(R.string.chat_welcome),
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+        )
+        if (showSetup) {
+            Button(onClick = onSetup, enabled = setupEnabled, modifier = Modifier.heightIn(min = 48.dp).testTag("chat-config-setup")) {
+                Text(stringResource(R.string.chat_config_setup))
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (suggestion in suggestions) ChatSuggestion(suggestion, suggestionsEnabled, onSend)
+        }
+    }
+}
+
+@Composable
+private fun ChatSuggestion(@StringRes suggestion: Int, enabled: Boolean, onSend: (String) -> Unit) {
+    val text = stringResource(suggestion)
+    Surface(
+        onClick = { onSend(text) }, enabled = enabled,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().testTag("chat-suggestion"),
+    ) {
+        Row(
+            Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Icon(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun ChatConversationStatus(uiState: ChatUiState, enabled: Boolean, onReload: () -> Unit) {
+    Column(Modifier.testTag("chat-session-status"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when {
+            uiState.configLoading -> ChatProgressStatus(R.string.chat_config_loading)
+            uiState.configLoadFailed -> if (uiState.configDraft == null) {
+                uiState.configFailure?.let { ChatConfigFailure(it) }
+                TextButton(onClick = onReload, enabled = enabled) { Text(stringResource(R.string.chat_config_reload)) }
+            }
+            else -> uiState.modelId?.let { modelId ->
+                Text(modelId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 @Composable
-private fun ChatConversationStatus(uiState: ChatUiState) {
-    Text(
-        if (uiState.configLoading) stringResource(R.string.chat_config_loading) else uiState.modelId ?: stringResource(R.string.chat_not_configured),
-        modifier = Modifier.testTag("chat-session-status"),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
+private fun ChatProgressStatus(@StringRes message: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        Text(
+            stringResource(message),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
 }
 
 @Composable
@@ -372,37 +441,20 @@ private fun ChatFloatingActions(
 private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Unit) {
     val reply by turn.reply.collectAsStateWithLifecycle()
     val showRetry = canRetry && (reply.status == ChatReplyStatus.FAILED || reply.status == ChatReplyStatus.STOPPED)
-    Column(Modifier.fillMaxWidth().testTag("chat-turn-${turn.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().testTag("chat-turn-${turn.id}"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         UserMessage(turn)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.chat_title), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (reply.status == ChatReplyStatus.WAITING) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text(stringResource(R.string.chat_waiting), style = MaterialTheme.typography.bodyMedium)
-                }
-            }
             if (reply.text.isNotEmpty()) {
                 AssistantMarkdown(reply, modifier = Modifier.testTag("chat-reply-${turn.id}"))
             }
-            when (reply.status) {
-                ChatReplyStatus.FAILED -> {
-                    val message = when (reply.error) {
-                        ChatError.NETWORK -> R.string.chat_error_network
-                        ChatError.TIMEOUT -> R.string.chat_error_timeout
-                        ChatError.HTTP -> R.string.chat_error_http
-                        ChatError.PROTOCOL -> R.string.chat_error_protocol
-                        ChatError.REMOTE -> R.string.chat_error_remote
-                        else -> R.string.chat_error_unknown
+            if (reply.status != ChatReplyStatus.STREAMING && (reply.status != ChatReplyStatus.COMPLETE || reply.text.isEmpty())) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ChatReplyStatusNotice(reply)
+                    if (showRetry) {
+                        Text(stringResource(R.string.chat_retry_notice), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(stringResource(message, reply.httpStatus ?: 0), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
-                ChatReplyStatus.STOPPED -> Text(stringResource(R.string.chat_stopped), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                ChatReplyStatus.COMPLETE -> if (reply.text.isEmpty()) Text(stringResource(R.string.chat_empty_response), style = MaterialTheme.typography.bodyMedium)
-                else -> Unit
-            }
-            if (showRetry) {
-                Text(stringResource(R.string.chat_retry_notice), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (reply.text.isNotEmpty() || showRetry) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -418,6 +470,34 @@ private fun ChatTurnContent(turn: ChatTurn, canRetry: Boolean, onRetry: () -> Un
             }
         }
     }
+}
+
+@Composable
+private fun ChatReplyStatusNotice(reply: ChatReply) {
+    if (reply.status == ChatReplyStatus.WAITING) {
+        ChatProgressStatus(R.string.chat_waiting)
+        return
+    }
+    val colors = MaterialTheme.colorScheme
+    val message = when (reply.status) {
+        ChatReplyStatus.FAILED -> when (reply.error) {
+            ChatError.NETWORK -> stringResource(R.string.chat_error_network)
+            ChatError.TIMEOUT -> stringResource(R.string.chat_error_timeout)
+            ChatError.HTTP -> stringResource(R.string.chat_error_http, reply.httpStatus ?: 0)
+            ChatError.PROTOCOL -> stringResource(R.string.chat_error_protocol)
+            ChatError.REMOTE -> stringResource(R.string.chat_error_remote)
+            else -> stringResource(R.string.chat_error_unknown)
+        }
+        ChatReplyStatus.STOPPED -> stringResource(R.string.chat_stopped)
+        ChatReplyStatus.COMPLETE -> stringResource(R.string.chat_empty_response)
+        else -> return
+    }
+    Text(
+        message,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (reply.status == ChatReplyStatus.FAILED) colors.error else colors.onSurfaceVariant,
+    )
 }
 
 @Composable

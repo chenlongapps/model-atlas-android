@@ -12,6 +12,7 @@ import io.github.chenlongapps.modelatlas.ai.LlmRole
 import io.github.chenlongapps.modelatlas.ai.config.ConfigFailure
 import io.github.chenlongapps.modelatlas.ai.config.ConfigStorageException
 import io.github.chenlongapps.modelatlas.ai.config.LlmConfigRepository
+import io.github.chenlongapps.modelatlas.ai.invalidLlmConfigFields
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -69,9 +70,15 @@ internal class ChatViewModel @Inject constructor(
     private fun draftFromConfig() = ChatConfigDraft(config?.baseUrl.orEmpty(), config?.apiKey.orEmpty(), config?.modelId.orEmpty())
 
     fun editConfig(baseUrl: String, apiKey: String, modelId: String) {
-        if (state.value.configDraft == null || state.value.configSaving || state.value.configLoading || state.value.configLoadFailed) return
+        val current = state.value
+        val draft = current.configDraft ?: return
+        if (current.configSaving || current.configLoading || current.configLoadFailed) return
         val changed = config?.let { it.baseUrl != baseUrl.trim() || it.apiKey != apiKey || it.modelId != modelId.trim() } ?: true
-        state.update { it.copy(configDraft = ChatConfigDraft(baseUrl, apiKey, modelId, changed = changed), configFailure = null) }
+        val invalidFields = if (draft.invalidFields.isEmpty()) emptySet()
+            else invalidLlmConfigFields(baseUrl.trim(), apiKey, modelId.trim()).intersect(draft.invalidFields)
+        state.update { it.copy(
+            configDraft = ChatConfigDraft(baseUrl, apiKey, modelId, invalidFields, changed), configFailure = null,
+        ) }
     }
 
     fun dismissConfig() {
@@ -82,12 +89,14 @@ internal class ChatViewModel @Inject constructor(
     fun applyConfig() {
         if (state.value.isGenerating || state.value.configLoading || state.value.configSaving || state.value.configLoadFailed) return
         val draft = state.value.configDraft ?: return
-        val candidate = try {
-            LlmConfig(draft.baseUrl.trim(), draft.apiKey, draft.modelId.trim()).also { it.validate() }
-        } catch (_: IllegalArgumentException) {
-            state.update { it.copy(configDraft = ChatConfigDraft(draft.baseUrl, draft.apiKey, draft.modelId, invalid = true, changed = draft.changed)) }
+        val baseUrl = draft.baseUrl.trim()
+        val modelId = draft.modelId.trim()
+        val invalidFields = invalidLlmConfigFields(baseUrl, draft.apiKey, modelId)
+        if (invalidFields.isNotEmpty()) {
+            state.update { it.copy(configDraft = ChatConfigDraft(draft.baseUrl, draft.apiKey, draft.modelId, invalidFields, draft.changed)) }
             return
         }
+        val candidate = LlmConfig(baseUrl, draft.apiKey, modelId)
         state.update { it.copy(configSaving = true, configFailure = null) }
         viewModelScope.launch {
             try {
