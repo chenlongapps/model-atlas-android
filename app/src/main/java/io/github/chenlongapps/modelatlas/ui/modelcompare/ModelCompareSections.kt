@@ -34,8 +34,10 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.ModelDetail
+import io.github.chenlongapps.modelatlas.data.model.ModelParameters
 import io.github.chenlongapps.modelatlas.data.model.ModelPriceSummary
-import io.github.chenlongapps.modelatlas.ui.model.formatBillionParameters
+import io.github.chenlongapps.modelatlas.ui.model.formatParameterCount
+import io.github.chenlongapps.modelatlas.ui.model.parameterCountDescription
 import io.github.chenlongapps.modelatlas.ui.modellist.formatCompactTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
@@ -107,12 +109,14 @@ internal fun LazyListScope.compareModelInfoItems(
     val metadata = models.map(ModelDetail::metadata)
     val releaseDates = metadata.map { it.releaseDate }
     val knowledgeCutoffs = metadata.map { it.knowledgeCutoff }
-    val totalParameters = models.map { it.parameters?.totalBillion?.let(::formatBillionParameters) }
-    val activeParameters = models.map { it.parameters?.activeBillion?.let(::formatBillionParameters) }
+    val firstParameters = models[0].parameters
+    val secondParameters = models[1].parameters
+    val parameterDifference = compareParameterCounts(firstParameters, secondParameters)
+    val showParameters = parameterDifference != null && (!onlyDifferences || parameterDifference != SpecDifference.SAME)
     val licenses = models.map { it.license }
     fun visible(first: Any?, second: Any?) = isCompareRowVisible(first, second, onlyDifferences)
     val hasBasic = visible(releaseDates[0], releaseDates[1]) || visible(knowledgeCutoffs[0], knowledgeCutoffs[1]) ||
-        visible(totalParameters[0], totalParameters[1]) || visible(activeParameters[0], activeParameters[1])
+        showParameters
     val hasCapabilities = listOf(
         metadata.map { it.attachment }, metadata.map { it.toolCall }, metadata.map { it.reasoning },
         metadata.map { it.structuredOutput }, metadata.map { it.temperature },
@@ -122,8 +126,11 @@ internal fun LazyListScope.compareModelInfoItems(
             CompareHeading(R.string.compare_basic)
             TextRow(R.string.model_list_release_date_label, releaseDates, names, layout, onlyDifferences)
             TextRow(R.string.detail_knowledge_cutoff, knowledgeCutoffs, names, layout, onlyDifferences)
-            TextRow(R.string.parameter_total, totalParameters, names, layout, onlyDifferences)
-            TextRow(R.string.parameter_active, activeParameters, names, layout, onlyDifferences)
+            if (showParameters) {
+                CompareRow(stringResource(R.string.detail_parameter_count),
+                    ParameterCountValue(firstParameters), ParameterCountValue(secondParameters), names, layout,
+                    different = parameterDifference == SpecDifference.DIFFERENT)
+            }
         }
     }
     if (hasCapabilities) item("capabilities", contentType = "section") {
@@ -145,6 +152,13 @@ internal fun LazyListScope.compareModelInfoItems(
 }
 
 @Composable
+private fun ParameterCountValue(parameters: ModelParameters?): CompareValue {
+    val compact = formatParameterCount(parameters) ?: return MissingCompareValue()
+    // 让居中排版与绘制使用相同宽度，避免大字号 RTL 下短值超出文字边界。
+    return CompareValue(compact, spoken = parameterCountDescription(parameters), fillTextWidth = true)
+}
+
+@Composable
 internal fun CompareSection(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxWidth().padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
@@ -163,7 +177,7 @@ internal fun CompareNote(text: String, textAlign: TextAlign = TextAlign.Start) {
 
 internal data class CompareValue(
     val text: String, val spoken: String = text, val supportingText: String? = null,
-    val prominent: Boolean = false, val missing: Boolean = false,
+    val prominent: Boolean = false, val missing: Boolean = false, val fillTextWidth: Boolean = false,
 )
 
 @Composable
@@ -269,7 +283,8 @@ private fun CompareCell(label: String, name: String, value: CompareValue, modifi
         if (slot != null) CompareNote(stringResource(R.string.compare_slot_label, slot + 1), TextAlign.Center)
         val style = if (value.prominent) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge
         // 只镜像列顺序，不让 RTL 反转由数字／中性符号组成的成绩（如 899 ± 18）。
-        Text(value.text, style = style.copy(textDirection = TextDirection.ContentOrLtr), textAlign = TextAlign.Center,
+        Text(value.text, modifier = if (value.fillTextWidth) Modifier.fillMaxWidth() else Modifier,
+            style = style.copy(textDirection = TextDirection.ContentOrLtr), textAlign = TextAlign.Center,
             fontWeight = if (different) FontWeight.Bold else null,
             color = if (value.missing) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
         value.supportingText?.let { CompareNote(it, TextAlign.Center) }

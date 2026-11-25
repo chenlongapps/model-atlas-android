@@ -1,8 +1,10 @@
 package io.github.chenlongapps.modelatlas.ui.modelcompare
 
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
+import io.github.chenlongapps.modelatlas.data.model.ModelParameters
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,6 +39,29 @@ class CompareSpecsTest {
         assertTrue(isCompareRowVisible(true, false, true))
         assertTrue(isCompareRowVisible(true, true, false))
         assertFalse(isCompareRowVisible(true, true, true))
+    }
+
+    @Test fun parameterCountsCompareExactlyAndIgnoreScaleAndAncillaryFields() {
+        val first = ModelParameters(totalBillion = "671.00".toBigDecimal(), activeBillion = "37.0".toBigDecimal())
+        val same = ModelParameters(totalBillion = "671".toBigDecimal(), activeBillion = "37.000".toBigDecimal(),
+            notes = "Different source notes")
+        assertEquals(SpecDifference.SAME, compareParameterCounts(first, same))
+        assertEquals(SpecDifference.DIFFERENT, compareParameterCounts(first,
+            same.copy(activeBillion = "37.000000000000000001".toBigDecimal())))
+        assertEquals(SpecDifference.SAME, compareParameterCounts(first.copy(activeBillion = null),
+            same.copy(activeBillion = null)))
+    }
+
+    @Test fun parameterCountDisclosureAloneIsNotAConfirmedDifference() {
+        val first = ModelParameters(totalBillion = "671".toBigDecimal(), activeBillion = "37".toBigDecimal())
+        val totalOnly = first.copy(activeBillion = null)
+        val activeOnly = first.copy(totalBillion = null)
+        assertEquals(SpecDifference.MISSING, compareParameterCounts(first, totalOnly))
+        assertEquals(SpecDifference.MISSING, compareParameterCounts(totalOnly, activeOnly))
+        assertEquals(SpecDifference.MISSING, compareParameterCounts(null, activeOnly))
+        assertEquals(SpecDifference.DIFFERENT, compareParameterCounts(first,
+            totalOnly.copy(totalBillion = "672".toBigDecimal())))
+        assertNull(compareParameterCounts(ModelParameters(), null))
     }
 
     @Test fun exactTokenValuesAndExplicitEmptyModalitiesCompareBeforeFormatting() {

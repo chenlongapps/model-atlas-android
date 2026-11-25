@@ -36,7 +36,8 @@ import io.github.chenlongapps.modelatlas.data.model.ModelDetail
 import io.github.chenlongapps.modelatlas.data.model.ModelDetailMetadata
 import io.github.chenlongapps.modelatlas.data.model.ModelParameters
 import io.github.chenlongapps.modelatlas.ui.model.ModelInfoBadge
-import io.github.chenlongapps.modelatlas.ui.model.formatBillionParameters
+import io.github.chenlongapps.modelatlas.ui.model.formatParameterCount
+import io.github.chenlongapps.modelatlas.ui.model.parameterCountDescription
 import io.github.chenlongapps.modelatlas.ui.modellist.formatModality
 import io.github.chenlongapps.modelatlas.ui.modellist.formatTokenCount
 import io.github.chenlongapps.modelatlas.ui.modellist.modalityIcon
@@ -87,15 +88,6 @@ internal fun LazyListScope.overviewItems(model: ModelDetail) {
 }
 
 @Composable
-private fun parameterCountSummary(parameters: ModelParameters?): String {
-    val noData = stringResource(R.string.no_data)
-    return stringResource(R.string.parameter_total) + "：" +
-        (parameters?.totalBillion?.let(::formatBillionParameters) ?: noData) + "\n" +
-        stringResource(R.string.parameter_active) + "：" +
-        (parameters?.activeBillion?.let(::formatBillionParameters) ?: noData)
-}
-
-@Composable
 private fun OverviewSection(title: String, @DrawableRes icon: Int, tag: String, content: @Composable ColumnScope.() -> Unit) {
     Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("overview-section:$tag"), shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface) {
@@ -115,11 +107,13 @@ private data class OverviewField(
     val value: String,
     val hasTokens: Boolean = false,
     val missing: Boolean = false,
+    val spokenValue: String = value,
 )
 
 @Composable
 private fun OverviewMetrics(metadata: ModelDetailMetadata, parameters: ModelParameters?) {
     val noData = stringResource(R.string.no_data)
+    val parameterCount = formatParameterCount(parameters)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         OverviewFields(listOf(
             OverviewField("context", stringResource(R.string.model_list_context_label),
@@ -133,8 +127,8 @@ private fun OverviewMetrics(metadata: ModelDetailMetadata, parameters: ModelPara
             OverviewField("input", stringResource(R.string.detail_input_limit),
                 metadata.inputLimitTokens?.let(::formatTokenCount) ?: noData,
                 hasTokens = metadata.inputLimitTokens != null, missing = metadata.inputLimitTokens == null),
-            OverviewField("parameters", stringResource(R.string.detail_parameter_count), parameterCountSummary(parameters),
-                missing = parameters?.totalBillion == null && parameters?.activeBillion == null),
+            OverviewField("parameters", stringResource(R.string.detail_parameter_count), parameterCount ?: noData,
+                missing = parameterCount == null, spokenValue = parameterCountDescription(parameters)),
         ))
     }
 }
@@ -164,7 +158,7 @@ private fun OverviewFields(fields: List<OverviewField>, modifier: Modifier = Mod
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     row.forEach { field ->
                         Column(Modifier.weight(1f).testTag("overview-metric:${field.tag}").semantics(mergeDescendants = true) {
-                            contentDescription = "${field.label}：${field.value}${if (field.hasTokens) " $unit" else ""}"
+                            contentDescription = "${field.label}：${field.spokenValue}${if (field.hasTokens) " $unit" else ""}"
                         }, verticalArrangement = Arrangement.spacedBy(if (prominent) 6.dp else 4.dp)) {
                             Text(field.label, style = labelStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(field.displayValue(), style = if (field.missing) missingStyle else valueStyle,
