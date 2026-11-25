@@ -42,12 +42,15 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.ui.components.BrandLogoShape
+import io.github.chenlongapps.modelatlas.ui.components.BrandLogoSize
+
+private val SkeletonTextShape = RoundedCornerShape(4.dp)
 
 /** 分页器保留页面组合时，隐藏页不应继续运行装饰动画。 */
 internal val LocalModelListVisible = staticCompositionLocalOf { true }
@@ -102,7 +105,7 @@ internal fun ModelCardSkeleton(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SkeletonBlock(shimmerProgress, Modifier.size(56.dp), cornerRadius = 16.dp)
+                SkeletonBlock(shimmerProgress, Modifier.size(BrandLogoSize), shape = BrandLogoShape)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -122,7 +125,7 @@ internal fun ModelCardSkeleton(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 repeat(4) {
-                    SkeletonBlock(shimmerProgress, Modifier.size(28.dp), cornerRadius = 10.dp)
+                    SkeletonBlock(shimmerProgress, Modifier.size(28.dp), shape = MaterialTheme.shapes.small)
                 }
             }
             HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
@@ -145,9 +148,9 @@ internal fun ModelCardSkeleton(
 private fun SkeletonBlock(
     shimmerProgress: State<Float>,
     modifier: Modifier,
-    cornerRadius: Dp = 4.dp,
+    shape: Shape = SkeletonTextShape,
 ) {
-    Box(modifier.modelSkeletonPlaceholder(shimmerProgress, RoundedCornerShape(cornerRadius)))
+    Box(modifier.modelSkeletonPlaceholder(shimmerProgress, shape))
 }
 
 /** 保留真实控件的测量结果，仅以占位轮廓替代绘制和读屏语义。调用方仍须禁用交互。 */

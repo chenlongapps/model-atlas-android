@@ -1,22 +1,14 @@
 package io.github.chenlongapps.modelatlas.ui.modellist
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import io.github.chenlongapps.modelatlas.R
+import io.github.chenlongapps.modelatlas.ui.components.BrandLogo
+import io.github.chenlongapps.modelatlas.ui.components.BrandLogoSize
 
 /**
  * LAB 前缀 → 随包彩色 logo 素材。
@@ -59,38 +51,23 @@ internal fun labLogoResOrNull(lab: String?): Int? = LabLogos[lab]
 @DrawableRes
 internal fun labLogoRes(lab: String?): Int = labLogoResOrNull(lab) ?: R.drawable.ic_lab_logo_fallback
 
-/** 品牌 logo 需要固定浅色底：素材保留官方配色，深色图案在深色卡片上才能看清。 */
-private val LabLogoBackground: Color = Color.White
-
-private val LabLogoChipSize: Dp = 56.dp
-
-/**
- * 列表与详情共用的 LAB logo，放大时保持相同图形比例和圆角比例。
- *
- * 与模型名并列，仅作视觉标识；旁侧已显示同一 LAB 的文字，因此不重复提供无障碍描述。
- */
+/** 列表与详情共用的 LAB Logo，放大时保持相同图形比例和圆角比例。 */
 @Composable
 internal fun LabLogo(
     lab: String?,
     modifier: Modifier = Modifier,
-    size: Dp = LabLogoChipSize,
+    size: Dp = BrandLogoSize,
 ) {
     val hasLabLogo = labLogoResOrNull(lab) != null
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(25))
-            .background(LabLogoBackground),
-        contentAlignment = Alignment.Center,
-    ) {
-        Image(
-            painter = painterResource(labLogoRes(lab)),
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize(44f / 56f)
-                .testTag(if (hasLabLogo) LabLogoTag else LabLogoFallbackTag),
-        )
-    }
+    BrandLogo(
+        resourceId = labLogoRes(lab),
+        imageModifier = Modifier
+            .fillMaxSize(44f / 56f)
+            .testTag(if (hasLabLogo) LabLogoTag else LabLogoFallbackTag),
+        modifier = modifier,
+        width = size,
+        height = size,
+    )
 }
 
 internal const val LabLogoTag: String = "lab-logo"

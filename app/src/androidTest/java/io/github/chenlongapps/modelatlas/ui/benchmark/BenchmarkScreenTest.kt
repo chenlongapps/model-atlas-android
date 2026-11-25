@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -58,6 +59,7 @@ import io.github.chenlongapps.modelatlas.data.local.entity.BenchmarkScoreEntity
 import io.github.chenlongapps.modelatlas.data.mapper.toBenchmarkBoards
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import io.github.chenlongapps.modelatlas.testing.saveRegressionScreenshot
+import kotlin.math.roundToInt
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -120,11 +122,29 @@ class BenchmarkScreenTest {
             assertEquals(modelLogo.height, logoImage.height, 1f)
             assertEquals(16f * dp, logo.left - card.left, 1f)
             assertEquals(16f * dp, logo.top - card.top, 1f)
+            val inset = (16f * dp).roundToInt()
+            val corner = (2f * dp).roundToInt()
+            val insideCorner = (8f * dp).roundToInt()
+            val cornerRow = (3f * dp).roundToInt()
+            val surface = benchmarkImage[benchmarkImage.width / 2, 1]
+            // 同样的白底和圆角；宽字标不能按长边放大圆角。
+            for (image in listOf(modelImage, benchmarkImage)) {
+                assertEquals(surface, image[inset + corner, inset + corner])
+                assertEquals(Color.White, image[inset + insideCorner, inset + cornerRow])
+            }
             val first = compose.onNodeWithTag("benchmark-result:a", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             assertEquals(12f * dp, first.top - logo.bottom, 1f)
-            val wordmark = compose.onNodeWithTag("benchmark-catalog-logo:${wide.benchmarkId}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val wordmarkNode = compose.onNodeWithTag("benchmark-catalog-logo:${wide.benchmarkId}", useUnmergedTree = true)
+            val wordmark = wordmarkNode.fetchSemanticsNode().boundsInRoot
             assertEquals(56f * dp, wordmark.height, 1f)
             assertEquals(88f * dp, wordmark.width, 1f)
+            val wordmarkPixels = wordmarkNode.captureToImage().toPixelMap()
+            assertEquals(surface, wordmarkPixels[corner, corner])
+            assertEquals(Color.White, wordmarkPixels[insideCorner, cornerRow])
+            val wordmarkImage = compose.onNodeWithTag("benchmark-catalog-logo-image:${wide.benchmarkId}", useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot
+            assertEquals(76f * dp, wordmarkImage.width, 1f)
+            assertEquals(44f * dp, wordmarkImage.height, 1f)
             val priceLayouts = mutableListOf<TextLayoutResult>()
             val scoreLayouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText("$1.00", useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(priceLayouts) }

@@ -1,7 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.benchmark
 
 import android.content.res.Configuration
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -53,6 +51,8 @@ import androidx.compose.ui.unit.Dp
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoard
 import io.github.chenlongapps.modelatlas.data.model.BenchmarkBoardEntry
+import io.github.chenlongapps.modelatlas.ui.components.BrandLogo
+import io.github.chenlongapps.modelatlas.ui.components.BrandLogoSize
 import io.github.chenlongapps.modelatlas.ui.modeldetail.BenchmarkLogo
 import io.github.chenlongapps.modelatlas.ui.modeldetail.benchmarkLogoResource
 import io.github.chenlongapps.modelatlas.ui.modeldetail.benchmarkLogoWidth
@@ -92,15 +92,16 @@ internal fun BenchmarkCard(board: BenchmarkBoard, onClick: () -> Unit, modifier:
     }
 }
 
-/** 仅总览对齐模型页 56dp 白底/14dp 圆角/6dp 留白；宽字标保留宽底座，详情 Logo 不变。 */
+/** 总览与模型列表共用品牌底座；宽字标保留宽底座，详情和全榜不变。 */
 @Composable
 private fun BenchmarkCatalogLogo(benchmarkId: String, modifier: Modifier = Modifier) {
-    val width = if (benchmarkLogoWidth(benchmarkId) > 40.dp) 88.dp else 56.dp
-    Box(modifier.size(width, 56.dp).clip(RoundedCornerShape(14.dp)).background(Color.White)
-        .testTag("benchmark-catalog-logo:$benchmarkId")) {
-        Image(painterResource(benchmarkLogoResource(benchmarkId)), contentDescription = null,
-            modifier = Modifier.fillMaxSize().padding(6.dp).testTag("benchmark-catalog-logo-image:$benchmarkId"))
-    }
+    val width = maxOf(benchmarkLogoWidth(benchmarkId), BrandLogoSize)
+    BrandLogo(
+        resourceId = benchmarkLogoResource(benchmarkId),
+        imageModifier = Modifier.fillMaxSize().padding(6.dp).testTag("benchmark-catalog-logo-image:$benchmarkId"),
+        modifier = modifier.testTag("benchmark-catalog-logo:$benchmarkId"),
+        width = width,
+    )
 }
 
 /** 每项名称/分数在上、通栏柱条在下；完整文字实测放不下时才将分数下移。 */
