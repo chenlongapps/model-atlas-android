@@ -1,7 +1,7 @@
 package io.github.chenlongapps.modelatlas.ui.components.glass
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
@@ -53,14 +53,14 @@ internal fun Modifier.glassSurface(
     style: GlassStyle = GlassStyle.Standard,
     tint: Color = MaterialTheme.colorScheme.background,
     fallbackColor: Color = MaterialTheme.colorScheme.surfaceContainer,
-    animateTint: Boolean = false,
+    tintAnimationSpec: AnimationSpec<Color>? = null,
 ): Modifier {
     if (backdrop == null || !glassEffectsAvailable()) {
-        val fallback by glassTint(fallbackColor.copy(alpha = 1f), animateTint)
+        val fallback by glassTint(fallbackColor.copy(alpha = 1f), tintAnimationSpec)
         return clip(shape).drawBehind { drawRect(fallback) }
     }
     // 着色在绘制阶段更新；切换底栏模式或发送状态不必重新配置折射和模糊。
-    val overlay by glassTint(tint.copy(alpha = style.tintAlpha), animateTint)
+    val overlay by glassTint(tint.copy(alpha = style.tintAlpha), tintAnimationSpec)
     val blurRadius = style.blurRadius
     // Backdrop 2.0 的 lens 不接受任意 Shape；其它形状保留裁剪、模糊和着色。
     val refraction = style.lens?.takeIf { shape is RoundedCornerShape || shape is AbsoluteRoundedCornerShape }
@@ -87,8 +87,8 @@ internal fun Modifier.glassSurface(
 }
 
 @Composable
-private fun glassTint(target: Color, animate: Boolean) =
-    if (animate) animateColorAsState(target, tween(220), label = "Glass tint") else rememberUpdatedState(target)
+private fun glassTint(target: Color, animationSpec: AnimationSpec<Color>?) =
+    if (animationSpec != null) animateColorAsState(target, animationSpec, label = "Glass tint") else rememberUpdatedState(target)
 
 @Composable
 internal fun GlassSurface(

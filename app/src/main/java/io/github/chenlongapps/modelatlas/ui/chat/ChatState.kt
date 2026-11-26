@@ -49,6 +49,8 @@ internal data class ChatUiState(
 ) {
     val configurationReady: Boolean get() = modelId != null && !configLoading && !configSaving && !configLoadFailed
     val canStartRequest: Boolean get() = configurationReady && !isGenerating && configDraft == null
-    val canSend: Boolean get() = canStartRequest && input.isNotBlank()
+    val hasInput: Boolean get() = input.isNotBlank()
+    val canReturnFromComposer: Boolean get() = !hasInput && !isGenerating && configDraft == null
+    val canSend: Boolean get() = canStartRequest && hasInput
     val canSendSuggestion: Boolean get() = canStartRequest && turns.isEmpty()
 }

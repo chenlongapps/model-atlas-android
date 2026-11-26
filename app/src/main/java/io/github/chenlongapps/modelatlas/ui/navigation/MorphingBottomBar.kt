@@ -2,11 +2,14 @@ package io.github.chenlongapps.modelatlas.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -71,7 +75,6 @@ import io.github.chenlongapps.modelatlas.ui.chat.ChatUiState
 import io.github.chenlongapps.modelatlas.ui.components.glass.GlassStyle
 import io.github.chenlongapps.modelatlas.ui.components.glass.glassEffectsAvailable
 import io.github.chenlongapps.modelatlas.ui.components.glass.glassSurface
-import kotlin.math.roundToInt
 
 /** 底栏由当前导航路由决定形态，不维护独立的开关状态。 */
 internal enum class BottomBarMode { Navigation, Chat }
@@ -79,13 +82,16 @@ internal enum class BottomBarMode { Navigation, Chat }
 private val composerGlassStyle = GlassStyle.BottomBar.copy(tintAlpha = 0.86f)
 private val actionGlassStyle = GlassStyle.BottomBar.copy(tintAlpha = 0.9f)
 private val darkNavigationGlassStyle = GlassStyle.BottomBar.copy(tintAlpha = 0.68f)
+private const val AssistantActionDurationMillis = 180
+private val capsuleTintAnimation = tween<Color>(220)
+private val actionTintAnimation = tween<Color>(AssistantActionDurationMillis)
 
 private fun navigationGlassStyle(surface: Color): GlassStyle =
     if (surface.luminance() < 0.5f) darkNavigationGlassStyle else GlassStyle.BottomBar
 
 /**
  * 主界面与助手共用的唯一底栏：胶囊玻璃表面保持不变，内部内容与末侧按钮随模式软化过渡。
- * 导航模式下胶囊在起始侧、AI 入口在末侧；聊天模式下胶囊成为输入栏、入口成为发送／停止。
+ * 导航模式下胶囊在起始侧、AI 入口在末侧；聊天模式下胶囊成为输入栏，圆钮切换操作。
  */
 @Composable
 internal fun MorphingBottomBar(
@@ -96,13 +102,15 @@ internal fun MorphingBottomBar(
     chatState: State<ChatUiState>,
     onNavigate: suspend (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
-    onOpenChat: () -> Unit,
+    onToggleChat: () -> Unit,
     onChatInput: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    onNavigationAnchor: ((AssistantRevealAnchor) -> Unit)? = null,
+    navigationEnabled: Boolean = true,
+    onActionAnchor: ((AssistantRevealAnchor) -> Unit)? = null,
+    onNavigationHeight: ((Dp) -> Unit)? = null,
 ) {
     require(items.isNotEmpty())
     val spacing = if (items.size >= 5) 2.dp else 4.dp
@@ -131,15 +139,23 @@ internal fun MorphingBottomBar(
 
     BoxWithConstraints(modifier.testTag("glass-navigation")) {
         val gap = 8.dp
-        val capsuleMinWidth = 48.dp * items.size + 8.dp + spacing * (items.size - 1)
-        val aiSize = (maxWidth - gap - capsuleMinWidth).coerceIn(48.dp, 64.dp)
+        val capsuleMinWidth = (NavigationMinTouchTarget + spacing) * items.size -
+            spacing + NavigationCapsuleInset * 2
+        val aiSize = (maxWidth - gap - capsuleMinWidth).coerceIn(NavigationMinTouchTarget, 64.dp)
+        val navigationHeight = maxOf(aiSize, navigationContentHeight.dp)
+        val navigationAligned = !chatOpen && transition.currentState == BottomBarMode.Navigation
+        if (onNavigationHeight != null && navigationContentHeight > 0f) {
+            SideEffect { onNavigationHeight(navigationHeight) }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(mode, layoutDirection, items.size, spacing, aiSize, enabled) {
-                    if (!enabled || mode != BottomBarMode.Navigation) return@pointerInput
+                .pointerInput(mode, layoutDirection, items.size, spacing, aiSize, enabled, navigationEnabled) {
+                    if (!enabled || !navigationEnabled || mode != BottomBarMode.Navigation) return@pointerInput
                     detectModelsDoubleClicks({ width ->
-                        navigationModelsRange(width, aiSize.toPx(), gap.toPx(), 4.dp.toPx(), spacing.toPx(), items.size, isRtl)
+                        navigationModelsRange(
+                            width, aiSize.toPx(), gap.toPx(), NavigationCapsuleInset.toPx(), spacing.toPx(), items.size, isRtl,
+                        )
                     }) { modelsDoubleClick() }
                 },
             horizontalArrangement = Arrangement.spacedBy(gap),
@@ -157,7 +173,7 @@ internal fun MorphingBottomBar(
                         style = if (chatOpen) composerGlassStyle else navigationGlassStyle(colors.surface),
                         tint = if (chatOpen) capsuleSurface else colors.surface,
                         fallbackColor = capsuleSurface,
-                        animateTint = true,
+                        tintAnimationSpec = capsuleTintAnimation,
                     ),
                 )
                 transition.AnimatedContent(
@@ -169,7 +185,8 @@ internal fun MorphingBottomBar(
                     },
                 ) { target ->
                     // 退出端立即停用交互与读屏，动画期间只有目标形态可操作。
-                    val interactive = enabled && mode == target
+                    val interactive = enabled && mode == target &&
+                        (target == BottomBarMode.Chat || navigationEnabled)
                     when (target) {
                         BottomBarMode.Navigation -> NavigationCapsuleContent(
                             pagerState = pagerState,
@@ -179,6 +196,7 @@ internal fun MorphingBottomBar(
                             onNavigate = onNavigate,
                             onModelsDoubleClick = { modelsDoubleClick() },
                             items = items,
+                            minHeight = aiSize,
                             enabled = interactive,
                             modifier = Modifier
                                 .interactionGate(interactive)
@@ -188,31 +206,40 @@ internal fun MorphingBottomBar(
                             chatState = chatState,
                             enabled = interactive,
                             onInput = onChatInput,
-                            minHeight = (navigationContentHeight.dp - 24.dp).coerceAtLeast(44.dp),
+                            minHeight = navigationHeight,
                             modifier = Modifier.interactionGate(interactive),
                         )
                     }
                 }
             }
-            AssistantActionButton(
-                chatOpen = chatOpen,
-                chatState = chatState,
-                size = aiSize,
-                backdrop = glassBackdrop,
-                enabled = enabled,
-                onOpenChat = onOpenChat,
-                onSend = onSend,
-                onStop = onStop,
-                modifier = if (onNavigationAnchor == null) Modifier else Modifier.onGloballyPositioned { coordinates ->
-                    val diameter = coordinates.size.width
-                    val radius = diameter / 2f
-                    val rowHeight = maxOf(diameter, with(density) { navigationContentHeight.dp.roundToPx() })
-                    // 发送键随草稿／IME 移动；圆心的 Y 记录为导航形态相对底边的距离。
-                    val centerFromBottom = rowHeight - ((rowHeight - diameter) / 2f).roundToInt() - radius
-                    val x = coordinates.localToRoot(Offset(radius, radius)).x
-                    onNavigationAnchor(AssistantRevealAnchor(Offset(x, -centerFromBottom), radius))
-                },
-            )
+            // 导航时随整行居中；编辑器增高时，按钮仍居中于贴底的导航槽位。
+            Box(
+                modifier = if (navigationAligned) Modifier else Modifier
+                    .align(Alignment.Bottom)
+                    .heightIn(min = navigationHeight),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier.size(aiSize).then(
+                        if (onActionAnchor == null) Modifier else Modifier.onGloballyPositioned { coordinates ->
+                            val radius = coordinates.size.width / 2f
+                            onActionAnchor(AssistantRevealAnchor(coordinates.localToRoot(Offset(radius, radius)), radius))
+                        },
+                    ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AssistantActionButton(
+                        chatOpen = chatOpen,
+                        chatState = chatState,
+                        slotSize = aiSize,
+                        backdrop = glassBackdrop,
+                        enabled = enabled,
+                        onToggleChat = onToggleChat,
+                        onSend = onSend,
+                        onStop = onStop,
+                    )
+                }
+            }
         }
     }
 }
@@ -233,16 +260,19 @@ private fun ChatComposerContent(
     val colors = MaterialTheme.colorScheme
     val placeholder = stringResource(R.string.chat_input)
     val textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface)
+    val minFieldHeight = 44.dp
+    val verticalPadding = ((minHeight - minFieldHeight) / 2).coerceIn(0.dp, 12.dp)
+    val fieldHeight = minHeight - verticalPadding * 2
     BoxWithConstraints(modifier.fillMaxWidth()) {
         // 单行胶囊与导航胶囊同高；长文本有上限并在编辑器内部滚动。
-        val maxFieldHeight = (maxHeight * 0.3f).coerceIn(44.dp, 140.dp).coerceAtLeast(minHeight)
+        val maxFieldHeight = (maxHeight * 0.3f).coerceIn(minFieldHeight, 140.dp).coerceAtLeast(fieldHeight)
         BasicTextField(
             value = input,
             onValueChange = onInput,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-                .heightIn(min = minHeight, max = maxFieldHeight)
+                .padding(horizontal = 20.dp, vertical = verticalPadding)
+                .heightIn(min = fieldHeight, max = maxFieldHeight)
                 .testTag("chat-input"),
             enabled = enabled,
             textStyle = textStyle,
@@ -266,26 +296,27 @@ private fun ChatComposerContent(
     }
 }
 
-private enum class AssistantAction { Ai, Send, Stop }
+private enum class AssistantAction { Ai, Back, Send, Stop }
 
 @Composable
 private fun AssistantActionButton(
     chatOpen: Boolean,
     chatState: State<ChatUiState>,
-    size: Dp,
+    slotSize: Dp,
     backdrop: Backdrop?,
     enabled: Boolean,
-    onOpenChat: () -> Unit,
+    onToggleChat: () -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    // 只在可用性与生成状态真正变化时重组，避免每个字符重建玻璃背景。
+    // 只订阅按钮所需的状态，普通输入和流式回复不重组玻璃表面。
     val canSend by remember(chatState) { derivedStateOf { chatState.value.canSend } }
     val isGenerating by remember(chatState) { derivedStateOf { chatState.value.isGenerating } }
+    val canReturn by remember(chatState) { derivedStateOf { chatState.value.canReturnFromComposer } }
     val action = when {
         !chatOpen -> AssistantAction.Ai
         isGenerating -> AssistantAction.Stop
+        canReturn -> AssistantAction.Back
         else -> AssistantAction.Send
     }
     val colors = MaterialTheme.colorScheme
@@ -293,28 +324,37 @@ private fun AssistantActionButton(
     val label = stringResource(
         when (action) {
             AssistantAction.Ai -> R.string.chat_title
+            AssistantAction.Back -> R.string.chat_exit
             AssistantAction.Send -> R.string.chat_send
             AssistantAction.Stop -> R.string.chat_stop
         },
     )
-    val clickable = enabled && when (action) {
-        AssistantAction.Ai -> true
-        AssistantAction.Send -> canSend
-        AssistantAction.Stop -> true
-    }
-    val emphasized = chatOpen && clickable
+    val clickable = enabled && (action != AssistantAction.Send || canSend)
+    val requestAction = action == AssistantAction.Send || action == AssistantAction.Stop
+    val size by animateDpAsState(
+        if (requestAction) slotSize.coerceAtMost(56.dp) else slotSize,
+        tween(AssistantActionDurationMillis),
+        label = "Assistant action size",
+    )
+    val emphasized = clickable && requestAction
     val actionSurface = when {
         emphasized -> colors.primaryContainer
         chatOpen -> colors.surfaceContainerHigh
         else -> colors.surfaceContainer
     }
+    val iconTint by animateColorAsState(
+        if (emphasized) colors.onPrimaryContainer else colors.onSurface.copy(alpha = 0.38f),
+        actionTintAnimation,
+        label = "Assistant action tint",
+    )
     val tag = when (action) {
         AssistantAction.Ai -> "nav-chat"
+        AssistantAction.Back -> "chat-exit"
         AssistantAction.Send -> "chat-send"
         AssistantAction.Stop -> "chat-stop"
     }
     Box(
-        modifier = modifier
+        modifier = Modifier
             .size(size)
             .glassSurface(
                 backdrop = backdrop,
@@ -322,7 +362,7 @@ private fun AssistantActionButton(
                 style = if (chatOpen) actionGlassStyle else navigationGlassStyle(colors.surface),
                 tint = if (chatOpen) actionSurface else colors.surface,
                 fallbackColor = actionSurface,
-                animateTint = true,
+                tintAnimationSpec = actionTintAnimation,
             )
             .testTag(tag)
             .semantics { contentDescription = label }
@@ -334,7 +374,7 @@ private fun AssistantActionButton(
             ) {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 when (action) {
-                    AssistantAction.Ai -> onOpenChat()
+                    AssistantAction.Ai, AssistantAction.Back -> onToggleChat()
                     AssistantAction.Send -> onSend()
                     AssistantAction.Stop -> onStop()
                 }
@@ -343,29 +383,37 @@ private fun AssistantActionButton(
     ) {
         AnimatedContent(
             targetState = action,
+            contentAlignment = Alignment.Center,
             transitionSpec = {
-                (fadeIn(tween(durationMillis = 200)) + scaleIn(tween(durationMillis = 200), initialScale = 0.85f)) togetherWith
-                    fadeOut(tween(durationMillis = 120))
+                val spec = tween<Float>(AssistantActionDurationMillis)
+                ((fadeIn(spec) + scaleIn(spec, initialScale = 0.85f)) togetherWith
+                    (fadeOut(spec) + scaleOut(spec, targetScale = 0.85f))).using(null)
             },
             modifier = Modifier.clearAndSetSemantics {},
             label = "Assistant action",
         ) { target ->
             when (target) {
-                AssistantAction.Ai -> Text(
-                    stringResource(R.string.nav_ai),
+                AssistantAction.Ai -> NavigationItemContent(
+                    label = stringResource(R.string.nav_chat),
                     color = colors.onSurfaceVariant,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                AssistantAction.Send -> Icon(
-                    painterResource(R.drawable.ic_send),
+                ) { iconModifier ->
+                    Icon(
+                        painterResource(R.drawable.ic_assistant_sparkle),
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        modifier = iconModifier,
+                    )
+                }
+                AssistantAction.Back -> Icon(
+                    painterResource(R.drawable.ic_arrow_back),
                     contentDescription = null,
-                    tint = if (emphasized) colors.onPrimaryContainer else colors.onSurface.copy(alpha = 0.38f),
+                    tint = colors.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )
-                AssistantAction.Stop -> Icon(
-                    painterResource(R.drawable.ic_stop),
+                AssistantAction.Send, AssistantAction.Stop -> Icon(
+                    painterResource(if (target == AssistantAction.Send) R.drawable.ic_send else R.drawable.ic_stop),
                     contentDescription = null,
-                    tint = if (emphasized) colors.onPrimaryContainer else colors.onSurfaceVariant,
+                    tint = iconTint,
                     modifier = Modifier.size(24.dp),
                 )
             }

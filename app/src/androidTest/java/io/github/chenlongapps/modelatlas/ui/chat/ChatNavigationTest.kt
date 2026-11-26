@@ -1,6 +1,9 @@
 package io.github.chenlongapps.modelatlas.ui.chat
 
+import android.content.ComponentName
 import android.view.View
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -24,13 +27,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -38,11 +47,13 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.click
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -53,6 +64,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import io.github.chenlongapps.modelatlas.MainActivity
 import io.github.chenlongapps.modelatlas.ai.LlmChunk
 import io.github.chenlongapps.modelatlas.ai.LlmClient
 import io.github.chenlongapps.modelatlas.ai.LlmConfig
@@ -77,7 +89,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.flow
 
 class ChatNavigationTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var view: View
     private val store = ViewModelStore()
 
@@ -104,17 +116,15 @@ class ChatNavigationTest {
         val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("nav-chat").performClick()
         compose.onNodeWithTag("chat-screen").assertIsDisplayed()
-        compose.onNodeWithContentDescription("发送").assertIsDisplayed()
+        val back = compose.onNodeWithContentDescription("退出助手").assertIsDisplayed().assertIsEnabled()
         val chatCapsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
-        val send = compose.onNodeWithTag("chat-send").fetchSemanticsNode().boundsInRoot
-        // 胶囊与右侧入口在路由切换前后保持同一位置和形状，仅内容形态变化。
+        // 无输入时，返回与 AI 圆钮占同一位置，胶囊保持原有边界。
         assertEquals(navCapsule.left, chatCapsule.left, 1f)
         assertEquals(navCapsule.right, chatCapsule.right, 1f)
         assertEquals(navCapsule.top, chatCapsule.top, 1f)
         assertEquals(navCapsule.bottom, chatCapsule.bottom, 1f)
-        assertEquals(ai.left, send.left, 1f)
-        assertEquals(ai.right, send.right, 1f)
-        compose.onNodeWithTag("chat-back").performClick()
+        assertEquals(ai, back.fetchSemanticsNode().boundsInRoot)
+        back.performClick()
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithContentDescription("AI 助手").assertIsDisplayed()
         val restoredCapsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
@@ -248,6 +258,38 @@ class ChatNavigationTest {
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         open()
         compose.onNodeWithText("返回按钮草稿").assertIsDisplayed()
+    }
+
+    @Test fun bottomBackExitsWithKeyboardOpenAndPreservesWhitespaceDraft() {
+        compose.activityRule.scenario.onActivity { activity ->
+            val mainActivity = activity.packageManager.getActivityInfo(ComponentName(activity, MainActivity::class.java), 0)
+            activity.window.setSoftInputMode(mainActivity.softInputMode)
+            activity.enableEdgeToEdge()
+        }
+        compose.setContent { Content() }
+        compose.onNodeWithTag("nav-settings").performClick()
+        val ai = compose.onNodeWithTag("nav-chat")
+        val original = ai.fetchSemanticsNode().boundsInRoot
+        open()
+        val input = compose.onNodeWithTag("chat-input")
+        input.performTextInput("  ")
+        input.performClick()
+        compose.waitUntil(5_000) { imeVisible() }
+        input.assertIsFocused()
+        val back = compose.onNodeWithTag("chat-exit").assertIsEnabled()
+        // 浮动 IME 可见时不产生底部 inset。
+        val imeBottom = ViewCompat.getRootWindowInsets(view)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+        if (imeBottom > 0) {
+            compose.waitUntil(5_000) { back.fetchSemanticsNode().boundsInRoot.center.y < original.center.y }
+        }
+        back.performClick()
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.waitUntil(5_000) { !imeVisible() && ai.fetchSemanticsNode().boundsInRoot == original }
+
+        open()
+        input.assertTextEquals("  ").assertIsNotFocused()
+        back.assertIsEnabled()
+        assertFalse(imeVisible())
     }
 
     @Test fun visibilitySignalOnlyEnablesOpenAssistantRoute() {
@@ -432,14 +474,25 @@ class ChatNavigationTest {
             assertTrue("$tag width < 48dp", bounds.width >= minimumPixels - 1f)
             assertTrue("$tag height < 48dp", bounds.height >= minimumPixels - 1f)
         }
-        val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
+        val assistant = compose.onNodeWithTag("nav-chat").assertContentDescriptionEquals("AI 助手")
+            .fetchSemanticsNode().boundsInRoot
         val capsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
-        assertEquals(ai.width, ai.height, 1f)
-        assertTrue("RTL 的 AI 入口应位于末侧（左侧）", ai.right < capsule.left)
+        assertEquals(assistant.width, assistant.height, 1f)
+        assertTrue("RTL 的助手入口应位于末侧（左侧）", assistant.right < capsule.left)
+        val labelLayouts = mutableListOf<TextLayoutResult>()
+        compose.onNode(hasText("助手") and hasAnyAncestor(hasTestTag("nav-chat")), useUnmergedTree = true)
+            .assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(labelLayouts) }
+        val labelLayout = labelLayouts.single()
+        assertEquals(1, labelLayout.lineCount)
+        assertFalse(labelLayout.didOverflowHeight)
+        assertTrue(labelLayout.getLineLeft(0) >= -1f)
+        assertTrue(labelLayout.getLineRight(0) <= labelLayout.size.width + 1f)
+        assertEquals("助手".length, labelLayout.getLineEnd(0))
         open()
         assertFullScreen()
         assertControlsInsideScreen()
-        compose.onNodeWithTag("chat-send").assertIsDisplayed()
+        compose.onNodeWithTag("chat-exit").assertIsDisplayed().assertIsEnabled()
         compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()
         saveRegressionScreenshot("chat-route-320dp-large-rtl")
     }
@@ -453,9 +506,13 @@ class ChatNavigationTest {
             ) {
                 ModelAtlasTheme(darkTheme = true, dynamicColor = false) {
                     Box(Modifier.size(640.dp, 320.dp)) {
-                        ModelAtlasScaffold(chatContent = { padding, visible, onBack ->
-                            ChatScreen(ChatUiState(modelId = "model", input = "第一行\n第二行"), bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
-                        }) { _, _, _ -> }
+                        val chat = ChatUiState(modelId = "model", input = "第一行\n第二行")
+                        ModelAtlasScaffold(
+                            chatUiState = rememberUpdatedState(chat),
+                            chatContent = { padding, visible, onBack ->
+                                ChatScreen(chat, bottomOverlayPadding = padding, isVisible = visible, onBack = onBack)
+                            },
+                        ) { _, _, _ -> }
                     }
                 }
             }
@@ -463,7 +520,7 @@ class ChatNavigationTest {
         open()
         compose.onNodeWithTag("chat-send").assertIsDisplayed()
         assertFullScreen()
-        assertControlsInsideScreen()
+        assertControlsInsideScreen("chat-send")
         compose.onNodeWithTag("chat-session-status").assertIsDisplayed()
         compose.onNodeWithContentDescription("会话配置").assertIsDisplayed()
         compose.onNodeWithTag("chat-back").assertIsDisplayed()
@@ -502,7 +559,7 @@ class ChatNavigationTest {
             compose.runOnIdle { chat = chat.copy(turns = listOf(turn)) }
             compose.waitUntil(5_000) { compose.onAllNodes(hasText("val maxOutput = 4096")).fetchSemanticsNodes().size == 1 }
             compose.onNodeWithTag("chat-reply-1").assertIsDisplayed()
-            compose.onNodeWithTag("chat-send").assertIsDisplayed()
+            compose.onNodeWithTag("chat-exit").assertIsDisplayed().assertIsEnabled()
             saveRegressionScreenshot("chat-theme-$variant-normal")
             if (variant == 1) {
                 compose.runOnIdle { turn.update(ChatReply("保留的部分回复", ChatReplyStatus.FAILED, ChatError.NETWORK)) }
@@ -531,9 +588,9 @@ class ChatNavigationTest {
         }
     }
 
-    private fun assertControlsInsideScreen() {
+    private fun assertControlsInsideScreen(action: String = "chat-exit") {
         val screen = compose.onNodeWithTag("chat-screen").fetchSemanticsNode().boundsInRoot
-        for (tag in listOf("chat-input", "chat-send", "chat-back")) {
+        for (tag in listOf("chat-input", action, "chat-back")) {
             val bounds = compose.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertTrue("$tag 必须完整位于全屏助手内", bounds.left >= screen.left && bounds.right <= screen.right && bounds.bottom <= screen.bottom)
         }

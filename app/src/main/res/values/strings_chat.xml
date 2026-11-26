@@ -16,6 +16,7 @@
     <string name="chat_suggestion_tools">工具调用和普通文本回答有什么区别？</string>
     <string name="chat_suggestion_structured_output">JSON 模式和结构化输出有什么区别？</string>
     <string name="chat_input">输入消息</string>
+    <string name="chat_exit">退出助手</string>
     <string name="chat_send">发送</string>
     <string name="chat_stop">停止</string>
     <string name="chat_return_to_latest">回到最新</string>

@@ -49,10 +49,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -60,6 +62,9 @@ import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import io.github.chenlongapps.modelatlas.R
 import kotlin.math.roundToInt
+
+internal val NavigationMinTouchTarget = 48.dp
+internal val NavigationCapsuleInset = 4.dp
 
 internal data class GlassNavigationItem(
     @param:StringRes val label: Int,
@@ -86,6 +91,7 @@ internal fun NavigationCapsuleContent(
     onNavigate: suspend (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
     items: List<GlassNavigationItem>,
+    minHeight: Dp,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
@@ -107,11 +113,22 @@ internal fun NavigationCapsuleContent(
         rememberCombinedBackdrop(backdrop, materialBackdrop, inkBackdrop)
     } else null
 
-    BoxWithConstraints(modifier.fillMaxWidth().padding(4.dp)) {
+    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = NavigationCapsuleInset)) {
         val tabs = geometry(constraints.maxWidth)
+        // 紧凑时让触摸区占满胶囊高度，透镜仍保留原有内缩。
+        val opticsInset = Modifier.padding(vertical = NavigationCapsuleInset)
+        val preferredLabelPadding = when {
+            items.size >= 5 -> 2.dp
+            items.size >= 4 -> 8.dp
+            else -> 12.dp
+        }
+        val labelPadding = minOf(
+            preferredLabelPadding,
+            ((with(density) { tabs.itemWidth.toDp() } - NavigationMinTouchTarget) / 2).coerceAtLeast(0.dp),
+        )
         val selected = pagerState.currentPage
         val indicator: @Composable () -> Unit = {
-            Box(Modifier.matchParentSize()) {
+            Box(Modifier.matchParentSize().then(opticsInset)) {
                 Box(
                     Modifier.align(Alignment.CenterStart)
                         .offset { IntOffset((motion.position * tabs.step).roundToInt(), 0) }
@@ -123,10 +140,10 @@ internal fun NavigationCapsuleContent(
             }
         }
         if (lensBackdrop == null) indicator()
-        else Box(Modifier.matchParentSize().navigationPressLight(tabs, motion, press))
+        else Box(Modifier.matchParentSize().then(opticsInset).navigationPressLight(tabs, motion, press))
 
         NavigationTabs(
-            items, selected, spacing,
+            items, selected, spacing, minHeight, labelPadding,
             modifier = Modifier.fillMaxWidth().selectableGroup().then(
                 if (enabled) Modifier.dragNavigationLens(motion, geometry, { tick() }) { motion.release(navigate) }
                 else Modifier,
@@ -143,7 +160,7 @@ internal fun NavigationCapsuleContent(
         if (inkBackdrop != null) {
             // Record the themed ink independently: no input or accessibility nodes in this row.
             NavigationTabs(
-                items, selected, spacing,
+                items, selected, spacing, minHeight, labelPadding,
                 modifier = Modifier.matchParentSize()
                     .clearAndSetSemantics {}
                     .graphicsLayer { alpha = 0f }
@@ -160,6 +177,8 @@ private fun NavigationTabs(
     items: List<GlassNavigationItem>,
     selected: Int,
     spacing: Dp,
+    minHeight: Dp,
+    labelPadding: Dp,
     modifier: Modifier,
     color: (Int) -> Color,
     enabled: Boolean = false,
@@ -167,11 +186,6 @@ private fun NavigationTabs(
     onSelect: ((Int) -> Unit)? = null,
 ) {
     val modelsAction = if (onSelect != null && enabled) stringResource(R.string.model_list_scroll_to_top) else null
-    val horizontalPadding = when {
-        items.size >= 5 -> 2.dp
-        items.size >= 4 -> 8.dp
-        else -> 12.dp
-    }
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(spacing),
@@ -198,28 +212,47 @@ private fun NavigationTabs(
                     onClick = { onSelect(index) },
                 )
             val contentColor = color(index)
-            Column(
+            NavigationItemContent(
+                label = stringResource(item.label),
+                color = contentColor,
                 modifier = Modifier.weight(1f).then(tabModifier)
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = horizontalPadding, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
-            ) {
-                Crossfade(targetState = isSelected, label = "Navigation icon") { filled ->
+                    .heightIn(min = minHeight)
+                    .padding(horizontal = labelPadding),
+            ) { iconModifier ->
+                Crossfade(targetState = isSelected, modifier = iconModifier, label = "Navigation icon") { filled ->
                     Icon(
                         painterResource(if (filled) item.selectedIcon else item.icon),
                         contentDescription = null,
                         tint = contentColor,
-                        modifier = Modifier.size(24.dp),
                     )
                 }
-                Text(
-                    stringResource(item.label),
-                    color = contentColor,
-                    style = MaterialTheme.typography.labelMedium,
-                )
             }
         }
+    }
+}
+
+@Composable
+internal fun NavigationItemContent(
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Modifier) -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+    ) {
+        // 高度受限时优先分配给可换行的标签。
+        icon(Modifier.weight(1f, fill = false).size(24.dp))
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth(),
+            color = color,
+            // 两个全角字在紧凑槽位也能共用同一字号，不额外占用字间宽度。
+            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.sp),
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

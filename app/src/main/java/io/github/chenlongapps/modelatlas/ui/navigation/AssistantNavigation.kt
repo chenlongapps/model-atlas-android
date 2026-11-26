@@ -1,5 +1,6 @@
 package io.github.chenlongapps.modelatlas.ui.navigation
 
+import android.view.WindowInsets
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -36,7 +37,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.util.lerp
 import androidx.navigation3.runtime.NavEntry
@@ -59,6 +63,7 @@ import io.github.chenlongapps.modelatlas.ui.components.glass.rememberGlassBackdr
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -75,18 +80,24 @@ private data object AssistantDestination : NavKey
 internal fun AssistantNavigation(
     modifier: Modifier = Modifier,
     onChatClosed: () -> Unit,
+    canReturnFromComposer: () -> Boolean,
     sampleNavigationBackdrop: () -> Boolean,
     revealAnchor: () -> AssistantRevealAnchor?,
     mainContent: @Composable (isActive: Boolean) -> Unit,
     chatContent: @Composable (isVisible: Boolean, onBack: () -> Unit) -> Unit,
-    bottomBar: @Composable BoxScope.(isChatOpen: Boolean, interactive: Boolean, onOpenChat: () -> Unit, backdrop: Backdrop?) -> Unit,
+    bottomBar: @Composable BoxScope.(
+        isChatOpen: Boolean,
+        chatOnStack: Boolean,
+        onToggleChat: () -> Unit,
+        backdrop: Backdrop?,
+    ) -> Unit,
 ) {
     val background = MaterialTheme.colorScheme.surfaceContainerLowest
     val backdrop = rememberGlassBackdrop(background)
     if (LocalInspectionMode.current) {
         Box(modifier) {
             mainContent(true)
-            bottomBar(false, true, {}, backdrop)
+            bottomBar(false, false, {}, backdrop)
         }
         return
     }
@@ -97,31 +108,34 @@ internal fun AssistantNavigation(
     var closing by rememberSaveable { mutableStateOf(false) }
     val reveal = remember { AssistantReveal(chatOnStack, closing) }
     val chatVisible = chatOnStack && !closing
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
     // 弹出助手路由后仍保留阅读／跟随位置；不存对话、草稿或配置。
     val chatReadingState = rememberSaveableStateHolder()
-    val openChat: () -> Unit = {
-        if (backStack.last() == MainDestination && !closing) {
-            reveal.phase = RevealPhase.Opening
-            backStack.add(AssistantDestination)
-        }
-    }
     val closeChat: () -> Unit = {
         if (backStack.last() == AssistantDestination && !closing) {
             closing = true
             reveal.phase = RevealPhase.Closing
+            // 无 IME 时编辑器会随退场停用，圆钮的键盘焦点可以原位保留。
+            if (view.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true) focus.clearFocus()
+            keyboard?.hide()
             onChatClosed()
         }
     }
-    val phase = reveal.phase
-    LaunchedEffect(phase) {
-        when (phase) {
-            RevealPhase.Opening, RevealPhase.Restoring -> reveal.settle(phase, 1f, 420)
-            RevealPhase.Closing -> {
-                reveal.settle(phase, 0f, 360)
-                backStack.removeLastOrNull()
-                closing = false
+    LaunchedEffect(reveal) {
+        // 接到新方向即取消旧补间，直接用最后绘制的进度开始新一段。
+        snapshotFlow { reveal.phase }.collectLatest { phase ->
+            when (phase) {
+                RevealPhase.Opening, RevealPhase.Restoring -> reveal.settle(phase, 1f, 420)
+                RevealPhase.Closing -> {
+                    if (reveal.settle(phase, 0f, 360) && closing && backStack.last() == AssistantDestination) {
+                        backStack.removeAt(backStack.lastIndex)
+                        closing = false
+                    }
+                }
+                RevealPhase.Idle, RevealPhase.Dragging -> Unit
             }
-            RevealPhase.Idle, RevealPhase.Dragging -> Unit
         }
     }
     val currentAnchor by rememberUpdatedState(revealAnchor)
@@ -174,7 +188,8 @@ internal fun AssistantNavigation(
     LaunchedEffect(back) {
         snapshotFlow { back.transitionState }.collect { state ->
             if (state is NavigationEventTransitionState.InProgress &&
-                coroutineContext[MotionDurationScale]?.scaleFactor != 0f && !closing
+                coroutineContext[MotionDurationScale]?.scaleFactor != 0f &&
+                backStack.last() == AssistantDestination && !closing
             ) {
                 reveal.seekBack(state.latestEvent.progress)
             }
@@ -189,7 +204,19 @@ internal fun AssistantNavigation(
             transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
             popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
         )
-        bottomBar(chatVisible, !closing, openChat, activeBackdrop)
+        bottomBar(chatVisible, chatOnStack, {
+            // 读取实时方向，两个点击落在同一次重组前也能反转；预测性返回独占进度。
+            if (back.transitionState !is NavigationEventTransitionState.InProgress) {
+                when {
+                    backStack.last() == MainDestination || closing -> {
+                        if (backStack.last() == MainDestination) backStack.add(AssistantDestination)
+                        closing = false
+                        reveal.phase = RevealPhase.Opening
+                    }
+                    canReturnFromComposer() -> closeChat()
+                }
+            }
+        }, activeBackdrop)
     }
 }
 
@@ -232,17 +259,17 @@ private class AssistantReveal(open: Boolean, closing: Boolean) {
         progress = dragStart * (1f - backProgress.coerceIn(0f, 1f))
     }
 
-    suspend fun settle(command: RevealPhase, target: Float, durationMillis: Int) {
+    suspend fun settle(command: RevealPhase, target: Float, durationMillis: Int): Boolean {
         val duration = (durationMillis * abs(target - progress)).roundToInt()
         if (duration > 0) {
             animate(progress, target, animationSpec = tween(duration, easing = FastOutSlowInEasing)) { value, _ ->
                 if (phase == command) progress = value
             }
         }
-        if (phase == command) {
-            progress = target
-            phase = RevealPhase.Idle
-        }
+        if (phase != command) return false
+        progress = target
+        phase = RevealPhase.Idle
+        return true
     }
 }
 

@@ -173,12 +173,6 @@ internal fun ChatScreen(
     // IME 可见性不能由 bottom > 0 推断：浮动键盘或已处理 inset 的宿主可能高度为零。
     val imeVisible = WindowInsets.isImeVisible
     val view = LocalView.current
-    LaunchedEffect(isVisible) {
-        if (!isVisible) {
-            focus.clearFocus()
-            keyboard?.hide()
-        }
-    }
     if (!LocalInspectionMode.current) {
         val backOwner = rememberNavigationEventDispatcherOwner(enabled = isVisible)
         CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides backOwner) {

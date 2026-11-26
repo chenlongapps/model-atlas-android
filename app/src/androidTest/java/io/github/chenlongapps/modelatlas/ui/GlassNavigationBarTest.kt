@@ -25,17 +25,24 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -47,6 +54,7 @@ import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.navigation.MorphingBottomBar
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -59,6 +67,8 @@ class GlassNavigationBarTest {
     @Test fun releaseNavigationAt320DpKeepsCircleAndFourTabsUsable() = assertReleaseNavigation(false)
 
     @Test fun releaseNavigationAt320DpLargeFontDarkRtlKeepsCircleAndFourTabsUsable() = assertReleaseNavigation(true)
+
+    @Test fun compactCircleAlignsWithCapsuleAndSharesLabelBaseline() = assertReleaseNavigation(false, 300.dp)
 
     @Test fun lensTravelsBetweenTabsWhileHeldAndCommitsOnlyOnRelease() {
         val requests = mutableListOf<Int>()
@@ -176,7 +186,7 @@ class GlassNavigationBarTest {
         assertTrue(blue[x, y].blue - green[x, y].blue > 0.10f)
     }
 
-    private fun assertReleaseNavigation(largeRtl: Boolean) {
+    private fun assertReleaseNavigation(largeRtl: Boolean, width: Dp = 320.dp) {
         var minimumPixels = 0f
         var opens = 0
         compose.setContent {
@@ -187,13 +197,19 @@ class GlassNavigationBarTest {
                 LocalLayoutDirection provides if (largeRtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
             ) {
                 ModelAtlasTheme(darkTheme = largeRtl, dynamicColor = false) {
-                    ReleaseBar(onOpenChat = { opens++ })
+                    ReleaseBar(onOpenChat = { opens++ }, width = width)
                 }
             }
         }
         val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
         val capsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
         assertEquals(ai.width, ai.height, 1f)
+        assertEquals(capsule.center.y, ai.center.y, 1f)
+        if (!largeRtl) {
+            assertEquals(capsule.top, ai.top, 1f)
+            assertEquals(capsule.bottom, ai.bottom, 1f)
+            assertLabelBaselineAligned()
+        }
         // 胶囊在起始侧，AI 圆形入口在末侧。
         assertTrue(if (largeRtl) ai.right < capsule.left else ai.left > capsule.right)
         for (tag in listOf("nav-chat", "nav-models", "nav-benchmarks", "nav-compare", "nav-settings")) {
@@ -207,12 +223,29 @@ class GlassNavigationBarTest {
         compose.runOnIdle { assertEquals(1, opens) }
         compose.onNodeWithTag("nav-models").assertIsSelected()
         compose.onNodeWithTag("nav-indicator").assertIsDisplayed()
-        saveRegressionScreenshot("navigation-release-${if (largeRtl) "large-dark-rtl" else "light"}-ai-button")
+        val screenshotVariant = when {
+            largeRtl -> "large-dark-rtl"
+            width < 320.dp -> "compact"
+            else -> "light"
+        }
+        saveRegressionScreenshot("navigation-release-$screenshotVariant-ai-button")
         compose.onNodeWithTag("nav-settings").performClick().assertIsSelected()
         val indicator = compose.onNodeWithTag("nav-indicator").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val settings = compose.onNodeWithTag("nav-settings").fetchSemanticsNode().boundsInRoot
         assertEquals(settings.center.x, indicator.center.x, 1f)
-        saveRegressionScreenshot("navigation-release-${if (largeRtl) "large-dark-rtl" else "light"}-settings")
+        saveRegressionScreenshot("navigation-release-$screenshotVariant-settings")
+    }
+
+    private fun assertLabelBaselineAligned() {
+        fun labelBaseline(tag: String, label: String): Float {
+            val node = compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals(1, layout.lineCount)
+            return node.fetchSemanticsNode().boundsInRoot.top + layout.firstBaseline
+        }
+        assertEquals(labelBaseline("nav-settings", "设置"), labelBaseline("nav-chat", "助手"), 1f)
     }
 
     @Test fun navigationBarMorphsIntoComposerWithoutMovingCapsuleOrButton() {
@@ -235,7 +268,7 @@ class GlassNavigationBarTest {
         val navCapsule = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
         val ai = compose.onNodeWithTag("nav-chat").fetchSemanticsNode().boundsInRoot
 
-        compose.runOnIdle { mode = BottomBarMode.Chat }
+        compose.onNodeWithTag("nav-chat").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("chat-input").assertIsDisplayed()
         compose.onNodeWithTag("nav-models").assertDoesNotExist()
@@ -245,12 +278,11 @@ class GlassNavigationBarTest {
         assertEquals(navCapsule.left, chatCapsule.left, 1f)
         assertEquals(navCapsule.right, chatCapsule.right, 1f)
         assertEquals(navCapsule.height, chatCapsule.height, 1f)
-        val disabledSend = compose.onNodeWithTag("chat-send").assertIsDisplayed().assertIsNotEnabled()
-        val sendBounds = disabledSend.fetchSemanticsNode().boundsInRoot
-        assertEquals(ai.left, sendBounds.left, 1f)
-        assertEquals(ai.right, sendBounds.right, 1f)
-        assertEquals(ai.top, sendBounds.top, 1f)
-        assertEquals(ai.bottom, sendBounds.bottom, 1f)
+        val back = compose.onNodeWithTag("chat-exit").assertIsDisplayed().assertIsEnabled()
+        assertEquals(ai, back.fetchSemanticsNode().boundsInRoot)
+        compose.runOnIdle { chat = chat.copy(input = " \n ") }
+        assertEquals(ai, back.assertIsEnabled().fetchSemanticsNode().boundsInRoot)
+        compose.runOnIdle { chat = chat.copy(input = "") }
 
         compose.onNodeWithTag("chat-input").performTextInput("问题")
         compose.onNodeWithTag("chat-send").assertIsEnabled().performClick()
@@ -272,6 +304,45 @@ class GlassNavigationBarTest {
         val restored = compose.onNodeWithTag("glass-navigation-capsule").fetchSemanticsNode().boundsInRoot
         assertEquals(navCapsule.left, restored.left, 1f)
         assertEquals(navCapsule.right, restored.right, 1f)
+    }
+
+    @Test fun chatActionAnimatesThemeColorsAndDrawsDifferentSendAndStopGlyphs() {
+        val scheme = lightColorScheme()
+        var chat by mutableStateOf(ChatUiState(input = "问题"))
+        var actionDiameter = 0f
+        compose.setContent {
+            actionDiameter = with(LocalDensity.current) { 56.dp.toPx() }
+            MaterialTheme(colorScheme = scheme) {
+                ReleaseBar(mode = BottomBarMode.Chat, chatState = chat, sampleBackdrop = false)
+            }
+        }
+        val send = compose.onNodeWithTag("chat-send")
+        assertEquals(actionDiameter, send.fetchSemanticsNode().boundsInRoot.width, 1f)
+        val disabled = send.assertIsNotEnabled().captureToImage().toPixelMap()
+        val x = disabled.width / 2
+        val y = disabled.height / 2
+        val besideGlyph = disabled.width / 4
+        assertEquals(scheme.surfaceContainerHigh, disabled[besideGlyph, y])
+        assertNotEquals(disabled[besideGlyph, y], disabled[x, y])
+
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { chat = chat.copy(modelId = "model") }
+        compose.mainClock.advanceTimeBy(96)
+        val inBetween = send.assertIsEnabled().captureToImage().toPixelMap()[besideGlyph, y]
+        assertNotEquals(scheme.surfaceContainerHigh, inBetween)
+        assertNotEquals(scheme.primaryContainer, inBetween)
+        compose.mainClock.advanceTimeBy(192)
+        val enabled = send.captureToImage().toPixelMap()
+        assertEquals(scheme.primaryContainer, enabled[besideGlyph, y])
+        assertEquals(scheme.onPrimaryContainer, enabled[x, y])
+        val insideStopCorner = disabled.width / 14
+        assertEquals(scheme.primaryContainer, enabled[x + insideStopCorner, y + insideStopCorner])
+
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { chat = chat.copy(isGenerating = true) }
+        val stop = compose.onNodeWithTag("chat-stop").assertIsEnabled().captureToImage().toPixelMap()
+        assertEquals(scheme.primaryContainer, stop[besideGlyph, y])
+        assertEquals(scheme.onPrimaryContainer, stop[x + insideStopCorner, y + insideStopCorner])
     }
 
     @Test fun multilineDraftGrowsCapsuleAndStopsAtTheFieldLimit() {
@@ -312,12 +383,14 @@ class GlassNavigationBarTest {
         onChatInput: (String) -> Unit = {},
         onSend: () -> Unit = {},
         onStop: () -> Unit = {},
+        sampleBackdrop: Boolean = true,
+        width: Dp = 320.dp,
     ) {
         val items = listOf(GlassNavigationItem.Models, GlassNavigationItem.Benchmarks, GlassNavigationItem.Compare, GlassNavigationItem.Settings)
         val pager = rememberPagerState(pageCount = { items.size })
         val backdrop = rememberLayerBackdrop { drawContent() }
         val latestChat = rememberUpdatedState(chatState)
-        Box(Modifier.requiredSize(320.dp, 240.dp).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(horizontal = 16.dp)) {
+        Box(Modifier.requiredSize(width, 240.dp).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(horizontal = 16.dp)) {
             HorizontalPager(pager, Modifier.fillMaxSize().testTag("navigation-test-pager").layerBackdrop(backdrop)) {
                 Box(Modifier.fillMaxSize().background(pageColor))
             }
@@ -325,14 +398,14 @@ class GlassNavigationBarTest {
                 mode = mode,
                 pagerState = pager,
                 items = items,
-                backdrop = backdrop,
+                backdrop = backdrop.takeIf { sampleBackdrop },
                 chatState = latestChat,
                 onNavigate = {
                     onNavigate(it)
                     pager.animateScrollToPage(it)
                 },
                 onModelsDoubleClick = {},
-                onOpenChat = onOpenChat,
+                onToggleChat = onOpenChat,
                 onChatInput = onChatInput,
                 onSend = onSend,
                 onStop = onStop,

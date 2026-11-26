@@ -2,6 +2,8 @@ package io.github.chenlongapps.modelatlas.ui.chat
 
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsAnimation
 import android.view.WindowManager
 import android.content.ClipboardManager
 import android.content.ClipDescription
@@ -34,6 +36,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertAll
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -125,6 +128,8 @@ class ChatScreenTest {
         compose.onNodeWithText("消息将发送至你配置的 API。", substring = true).assertDoesNotExist()
         val suggestions = compose.onAllNodesWithTag("chat-suggestion")
         suggestions.assertCountEquals(3).assertAll(SemanticsMatcher.keyIsDefined(SemanticsProperties.Disabled))
+        compose.onNodeWithTag("chat-exit").assertIsEnabled()
+        compose.runOnIdle { vm.setInput("尚未配置") }
         compose.onNodeWithTag("chat-send").assertIsNotEnabled()
         saveRegressionScreenshot("chat-first-setup")
         setup.performClick()
@@ -132,7 +137,7 @@ class ChatScreenTest {
         compose.onNodeWithContentDescription("关闭").performClick()
         compose.runOnIdle { configure(); vm.setInput(" \n ") }
         setup.assertDoesNotExist()
-        compose.onNodeWithTag("chat-send").assertIsNotEnabled()
+        compose.onNodeWithTag("chat-exit").assertIsEnabled()
         assertEquals(0, fake.calls.get())
     }
 
@@ -169,21 +174,31 @@ class ChatScreenTest {
 
     @Test fun streamingAppendsOneMessageAndStopRetainsItThenRetryDoesNotDuplicateUser() {
         show()
+        val back = compose.onNodeWithTag("chat-exit").assertIsEnabled()
+        val send = compose.onNodeWithTag("chat-send")
+        val stop = compose.onNodeWithTag("chat-stop")
         compose.onNodeWithTag("chat-input").performClick()
         compose.waitUntil(5_000) { imeVisible() }
-        send()
+        compose.onNodeWithTag("chat-input").performTextInput("问题\n第二行")
+        send.assertIsEnabled().performClick()
+        compose.waitUntil { fake.calls.get() == 1 }
         val waiting = compose.onNodeWithText("正在等待回复…")
         compose.waitUntil(5_000) { waiting.isDisplayed() }
         waiting.assert(politeStatus)
+        stop.assertIsEnabled().assertContentDescriptionEquals("停止")
+        send.assertDoesNotExist()
+        back.assertDoesNotExist()
         compose.onNodeWithTag("chat-back").assertIsDisplayed()
         fake.channel.trySend(LlmChunk("第一段\n"))
         fake.channel.trySend(LlmChunk("第二段"))
         awaitReply(1, "第一段\n第二段").assertIsDisplayed()
         compose.onNodeWithTag("chat-reply-1").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
         compose.onAllNodesWithTag("chat-turn-1").assertCountEquals(1)
-        compose.onNodeWithTag("chat-stop").performClick()
+        stop.assertIsEnabled().performClick()
         compose.waitUntil { fake.active.get() == 0 }
         compose.onNodeWithText("已停止生成。").assertIsDisplayed().assert(politeStatus)
+        stop.assertDoesNotExist()
+        back.assertIsEnabled().assertContentDescriptionEquals("退出助手")
         awaitReply(1, "第一段\n第二段").assertIsDisplayed()
         compose.onNodeWithTag("chat-retry").performClick()
         compose.waitUntil { fake.calls.get() == 2 }
@@ -620,14 +635,31 @@ class ChatScreenTest {
 
     @Test fun visibleKeyboardConsumesFirstSystemBackAndNextBackFallsThroughWithoutLosingDraft() {
         show()
+        val imeAnimations = AtomicInteger()
+        compose.activityRule.scenario.onActivity { activity ->
+            // 可见性在动画结束前就会更新，但系统仍能消费返回。
+            activity.findViewById<View>(android.R.id.content).setWindowInsetsAnimationCallback(
+                object : WindowInsetsAnimation.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimation) {
+                        if (animation.typeMask and WindowInsets.Type.ime() != 0) imeAnimations.incrementAndGet()
+                    }
+
+                    override fun onEnd(animation: WindowInsetsAnimation) {
+                        if (animation.typeMask and WindowInsets.Type.ime() != 0) imeAnimations.decrementAndGet()
+                    }
+
+                    override fun onProgress(insets: WindowInsets, runningAnimations: List<WindowInsetsAnimation>) = insets
+                },
+            )
+        }
         compose.onNodeWithTag("chat-input").performTextInput("保留草稿\n第二行")
         compose.onNodeWithTag("chat-input").performClick()
-        compose.waitUntil(5_000) { imeVisible() }
+        compose.waitUntil(5_000) { imeVisible() && imeAnimations.get() == 0 }
         val imeTop = view.height - ViewCompat.getRootWindowInsets(view)!!.getInsets(WindowInsetsCompat.Type.ime()).bottom
         val bottom = compose.onNodeWithTag("chat-input").fetchSemanticsNode().boundsInRoot.bottom
         assertTrue("编辑器应在 IME 上方", bottom <= imeTop + 1f)
         pressBack()
-        compose.waitUntil(5_000) { !imeVisible() }
+        compose.waitUntil(5_000) { !imeVisible() && imeAnimations.get() == 0 }
         compose.runOnIdle { assertEquals(0, exits); assertEquals("保留草稿\n第二行", vm.uiState.value.input) }
         pressBack()
         compose.runOnIdle { assertEquals(1, exits) }

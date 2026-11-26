@@ -50,12 +50,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -116,6 +116,7 @@ import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesScreen
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoritesUiState
 import io.github.chenlongapps.modelatlas.ui.favorites.FavoriteRemovalTransition
 import io.github.chenlongapps.modelatlas.ui.favorites.LocalFavoriteRemovalTransition
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -223,13 +224,26 @@ internal fun ModelAtlasScaffold(
         if (navigationHiddenByMain) 1f else 0f, tween(200), label = "Navigation scroll visibility",
     )
     val sampleNavigationBackdrop by remember(hideProgress) { derivedStateOf { hideProgress.value < 1f } }
-    var navigationAnchor by remember { mutableStateOf<AssistantRevealAnchor?>(null) }
-    var navigationBottom by remember { mutableStateOf(0f) }
+    var actionAnchor by remember { mutableStateOf<AssistantRevealAnchor?>(null) }
+    val ime = WindowInsets.ime
+    val direction = LocalLayoutDirection.current
+    val hasImeInsets = { ime.getBottom(density) > 0 || ime.getLeft(density, direction) > 0 || ime.getRight(density, direction) > 0 }
+    var retainClosingImeInsets by remember { mutableStateOf(false) }
+    LaunchedEffect(retainClosingImeInsets, ime, density, direction) {
+        if (retainClosingImeInsets) {
+            snapshotFlow { hasImeInsets() }.first { !it }
+            retainClosingImeInsets = false
+        }
+    }
     AssistantNavigation(
         modifier = modifier.fillMaxSize(),
-        onChatClosed = onChatClosed,
+        onChatClosed = {
+            retainClosingImeInsets = hasImeInsets()
+            onChatClosed()
+        },
+        canReturnFromComposer = { chatUiState.value.canReturnFromComposer },
         sampleNavigationBackdrop = { sampleNavigationBackdrop },
-        revealAnchor = { navigationAnchor?.let { it.copy(center = it.center + Offset(0f, navigationBottom)) } },
+        revealAnchor = { actionAnchor },
         chatContent = { visible, onBack -> chatContent(chatBarHeight.dp + 32.dp, visible, onBack) },
         mainContent = { isActive ->
             MainAtlasScaffold(
@@ -256,9 +270,9 @@ internal fun ModelAtlasScaffold(
                 modelContent = modelContent,
             )
         },
-        bottomBar = { isChatOpen, interactive, onOpenChat, backdrop ->
+        bottomBar = { isChatOpen, chatOnStack, onToggleChat, backdrop ->
             val mode = if (isChatOpen) BottomBarMode.Chat else BottomBarMode.Navigation
-            val hidden = mode == BottomBarMode.Navigation && navigationHiddenByMain
+            val hidden = !chatOnStack && navigationHiddenByMain
             val baseInsets = WindowInsets.navigationBars.union(WindowInsets.displayCutout)
                 .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
             Box(
@@ -266,7 +280,7 @@ internal fun ModelAtlasScaffold(
                     .align(Alignment.BottomCenter)
                     // 整个外壳（含底部安全区）滑出，列表留白与测量高度保持不变。
                     .graphicsLayer {
-                        val progress = if (isChatOpen) 0f else hideProgress.value
+                        val progress = if (chatOnStack) 0f else hideProgress.value
                         translationY = size.height * progress
                         alpha = if (progress < 1f) 1f else 0f
                     }
@@ -274,45 +288,39 @@ internal fun ModelAtlasScaffold(
                     .then(if (hidden) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
                     .windowInsetsPadding(baseInsets),
             ) {
-                Box(Modifier.onGloballyPositioned {
-                    // 参考底边固定在系统安全区，不随 IME 或输入栏高度移动。
-                    navigationBottom = it.localToRoot(Offset(0f, it.size.height.toFloat())).y -
-                        with(density) { 16.dp.roundToPx() }
-                }) {
-                    // 安全区已消费，聊天输入栏只追加未消费的 IME inset。
-                    Box(
-                        Modifier.then(
-                            if (isChatOpen) Modifier.windowInsetsPadding(
-                                WindowInsets.ime.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                            ) else Modifier,
-                        ).padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
-                            .widthIn(max = 400.dp)
-                            .fillMaxWidth(),
-                    ) {
-                        MorphingBottomBar(
-                            mode = mode,
-                            pagerState = pagerState,
-                            items = navigationItems,
-                            backdrop = backdrop,
-                            chatState = chatUiState,
-                            onNavigate = { page -> pagerState.animateScrollToPage(page) },
-                            onModelsDoubleClick = {
-                                // 底栏已开始切页；同时回顶，避免模型页出现后才跳到页头。
-                                scope.launch { modelListState.animateScrollToItem(0, 0) }
-                            },
-                            onOpenChat = onOpenChat,
-                            onChatInput = onChatInput,
-                            onSend = onChatSend,
-                            onStop = onChatStop,
-                            enabled = !hidden && interactive,
-                            onNavigationAnchor = { navigationAnchor = it },
-                            // 测量整个分体底栏，包含圆形入口与可随字号增高的胶囊。
-                            modifier = Modifier.fillMaxWidth().onSizeChanged {
-                                val height = with(density) { it.height.toDp().value }
-                                if (mode == BottomBarMode.Navigation) navigationHeight = height else chatBarHeight = height
-                            },
-                        )
-                    }
+                // 退场时继续跟随正在收起的 IME，圆形裁剪也追踪圆钮的实际位置。
+                Box(
+                    Modifier.then(
+                        if (chatOnStack || retainClosingImeInsets) Modifier.windowInsetsPadding(
+                            ime.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+                        ) else Modifier,
+                    ).padding(horizontal = if (navigationItems.size >= 5) 4.dp else 16.dp, vertical = 16.dp)
+                        .widthIn(max = 400.dp)
+                        .fillMaxWidth(),
+                ) {
+                    MorphingBottomBar(
+                        mode = mode,
+                        pagerState = pagerState,
+                        items = navigationItems,
+                        backdrop = backdrop,
+                        chatState = chatUiState,
+                        onNavigate = { page -> pagerState.animateScrollToPage(page) },
+                        onModelsDoubleClick = {
+                            // 底栏已开始切页；同时回顶，避免模型页出现后才跳到页头。
+                            scope.launch { modelListState.animateScrollToItem(0, 0) }
+                        },
+                        onToggleChat = onToggleChat,
+                        onChatInput = onChatInput,
+                        onSend = onChatSend,
+                        onStop = onChatStop,
+                        enabled = !hidden,
+                        navigationEnabled = !chatOnStack,
+                        onActionAnchor = { actionAnchor = it },
+                        onNavigationHeight = { navigationHeight = it.value },
+                        modifier = Modifier.fillMaxWidth().onSizeChanged {
+                            if (isChatOpen) chatBarHeight = with(density) { it.height.toDp().value }
+                        },
+                    )
                 }
             }
         },
