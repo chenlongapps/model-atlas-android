@@ -3,10 +3,10 @@ package io.github.chenlongapps.modelatlas.ui.navigation
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,15 +33,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -47,15 +46,20 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import io.github.chenlongapps.modelatlas.R
-import io.github.chenlongapps.modelatlas.ui.components.glass.GlassStyle
-import io.github.chenlongapps.modelatlas.ui.components.glass.GlassSurface
-import io.github.chenlongapps.modelatlas.ui.components.glass.glassEffectsAvailable
+import kotlin.math.roundToInt
 
 internal data class GlassNavigationItem(
     @param:StringRes val label: Int,
@@ -72,127 +76,148 @@ internal data class GlassNavigationItem(
     }
 }
 
-/** 胶囊内容本身不含玻璃表面：共享底栏只创建一次表面，模式切换时仅交叉淡化内容。 */
+/** The shared capsule supplies its existing material; the lens adds only foreground and optics. */
 @Composable
 internal fun NavigationCapsuleContent(
     pagerState: PagerState,
+    motion: NavigationLensMotion,
     backdrop: Backdrop?,
-    onNavigate: (Int) -> Unit,
+    materialBackdrop: LayerBackdrop?,
+    onNavigate: suspend (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
     items: List<GlassNavigationItem>,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val glassEnabled = backdrop != null && glassEffectsAvailable()
     val colors = MaterialTheme.colorScheme
-    val surface = colors.surface
-    val indicatorTint = if (surface.luminance() < 0.5f) {
-        lerp(surface, Color.White, 0.16f)
-    } else {
-        lerp(surface, Color.Black, 0.08f)
-    }
-    val layoutDirection = LocalLayoutDirection.current
-    val isRtl = layoutDirection == LayoutDirection.Rtl
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
+    val tick by rememberUpdatedState { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
     val navigate by rememberUpdatedState(onNavigate)
-    val scrollToTopLabel = stringResource(R.string.model_list_scroll_to_top)
+    val press = animateFloatAsState(if (motion.held) 1f else 0f, spring(1f, 700f), label = "Lens optics")
+    val lift = animateFloatAsState(if (motion.held) 1f else 0f, spring(0.65f, 250f), label = "Lens lift")
     val spacing = if (items.size >= 5) 2.dp else 4.dp
+    val spacingPx = with(density) { spacing.roundToPx().toFloat() }
+    val geometry = remember(spacingPx, items.size, isRtl) {
+        { width: Int -> NavigationTabGeometry(width.toFloat(), spacingPx, items.size, isRtl) }
+    }
+    val inkBackdrop = if (backdrop != null && materialBackdrop != null) rememberLayerBackdrop() else null
+    val lensBackdrop = if (backdrop != null && materialBackdrop != null && inkBackdrop != null) {
+        rememberCombinedBackdrop(backdrop, materialBackdrop, inkBackdrop)
+    } else null
 
-    Box(modifier.padding(4.dp)) {
-        BoxWithConstraints(Modifier.matchParentSize()) {
-            val itemWidth = (maxWidth - spacing * (items.size - 1)) / items.size
-            GlassSurface(
-                backdrop = backdrop,
-                shape = CircleShape,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(itemWidth)
-                    .graphicsLayer {
-                        // 在绘制阶段读取偏移，页面拖动时不必逐帧重组整个导航栏。
-                        val offset = pagerState.currentPage + pagerState.currentPageOffsetFraction
-                        translationX = offset * (itemWidth + spacing).toPx() * if (isRtl) -1f else 1f
-                    }
-                    .testTag("nav-indicator"),
-                style = GlassStyle.Indicator,
-                tint = indicatorTint,
-                fallbackColor = colors.secondaryContainer,
-            ) {}
-        }
-        Row(
-            modifier = Modifier.selectableGroup()
-                .pointerInput(pagerState, layoutDirection, items, enabled) {
-                    if (!enabled) return@pointerInput
-                    var lastTarget = pagerState.currentPage
-                    detectHorizontalDragGestures(
-                        onDragStart = { lastTarget = pagerState.currentPage },
-                        onHorizontalDrag = { change, _ ->
-                            val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                            val logicalFraction = if (isRtl) 1f - fraction else fraction
-                            val target = (logicalFraction * items.size).toInt().coerceIn(items.indices)
-                            if (target != lastTarget) {
-                                lastTarget = target
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                navigate(target)
-                            }
-                        },
-                    )
-                },
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            items.forEachIndexed { index, item ->
-                val selected = pagerState.currentPage == index
-                val contentColor by animateColorAsState(
-                    if (selected) {
-                        if (glassEnabled) colors.primary else colors.onSecondaryContainer
-                    } else colors.onSurfaceVariant,
-                    label = "Navigation content color",
+    BoxWithConstraints(modifier.fillMaxWidth().padding(4.dp)) {
+        val tabs = geometry(constraints.maxWidth)
+        val selected = pagerState.currentPage
+        val indicator: @Composable () -> Unit = {
+            Box(Modifier.matchParentSize()) {
+                Box(
+                    Modifier.align(Alignment.CenterStart)
+                        .offset { IntOffset((motion.position * tabs.step).roundToInt(), 0) }
+                        .fillMaxHeight()
+                        .width(with(density) { tabs.itemWidth.toDp() })
+                        .testTag("nav-indicator")
+                        .navigationLens(lensBackdrop, motion, press, lift, colors.onSurface, colors.secondaryContainer),
                 )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(CircleShape)
-                        .testTag(item.tag)
-                        .semantics {
-                            if (enabled && item == GlassNavigationItem.Models) {
-                                customActions = listOf(CustomAccessibilityAction(scrollToTopLabel) {
-                                    onModelsDoubleClick()
-                                    true
-                                })
-                            }
-                        }
-                        .selectable(
-                            enabled = enabled,
-                            selected = selected,
-                            role = Role.Tab,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = {
-                                if (!selected || pagerState.isScrollInProgress) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    navigate(index)
-                                }
-                            },
-                        )
-                        .heightIn(min = 56.dp)
-                        .padding(horizontal = when { items.size >= 5 -> 2.dp; items.size >= 4 -> 8.dp; else -> 12.dp }, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
-                ) {
-                    Crossfade(targetState = selected, label = "Navigation icon") { isSelected ->
-                        Icon(
-                            painterResource(if (isSelected) item.selectedIcon else item.icon),
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(24.dp),
-                        )
+            }
+        }
+        if (lensBackdrop == null) indicator()
+        else Box(Modifier.matchParentSize().navigationPressLight(tabs, motion, press))
+
+        NavigationTabs(
+            items, selected, spacing,
+            modifier = Modifier.fillMaxWidth().selectableGroup().then(
+                if (enabled) Modifier.dragNavigationLens(motion, geometry, { tick() }) { motion.release(navigate) }
+                else Modifier,
+            ),
+            color = { index ->
+                if (lensBackdrop == null && index == selected) colors.onSecondaryContainer else colors.onSurface
+            },
+            enabled = enabled,
+            onModelsDoubleClick = onModelsDoubleClick,
+            onSelect = { index ->
+                if (motion.select(index, navigate)) tick()
+            },
+        )
+        if (inkBackdrop != null) {
+            // Record the themed ink independently: no input or accessibility nodes in this row.
+            NavigationTabs(
+                items, selected, spacing,
+                modifier = Modifier.matchParentSize()
+                    .clearAndSetSemantics {}
+                    .graphicsLayer { alpha = 0f }
+                    .layerBackdrop(inkBackdrop),
+                color = { colors.primary },
+            )
+            indicator()
+        }
+    }
+}
+
+@Composable
+private fun NavigationTabs(
+    items: List<GlassNavigationItem>,
+    selected: Int,
+    spacing: Dp,
+    modifier: Modifier,
+    color: (Int) -> Color,
+    enabled: Boolean = false,
+    onModelsDoubleClick: () -> Unit = {},
+    onSelect: ((Int) -> Unit)? = null,
+) {
+    val modelsAction = if (onSelect != null && enabled) stringResource(R.string.model_list_scroll_to_top) else null
+    val horizontalPadding = when {
+        items.size >= 5 -> 2.dp
+        items.size >= 4 -> 8.dp
+        else -> 12.dp
+    }
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEachIndexed { index, item ->
+            val isSelected = selected == index
+            val tabModifier = if (onSelect == null) Modifier else Modifier
+                .testTag(item.tag)
+                .semantics {
+                    if (modelsAction != null && item == GlassNavigationItem.Models) {
+                        customActions = listOf(CustomAccessibilityAction(modelsAction) {
+                            onModelsDoubleClick()
+                            true
+                        })
                     }
-                    Text(
-                        stringResource(item.label),
-                        color = contentColor,
-                        style = MaterialTheme.typography.labelMedium,
+                }
+                .selectable(
+                    enabled = enabled,
+                    selected = isSelected,
+                    role = Role.Tab,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { onSelect(index) },
+                )
+            val contentColor = color(index)
+            Column(
+                modifier = Modifier.weight(1f).then(tabModifier)
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = horizontalPadding, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+            ) {
+                Crossfade(targetState = isSelected, label = "Navigation icon") { filled ->
+                    Icon(
+                        painterResource(if (filled) item.selectedIcon else item.icon),
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(24.dp),
                     )
                 }
+                Text(
+                    stringResource(item.label),
+                    color = contentColor,
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
         }
     }

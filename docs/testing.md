@@ -25,7 +25,7 @@
 | 目录、搜索和刷新 | `ModelListQueryTest`、`ModelListViewModelTest`、`ModelRepositoryTest`；设备用 `ModelCatalogControlsTest`、`SilentCatalogUpdateTest` 检查后台冻结与主动发布 |
 | 详情、收藏和对比 | `ModelDetailMapperTest`、`ModelDetailScreenTest`、`ModelDetailNavigationTest`；按范围选 `FavoritesViewModelTest`、`FavoriteDatabaseTest`、`ModelCompareViewModelTest`、`CompareBenchmarkGroupsTest`、`ModelCompareScreenTest` |
 | 评测、榜单和 Logo | `BenchmarkPresentationTest`、`BenchmarkBoardMapperTest`、`BenchmarkChartTest`、`BenchmarkLogoTest`；设备用 `ModelBenchmarkCardTest`、`BenchmarkScreenTest`、`BenchmarkRefreshTest`、`BenchmarkReentryTest` |
-| 外观、底栏和导航 | `AppearanceViewModelTest`、`SettingsRepositoryTest`、`NavigationScrollBehaviorTest`；设备用 `AppearanceNavigationTest`、`NavigationScrollTest`、`GlassNavigationBarTest`、`ModelAtlasAppTest`。显隐专项需开启默认关闭的偏好 |
+| 外观、底栏和导航 | `AppearanceViewModelTest`、`SettingsRepositoryTest`、`NavigationGeometryTest`、`NavigationScrollBehaviorTest`；设备用 `AppearanceNavigationTest`、`NavigationScrollTest`、`GlassSurfaceTest`、`GlassNavigationBarTest`、`ModelAtlasAppTest`。底栏检查拖动中间帧、Pager 同步、松手提交、实时取样与主题着色；显隐专项需开启默认关闭的偏好 |
 | 共享转场 | `ModelSharedTransitionTest`、`BenchmarkSharedTransitionTest` 及各自零动画用例；检查中间帧、暂停、取消、确认和来源移除 |
 | 数据源和 Room | `AtlasReleaseLoaderTest`、`AtlasCatalogMapperTest`、`ModelsDevApiTest`、`ModelsDevParserTest`、`ModelPriceMapperTest`；事务用 `AtlasCatalogIntegrationTest`、`CatalogDatabaseTest`、`BenchmarkRankingDatabaseTest` |
 | Debug 数据库 | `DebugDatabaseSchemaTest`、`DebugDatabaseStoreTest`、`DebugDatabaseScreenTest`；构建隔离另见[双版本说明](debug-release-coexistence.md#变更后的验证边界) |

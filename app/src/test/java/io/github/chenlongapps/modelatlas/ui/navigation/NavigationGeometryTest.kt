@@ -80,4 +80,16 @@ class NavigationGeometryTest {
         assertFalse(32f in rtl)
     }
 
+    @Test fun lensUsesContinuousMirroredCoordinatesButOnlyTabsAcceptPresses() {
+        for (rtl in listOf(false, true)) {
+            val tabs = NavigationTabGeometry(256f, 4f, 4, rtl)
+            val between = tabs.logicalX(if (rtl) 136.125f else 119.875f)
+            assertEquals(1.375f, tabs.positionAt(between), 0.001f)
+            assertEquals(between, tabs.center(tabs.positionAt(between)), 0.001f)
+            assertEquals(1, tabs.tabAt(between))
+            assertNull(tabs.tabAt(63f))
+            assertNull(tabs.tabAt(257f))
+        }
+    }
+
 }

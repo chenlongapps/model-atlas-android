@@ -29,6 +29,7 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -218,11 +219,16 @@ internal fun ModelAtlasScaffold(
     var navigationHeight by rememberSaveable { mutableStateOf(64f) }
     var chatBarHeight by rememberSaveable { mutableStateOf(64f) }
     var navigationHiddenByMain by remember { mutableStateOf(false) }
+    val hideProgress = animateFloatAsState(
+        if (navigationHiddenByMain) 1f else 0f, tween(200), label = "Navigation scroll visibility",
+    )
+    val sampleNavigationBackdrop by remember(hideProgress) { derivedStateOf { hideProgress.value < 1f } }
     var navigationAnchor by remember { mutableStateOf<AssistantRevealAnchor?>(null) }
     var navigationBottom by remember { mutableStateOf(0f) }
     AssistantNavigation(
         modifier = modifier.fillMaxSize(),
         onChatClosed = onChatClosed,
+        sampleNavigationBackdrop = { sampleNavigationBackdrop },
         revealAnchor = { navigationAnchor?.let { it.copy(center = it.center + Offset(0f, navigationBottom)) } },
         chatContent = { visible, onBack -> chatContent(chatBarHeight.dp + 32.dp, visible, onBack) },
         mainContent = { isActive ->
@@ -253,16 +259,17 @@ internal fun ModelAtlasScaffold(
         bottomBar = { isChatOpen, interactive, onOpenChat, backdrop ->
             val mode = if (isChatOpen) BottomBarMode.Chat else BottomBarMode.Navigation
             val hidden = mode == BottomBarMode.Navigation && navigationHiddenByMain
-            val hideProgress by animateFloatAsState(
-                if (hidden) 1f else 0f, tween(200), label = "Navigation scroll visibility",
-            )
             val baseInsets = WindowInsets.navigationBars.union(WindowInsets.displayCutout)
                 .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     // 整个外壳（含底部安全区）滑出，列表留白与测量高度保持不变。
-                    .graphicsLayer { translationY = size.height * hideProgress }
+                    .graphicsLayer {
+                        val progress = if (isChatOpen) 0f else hideProgress.value
+                        translationY = size.height * progress
+                        alpha = if (progress < 1f) 1f else 0f
+                    }
                     .testTag("glass-navigation-motion")
                     .then(if (hidden) Modifier.focusProperties { canFocus = false }.clearAndSetSemantics {} else Modifier)
                     .windowInsetsPadding(baseInsets),
@@ -288,13 +295,10 @@ internal fun ModelAtlasScaffold(
                             items = navigationItems,
                             backdrop = backdrop,
                             chatState = chatUiState,
-                            onNavigate = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+                            onNavigate = { page -> pagerState.animateScrollToPage(page) },
                             onModelsDoubleClick = {
-                                scope.launch {
-                                    // 切页与回顶同时进行，不在模型页出现后再瞬间跳到页头。
-                                    launch { pagerState.animateScrollToPage(0) }
-                                    modelListState.animateScrollToItem(0, 0)
-                                }
+                                // 底栏已开始切页；同时回顶，避免模型页出现后才跳到页头。
+                                scope.launch { modelListState.animateScrollToItem(0, 0) }
                             },
                             onOpenChat = onOpenChat,
                             onChatInput = onChatInput,

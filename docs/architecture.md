@@ -34,9 +34,11 @@ DTO、本地 Entity／JSON 和应用模型独立。Repository 不触发导航；
 
 ### 玻璃表面与采样
 
-- `Modifier.glassSurface` 与 `GlassSurface` 使用同一绘制逻辑。`Standard` 用于共享底栏；`Subtle` 用较实的着色维持聊天顶部按钮对比度；`Indicator` 用较弱折射和独立色相叠加。调用方按主题和交互状态传入着色与降级色。
-- 每个采样区域用 `rememberGlassBackdrop` 创建一个源，并用 `captureGlassBackdrop` 标记背景层。底栏共用 `NavDisplay` 源（含圆形揭示）；聊天顶部按钮只采样消息与两端渐隐，不采样自身。换主题只更新背景色；底栏由导航变为输入栏时，着色更新不重建采样源或光学效果。
+- `Modifier.glassSurface` 与 `GlassSurface` 使用同一绘制逻辑。`BottomBar` 为共享胶囊和 AI 圆钮依次应用 Vibrancy、模糊、折射，再叠加主题色；导航与聊天之间连续调整着色。`Subtle` 用较实的着色维持聊天顶部按钮对比度。
+- 底栏共用 `NavDisplay` 的背景采样源（含圆形揭示）。导航透镜组合页面背景、已经渲染的共享底板及不可见的主题着色标签层，只在透镜内再做折射和色散；不重复模糊底板。聊天只保留共享底板和圆钮，顶部按钮独立采样消息和两端渐隐。自动隐藏到位后解除底栏采样，保留布局和高度。
+- `NavigationLensMotion` 只管理视觉位置和一次性的 Pager 跳转请求。页面手势直接跟随 Pager 偏移；底栏横向手势越过阈值后接管透镜，拖动期间不切页，松手提交最近标签并弹簧吸附。点击可中断旧请求；新的 Pager 手势收回控制。高频位置和力度在布局、图层或绘制阶段读取，选中语义取自 Pager。
 - Preview、未提供采样源、缺少 RenderEffect 或软件渲染宿主使用不透明主题底色，不采集背景。没有运行时着色器或形状不支持折射时保留模糊与着色；折射只用于圆角矩形类形状。
+- 材质层次、弹性与高光参考 [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Copyright 2025 Kyant，[Apache-2.0 许可](../app/src/main/assets/licenses/AndroidLiquidGlass.txt)）和 [AM++ 的实现与演示](https://github.com/Zennmn/AM-plus-plus/tree/8bdf663647dffbbd53c927e2ee9502e4d401028f)。光学 Shader 直接来自现有 Backdrop 2.0.0 依赖；ModelAtlas 按共享底栏、主题和 Pager 重写了组装及手势代码。
 
 ### 路由与返回
 

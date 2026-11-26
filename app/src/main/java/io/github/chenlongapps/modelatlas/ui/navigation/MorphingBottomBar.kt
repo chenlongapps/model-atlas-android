@@ -3,6 +3,7 @@ package io.github.chenlongapps.modelatlas.ui.navigation
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,18 +27,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -57,17 +64,24 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import io.github.chenlongapps.modelatlas.R
 import io.github.chenlongapps.modelatlas.ui.chat.ChatUiState
 import io.github.chenlongapps.modelatlas.ui.components.glass.GlassStyle
+import io.github.chenlongapps.modelatlas.ui.components.glass.glassEffectsAvailable
 import io.github.chenlongapps.modelatlas.ui.components.glass.glassSurface
 import kotlin.math.roundToInt
 
 /** 底栏由当前导航路由决定形态，不维护独立的开关状态。 */
 internal enum class BottomBarMode { Navigation, Chat }
 
-private val composerGlassStyle = GlassStyle.Standard.copy(tintAlpha = 0.86f)
-private val actionGlassStyle = GlassStyle.Standard.copy(tintAlpha = 0.9f)
+private val composerGlassStyle = GlassStyle.BottomBar.copy(tintAlpha = 0.86f)
+private val actionGlassStyle = GlassStyle.BottomBar.copy(tintAlpha = 0.9f)
+private val darkNavigationGlassStyle = GlassStyle.BottomBar.copy(tintAlpha = 0.68f)
+
+private fun navigationGlassStyle(surface: Color): GlassStyle =
+    if (surface.luminance() < 0.5f) darkNavigationGlassStyle else GlassStyle.BottomBar
 
 /**
  * 主界面与助手共用的唯一底栏：胶囊玻璃表面保持不变，内部内容与末侧按钮随模式软化过渡。
@@ -80,7 +94,7 @@ internal fun MorphingBottomBar(
     items: List<GlassNavigationItem>,
     backdrop: Backdrop?,
     chatState: State<ChatUiState>,
-    onNavigate: (Int) -> Unit,
+    onNavigate: suspend (Int) -> Unit,
     onModelsDoubleClick: () -> Unit,
     onOpenChat: () -> Unit,
     onChatInput: (String) -> Unit,
@@ -94,9 +108,22 @@ internal fun MorphingBottomBar(
     val spacing = if (items.size >= 5) 2.dp else 4.dp
     val layoutDirection = LocalLayoutDirection.current
     val isRtl = layoutDirection == LayoutDirection.Rtl
-    val modelsDoubleClick by rememberUpdatedState(onModelsDoubleClick)
+    val scope = rememberCoroutineScope()
+    val lensMotion = remember(pagerState, scope) { NavigationLensMotion(pagerState, scope) }
+    LaunchedEffect(lensMotion) { lensMotion.followPagerGestures() }
+    val modelsDoubleClick by rememberUpdatedState {
+        lensMotion.select(0, onNavigate)
+        onModelsDoubleClick()
+    }
     val colors = MaterialTheme.colorScheme
     val chatOpen = mode == BottomBarMode.Chat
+    val transition = updateTransition(mode, label = "Bottom bar mode")
+    val glassBackdrop = if (glassEffectsAvailable()) backdrop else null
+    val plateBackdrop = if (glassBackdrop != null &&
+        (mode == BottomBarMode.Navigation || transition.currentState == BottomBarMode.Navigation)
+    ) rememberLayerBackdrop() else null
+    // A retained display list lets the lens replay the plate's already-filtered pixels.
+    val plateCapture = if (plateBackdrop != null) Modifier.layerBackdrop(plateBackdrop).graphicsLayer() else Modifier
     val capsuleSurface = if (chatOpen) colors.surfaceContainerHigh else colors.surfaceContainer
     val density = LocalDensity.current
     // 记住导航内容的实测高度，让输入胶囊在默认字号下与导航胶囊完全同高。
@@ -121,33 +148,36 @@ internal fun MorphingBottomBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .glassSurface(
-                        backdrop = backdrop,
-                        shape = CircleShape,
-                        style = if (chatOpen) composerGlassStyle else GlassStyle.Standard,
-                        tint = if (chatOpen) capsuleSurface else colors.background,
-                        fallbackColor = capsuleSurface,
-                    )
                     .testTag("glass-navigation-capsule"),
             ) {
-                AnimatedContent(
-                    targetState = mode,
+                Spacer(
+                    Modifier.matchParentSize().then(plateCapture).glassSurface(
+                        backdrop = glassBackdrop,
+                        shape = CircleShape,
+                        style = if (chatOpen) composerGlassStyle else navigationGlassStyle(colors.surface),
+                        tint = if (chatOpen) capsuleSurface else colors.surface,
+                        fallbackColor = capsuleSurface,
+                        animateTint = true,
+                    ),
+                )
+                transition.AnimatedContent(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.CenterStart,
                     transitionSpec = {
                         (fadeIn(tween(durationMillis = 220, delayMillis = 40)) togetherWith fadeOut(tween(durationMillis = 140)))
                             .using(SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> tween(durationMillis = 220) }))
                     },
-                    label = "Bottom bar content",
                 ) { target ->
                     // 退出端立即停用交互与读屏，动画期间只有目标形态可操作。
                     val interactive = enabled && mode == target
                     when (target) {
                         BottomBarMode.Navigation -> NavigationCapsuleContent(
                             pagerState = pagerState,
-                            backdrop = backdrop,
+                            motion = lensMotion,
+                            backdrop = glassBackdrop,
+                            materialBackdrop = plateBackdrop,
                             onNavigate = onNavigate,
-                            onModelsDoubleClick = onModelsDoubleClick,
+                            onModelsDoubleClick = { modelsDoubleClick() },
                             items = items,
                             enabled = interactive,
                             modifier = Modifier
@@ -168,7 +198,7 @@ internal fun MorphingBottomBar(
                 chatOpen = chatOpen,
                 chatState = chatState,
                 size = aiSize,
-                backdrop = backdrop,
+                backdrop = glassBackdrop,
                 enabled = enabled,
                 onOpenChat = onOpenChat,
                 onSend = onSend,
@@ -289,9 +319,10 @@ private fun AssistantActionButton(
             .glassSurface(
                 backdrop = backdrop,
                 shape = CircleShape,
-                style = if (chatOpen) actionGlassStyle else GlassStyle.Standard,
-                tint = if (chatOpen) actionSurface else colors.background,
+                style = if (chatOpen) actionGlassStyle else navigationGlassStyle(colors.surface),
+                tint = if (chatOpen) actionSurface else colors.surface,
                 fallbackColor = actionSurface,
+                animateTint = true,
             )
             .testTag(tag)
             .semantics { contentDescription = label }

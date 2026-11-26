@@ -9,25 +9,32 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -39,11 +46,11 @@ import io.github.chenlongapps.modelatlas.ui.navigation.BottomBarMode
 import io.github.chenlongapps.modelatlas.ui.navigation.GlassNavigationItem
 import io.github.chenlongapps.modelatlas.ui.navigation.MorphingBottomBar
 import io.github.chenlongapps.modelatlas.ui.theme.ModelAtlasTheme
-import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import kotlin.math.roundToInt
 
 /** Debug 测试宿主显式传 Release 的四项胶囊，避免只验证带调试条目的布局。 */
 class GlassNavigationBarTest {
@@ -52,6 +59,122 @@ class GlassNavigationBarTest {
     @Test fun releaseNavigationAt320DpKeepsCircleAndFourTabsUsable() = assertReleaseNavigation(false)
 
     @Test fun releaseNavigationAt320DpLargeFontDarkRtlKeepsCircleAndFourTabsUsable() = assertReleaseNavigation(true)
+
+    @Test fun lensTravelsBetweenTabsWhileHeldAndCommitsOnlyOnRelease() {
+        val requests = mutableListOf<Int>()
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ReleaseBar(onNavigate = { requests.add(it) })
+            }
+        }
+        val capsule = compose.onNodeWithTag("glass-navigation-capsule")
+        val capsuleBounds = capsule.fetchSemanticsNode().boundsInRoot
+        val models = compose.onNodeWithTag("nav-models")
+        val compare = compose.onNodeWithTag("nav-compare")
+        val start = models.fetchSemanticsNode().boundsInRoot.center - capsuleBounds.topLeft
+        val target = compare.fetchSemanticsNode().boundsInRoot.center - capsuleBounds.topLeft
+        val betweenTabs = start + (target - start) * 0.70f
+        capsule.performTouchInput {
+            down(start)
+            moveTo(betweenTabs, delayMillis = 150)
+        }
+        models.assertIsSelected()
+        compose.runOnIdle { assertTrue(requests.isEmpty()) }
+        val indicator = compose.onNodeWithTag("nav-indicator")
+        assertEquals(betweenTabs.x + capsuleBounds.left, indicator.fetchSemanticsNode().boundsInRoot.center.x, 2f)
+        saveRegressionScreenshot("navigation-lens-drag")
+
+        capsule.performTouchInput {
+            moveTo(target - Offset((target.x - start.x) * 0.09f, 0f), delayMillis = 100)
+            up()
+        }
+        compare.assertIsSelected()
+        assertEquals(compare.fetchSemanticsNode().boundsInRoot.center.x, indicator.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        compose.runOnIdle { assertEquals(listOf(2), requests) }
+    }
+
+    @Test fun latestTapWinsDuringPagerAnimation() {
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) { ReleaseBar() } }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.mainClock.advanceTimeBy(48)
+        compose.onNodeWithTag("nav-benchmarks").performClick()
+        compose.onNodeWithTag("nav-compare").performClick()
+        compose.mainClock.autoAdvance = true
+
+        val target = compose.onNodeWithTag("nav-compare").assertIsSelected().fetchSemanticsNode().boundsInRoot
+        val lens = compose.onNodeWithTag("nav-indicator").fetchSemanticsNode().boundsInRoot
+        assertEquals(target.center.x, lens.center.x, 1f)
+    }
+
+    @Test fun assistantMorphKeepsAnInFlightNavigationRequest() {
+        var mode by mutableStateOf(BottomBarMode.Navigation)
+        compose.setContent {
+            ModelAtlasTheme(dynamicColor = false) {
+                ReleaseBar(
+                    mode = mode,
+                    onNavigate = { repeat(30) { withFrameNanos {} } },
+                    onOpenChat = { mode = BottomBarMode.Chat },
+                )
+            }
+        }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("nav-settings").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag("nav-chat").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithTag("chat-input").assertIsDisplayed()
+        compose.runOnIdle { mode = BottomBarMode.Navigation }
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+    }
+
+    @Test fun pagerSwipeMovesTheLensBeforeThePageChanges() {
+        compose.setContent { ModelAtlasTheme(dynamicColor = false) { ReleaseBar() } }
+        fun centerX(tag: String): Float = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center.x
+        val start = centerX("nav-models")
+        val end = centerX("nav-benchmarks")
+        val pager = compose.onNodeWithTag("navigation-test-pager")
+        pager.performTouchInput {
+            down(center)
+            moveBy(Offset(-width * 0.3f, 0f), delayMillis = 120)
+        }
+        compose.onNodeWithTag("nav-models").assertIsSelected()
+        assertTrue(centerX("nav-indicator") in (start + 2f)..(end - 2f))
+        pager.performTouchInput { up() }
+    }
+
+    @Test fun lensSamplesThemedLabelsAndLivePagePixels() {
+        var pageColor by mutableStateOf(Color(0xFF1C9A55))
+        compose.setContent {
+            MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFFA91646))) {
+                ReleaseBar(pageColor = pageColor)
+            }
+        }
+        val capsule = compose.onNodeWithTag("glass-navigation-capsule")
+        val bounds = capsule.fetchSemanticsNode().boundsInRoot
+        val lens = compose.onNodeWithTag("nav-indicator").fetchSemanticsNode().boundsInRoot
+        val tabLeft = (lens.left - bounds.left).roundToInt()
+        val tabRight = (lens.right - bounds.left).roundToInt()
+        val y = (lens.center.y - bounds.top).roundToInt()
+        val x = tabLeft + (lens.width * 0.25f).roundToInt()
+
+        val green = capsule.captureToImage().toPixelMap()
+        var tintedPixels = 0
+        for (row in 0 until green.height) {
+            for (column in tabLeft until tabRight) {
+                val pixel = green[column, row]
+                if (pixel.red - pixel.green > 0.22f && pixel.red - pixel.blue > 0.15f) tintedPixels++
+            }
+        }
+        assertTrue("透镜应采到主题着色后的图标和文字", tintedPixels >= 12)
+        compose.runOnIdle { pageColor = Color(0xFF1C559A) }
+        val blue = capsule.captureToImage().toPixelMap()
+        assertTrue("同一透镜应即时采到页面颜色变化", green[x, y].green - blue[x, y].green > 0.10f)
+        assertTrue(blue[x, y].blue - green[x, y].blue > 0.10f)
+    }
 
     private fun assertReleaseNavigation(largeRtl: Boolean) {
         var minimumPixels = 0f
@@ -183,6 +306,8 @@ class GlassNavigationBarTest {
     private fun ReleaseBar(
         mode: BottomBarMode = BottomBarMode.Navigation,
         chatState: ChatUiState = ChatUiState(),
+        pageColor: Color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        onNavigate: suspend (Int) -> Unit = {},
         onOpenChat: () -> Unit = {},
         onChatInput: (String) -> Unit = {},
         onSend: () -> Unit = {},
@@ -190,18 +315,22 @@ class GlassNavigationBarTest {
     ) {
         val items = listOf(GlassNavigationItem.Models, GlassNavigationItem.Benchmarks, GlassNavigationItem.Compare, GlassNavigationItem.Settings)
         val pager = rememberPagerState(pageCount = { items.size })
-        val scope = rememberCoroutineScope()
         val backdrop = rememberLayerBackdrop { drawContent() }
         val latestChat = rememberUpdatedState(chatState)
         Box(Modifier.requiredSize(320.dp, 240.dp).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(horizontal = 16.dp)) {
-            HorizontalPager(pager, Modifier.fillMaxSize().layerBackdrop(backdrop)) { }
+            HorizontalPager(pager, Modifier.fillMaxSize().testTag("navigation-test-pager").layerBackdrop(backdrop)) {
+                Box(Modifier.fillMaxSize().background(pageColor))
+            }
             MorphingBottomBar(
                 mode = mode,
                 pagerState = pager,
                 items = items,
                 backdrop = backdrop,
                 chatState = latestChat,
-                onNavigate = { scope.launch { pager.animateScrollToPage(it) } },
+                onNavigate = {
+                    onNavigate(it)
+                    pager.animateScrollToPage(it)
+                },
                 onModelsDoubleClick = {},
                 onOpenChat = onOpenChat,
                 onChatInput = onChatInput,

@@ -1,6 +1,7 @@
 package io.github.chenlongapps.modelatlas.ui.components.glass
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
@@ -13,7 +14,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
@@ -29,7 +30,6 @@ internal data class GlassStyle(
     val lens: Lens? = Lens(16.dp, 32.dp),
     val vibrancy: Boolean = true,
     val tintAlpha: Float = 0.5f,
-    val hueTint: Boolean = false,
 ) {
     data class Lens(
         val refractionHeight: Dp,
@@ -41,12 +41,7 @@ internal data class GlassStyle(
         val Standard = GlassStyle()
         // 光学参数不变，通过更实的着色弱化背后内容。
         val Subtle = Standard.copy(tintAlpha = 0.72f)
-        val Indicator = GlassStyle(
-            lens = Lens(10.dp, 14.dp),
-            vibrancy = false,
-            tintAlpha = 0.75f,
-            hueTint = true,
-        )
+        val BottomBar = Standard.copy(lens = Lens(24.dp, 24.dp, chromaticAberration = false))
     }
 }
 
@@ -58,13 +53,14 @@ internal fun Modifier.glassSurface(
     style: GlassStyle = GlassStyle.Standard,
     tint: Color = MaterialTheme.colorScheme.background,
     fallbackColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    animateTint: Boolean = false,
 ): Modifier {
     if (backdrop == null || !glassEffectsAvailable()) {
-        return clip(shape).background(fallbackColor.copy(alpha = 1f))
+        val fallback by glassTint(fallbackColor.copy(alpha = 1f), animateTint)
+        return clip(shape).drawBehind { drawRect(fallback) }
     }
     // 着色在绘制阶段更新；切换底栏模式或发送状态不必重新配置折射和模糊。
-    val overlay by rememberUpdatedState(tint.copy(alpha = style.tintAlpha))
-    val hue by rememberUpdatedState(if (style.hueTint) tint.copy(alpha = 1f) else Color.Unspecified)
+    val overlay by glassTint(tint.copy(alpha = style.tintAlpha), animateTint)
     val blurRadius = style.blurRadius
     // Backdrop 2.0 的 lens 不接受任意 Shape；其它形状保留裁剪、模糊和着色。
     val refraction = style.lens?.takeIf { shape is RoundedCornerShape || shape is AbsoluteRoundedCornerShape }
@@ -78,20 +74,21 @@ internal fun Modifier.glassSurface(
                 blur(blurRadius.toPx())
                 if (refraction != null) {
                     lens(
-                        refraction.refractionHeight.toPx(),
+                        // Keep the 2.0.0 shader's active band clear of the capsule's medial axis.
+                        refraction.refractionHeight.toPx().coerceAtMost(size.minDimension * 0.45f),
                         refraction.refractionAmount.toPx(),
                         chromaticAberration = refraction.chromaticAberration,
                     )
                 }
             },
-            onDrawSurface = {
-                val hueColor = hue
-                if (hueColor != Color.Unspecified) drawRect(hueColor, blendMode = BlendMode.Hue)
-                drawRect(overlay)
-            },
+            onDrawSurface = { drawRect(overlay) },
         )
     })
 }
+
+@Composable
+private fun glassTint(target: Color, animate: Boolean) =
+    if (animate) animateColorAsState(target, tween(220), label = "Glass tint") else rememberUpdatedState(target)
 
 @Composable
 internal fun GlassSurface(

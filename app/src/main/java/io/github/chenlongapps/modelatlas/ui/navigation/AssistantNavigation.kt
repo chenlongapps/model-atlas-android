@@ -75,6 +75,7 @@ private data object AssistantDestination : NavKey
 internal fun AssistantNavigation(
     modifier: Modifier = Modifier,
     onChatClosed: () -> Unit,
+    sampleNavigationBackdrop: () -> Boolean,
     revealAnchor: () -> AssistantRevealAnchor?,
     mainContent: @Composable (isActive: Boolean) -> Unit,
     chatContent: @Composable (isVisible: Boolean, onBack: () -> Unit) -> Unit,
@@ -91,6 +92,7 @@ internal fun AssistantNavigation(
     }
     val backStack = rememberNavBackStack(MainDestination)
     val chatOnStack = backStack.last() == AssistantDestination
+    val activeBackdrop = backdrop.takeIf { chatOnStack || sampleNavigationBackdrop() }
     // 只保存已确认的退出意图，不保存入场或手势进度。重建时停在对应端点。
     var closing by rememberSaveable { mutableStateOf(false) }
     val reveal = remember { AssistantReveal(chatOnStack, closing) }
@@ -183,11 +185,11 @@ internal fun AssistantNavigation(
             sceneState = scene,
             // 不把手势交给 NavDisplay 的场景动画，否则会提前切走同 key 的助手内容。
             navigationEventState = rememberNavigationEventState(scene),
-            modifier = Modifier.fillMaxSize().captureGlassBackdrop(backdrop),
+            modifier = Modifier.fillMaxSize().captureGlassBackdrop(activeBackdrop),
             transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
             popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
         )
-        bottomBar(chatVisible, !closing, openChat, backdrop)
+        bottomBar(chatVisible, !closing, openChat, activeBackdrop)
     }
 }
 
